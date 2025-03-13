@@ -23,3 +23,48 @@ go.work.sum
 
 # env file
 .env
+
+# Скомпилированные бинарные файлы
+/hint
+/hint.exe
+/bin/
+/dist/
+
+# Временные файлы Go
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Файлы IDE и редакторов
+.idea/
+.vscode/
+*.swp
+*~
+.*.swp
+*.sublime-workspace
+*.sublime-project
+
+# Временные файлы операционной системы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Тестовая и локальная конфигурация
+.env
+hint.yaml
+*.pem
+*.key
+
+# Директория vendor, если не используется вендоринг
+/vendor/
+
+# Другие временные файлы и директории
+/tmp/
+*.log
+*.bak
+.*.kate-swp
