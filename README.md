@@ -50,6 +50,7 @@
 ## Configuration
 
 The utility supports several configuration methods:
+
 ### Via command line flags
 
 ```bash
@@ -81,3 +82,79 @@ api_url: <api_url>
 ```bash
 hint "How to use hint?"
 ```
+
+### Common use cases
+
+```bash
+# Ask about how to run the project
+hint "How do I run this project?"
+
+# Ask about project structure
+hint "Explain the directory structure of this project"
+
+# Get help with a specific file
+hint "What does the README.md file contain?"
+
+# Ask for code explanation
+hint "Explain what this code does"
+
+# Get suggestions for solving issues
+hint "I'm getting an error when running this command, what could be wrong?"
+```
+
+### Advanced usage
+
+You can get more specific assistance by navigating to different directories in your project:
+
+```bash
+# Navigate to a subdirectory to focus the context
+cd src/components/
+hint "What do these components do?"
+```
+
+## How it works
+
+1. When you run `hint` with a question, it captures your current working directory path
+2. It scans the directory contents to create context
+3. This context along with your question is sent to the configured LLM API
+4. The LLM generates a response based on the context and question
+5. The response is displayed in your terminal
+
+## Troubleshooting
+
+### Common issues
+
+1. **Error "API key must be specified"**
+   - Make sure you've set up your API key through one of the configuration methods
+   - Check if the environment variable is properly set
+
+2. **Error connecting to the API**
+   - Verify your internet connection
+   - Check if the API endpoint is correct and accessible
+
+3. **Empty or irrelevant responses**
+   - Try rephrasing your question to be more specific
+   - Check if you're in the correct directory related to your question
+
+### Debug mode
+
+If you're having issues, you can get more detailed logs:
+
+```bash
+export HINT_DEBUG=true
+hint "Your question"
+```
+
+## Contributing
+
+Contributions are welcome! Here's how you can contribute:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature-name`
+3. Commit your changes: `git commit -am 'Add some feature'`
+4. Push to the branch: `git push origin feature/your-feature-name`
+5. Submit a pull request
+
+## License
+
+MIT
