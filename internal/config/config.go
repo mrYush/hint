@@ -8,46 +8,41 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config содержит настройки приложения
+// Config contains application settings
 type Config struct {
 	APIURL   string
 	APIKey   string
 	Model    string
 }
 
-// Load загружает конфигурацию из различных источников
+// Load loads configuration from various sources
 func Load() (*Config, error) {
-	// Настройка viper для загрузки конфигурации
+	// Configure viper for configuration loading
 	viper.SetConfigName("hint")
 	viper.SetConfigType("yaml")
 	
-	// Пути для поиска файлов конфигурации
+	// Paths to search for configuration files
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		viper.AddConfigPath(filepath.Join(homeDir, ".config"))
 	}
 	viper.AddConfigPath(".")
 	
-	// Установка переменных окружения
+	// Setting environment variables
 	viper.SetEnvPrefix("HINT")
 	viper.AutomaticEnv()
 	
-	// Загрузка конфигурации из файла (если есть)
+	// Loading configuration from file (if exists)
 	_ = viper.ReadInConfig()
 	
-	// Получение значений из флагов командной строки
-	viper.BindPFlag("api_url", viper.GetViper().GetPFlag("api-url"))
-	viper.BindPFlag("api_key", viper.GetViper().GetPFlag("api-key"))
-	viper.BindPFlag("model", viper.GetViper().GetPFlag("model"))
-	
-	// Создание конфигурации
+	// Creating configuration
 	cfg := &Config{
 		APIURL:   viper.GetString("api_url"),
 		APIKey:   viper.GetString("api_key"),
 		Model:    viper.GetString("model"),
 	}
 	
-	// Установка значений по умолчанию
+	// Setting default values
 	if cfg.APIURL == "" {
 		cfg.APIURL = "https://api.openai.com/v1"
 	}
@@ -60,9 +55,9 @@ func Load() (*Config, error) {
 		cfg.Model = "gpt-4"
 	}
 	
-	// Проверка обязательных параметров
+	// Checking required parameters
 	if cfg.APIKey == "" {
-		return nil, errors.New("необходимо указать API-ключ через --api-key, HINT_API_KEY или OPENAI_API_KEY")
+		return nil, errors.New("API key must be specified using --api-key, HINT_API_KEY, or OPENAI_API_KEY")
 	}
 	
 	return cfg, nil
