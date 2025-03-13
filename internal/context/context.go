@@ -3,7 +3,6 @@ package context
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -42,13 +41,6 @@ func GetDirectoryContext() (*DirectoryContext, error) {
 		}
 		
 		files = append(files, fileName)
-	}
-	
-	// Дополнительно можно добавить чтение README.md или других важных файлов
-	readmeContent := ""
-	readmePath := filepath.Join(currentDir, "README.md")
-	if readmeData, err := os.ReadFile(readmePath); err == nil {
-		readmeContent = string(readmeData)
 	}
 	
 	return &DirectoryContext{
