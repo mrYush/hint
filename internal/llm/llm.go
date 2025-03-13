@@ -12,19 +12,19 @@ import (
 	"github.com/mrYush/hint/internal/context"
 )
 
-// Request представляет запрос к API LLM
+// Request represents a request to the LLM API
 type Request struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 }
 
-// Message представляет сообщение в формате OpenAI API
+// Message represents a message in OpenAI API format
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// Response представляет ответ от API LLM
+// Response represents a response from the LLM API
 type Response struct {
 	Choices []struct {
 		Message struct {
@@ -36,19 +36,19 @@ type Response struct {
 	} `json:"error,omitempty"`
 }
 
-// AskLLM отправляет запрос к LLM и возвращает ответ
+// AskLLM sends a request to the LLM and returns the response
 func AskLLM(cfg *config.Config, ctx *context.DirectoryContext, question string) (string, error) {
-	// Формирование системного сообщения с контекстом
+	// Creating a system message with context
 	systemPrompt := fmt.Sprintf(
-		"Вы - полезный ассистент, который помогает разработчику с проектом. "+
-		"Текущая директория: %s\n"+
-		"Файлы в директории: %s\n\n"+
-		"Ответьте на вопрос разработчика, учитывая данный контекст.",
+		"You are a helpful assistant aiding a developer with their project. "+
+		"Current directory: %s\n"+
+		"Files in directory: %s\n\n"+
+		"Answer the developer's question with this context in mind.",
 		ctx.CurrentDir,
 		strings.Join(ctx.Files, ", "),
 	)
 	
-	// Формирование запроса
+	// Creating the request
 	reqBody := Request{
 		Model: cfg.Model,
 		Messages: []Message{
@@ -57,17 +57,17 @@ func AskLLM(cfg *config.Config, ctx *context.DirectoryContext, question string) 
 		},
 	}
 	
-	// Сериализация запроса
+	// Serializing the request
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("ошибка сериализации запроса: %w", err)
+		return "", fmt.Errorf("error serializing request: %w", err)
 	}
 	
-	// Отправка запроса
+	// Sending the request
 	url := fmt.Sprintf("%s/chat/completions", cfg.APIURL)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("ошибка создания HTTP-запроса: %w", err)
+		return "", fmt.Errorf("error creating HTTP request: %w", err)
 	}
 	
 	req.Header.Set("Content-Type", "application/json")
@@ -76,30 +76,30 @@ func AskLLM(cfg *config.Config, ctx *context.DirectoryContext, question string) 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("ошибка выполнения HTTP-запроса: %w", err)
+		return "", fmt.Errorf("error executing HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 	
-	// Чтение ответа
+	// Reading the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("ошибка чтения ответа: %w", err)
+		return "", fmt.Errorf("error reading response: %w", err)
 	}
 	
-	// Десериализация ответа
+	// Deserializing the response
 	var result Response
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("ошибка десериализации ответа: %w", err)
+		return "", fmt.Errorf("error deserializing response: %w", err)
 	}
 	
-	// Проверка на ошибки
+	// Checking for errors
 	if result.Error != nil && result.Error.Message != "" {
-		return "", fmt.Errorf("ошибка API: %s", result.Error.Message)
+		return "", fmt.Errorf("API error: %s", result.Error.Message)
 	}
 	
-	// Проверка на наличие ответа
+	// Checking for response presence
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("получен пустой ответ от API")
+		return "", fmt.Errorf("received empty response from API")
 	}
 	
 	return result.Choices[0].Message.Content, nil
