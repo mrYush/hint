@@ -1,45 +1,45 @@
-# Hint - Контекстный помощник для разработчиков
+# Hint - Context-aware assistant for developers
 
-`hint` - это CLI-утилита, которая помогает разработчикам получать контекстные подсказки с учетом текущей рабочей директории и её содержимого. Утилита интегрируется с OpenAI-совместимыми API для генерации релевантных ответов на ваши вопросы.
+`hint` is a CLI utility that helps developers get contextual suggestions based on the current working directory and its contents. The utility integrates with OpenAI-compatible APIs to generate relevant answers to your questions.
 
-## Особенности
+## Features
 
-- Автоматический анализ текущей директории для создания контекста
-- Поддержка различных методов конфигурации (командная строка, переменные окружения, файл)
-- Совместимость с OpenAI и другими совместимыми API (Azure OpenAI, и т.д.)
-- Простой и интуитивно понятный интерфейс
+- Automatic analysis of the current directory to create context
+- Support for various configuration methods (command line, environment variables, file)
+- Compatibility with OpenAI and other compatible APIs (Azure OpenAI, etc.)
+- Simple and intuitive interface
 
-## Установка
+## Installation
 
-### Требования
+### Requirements
 
-- Go версии 1.20 или выше
-- Доступ к интернету для загрузки зависимостей
-- Ключ API для OpenAI или совместимого сервиса
+- Go version 1.20 or higher
+- Internet access for downloading dependencies
+- API key for OpenAI or compatible service
 
-### Сборка из исходного кода
+### Building from source
 
-1. Клонирование репозитория:
+1. Clone the repository:
    ```bash
    git clone https://github.com/mrYush/hint.git
    cd hint
    ```
 
-2. Установка зависимостей:
+2. Install dependencies:
    ```bash
    go mod tidy
    ```
 
-3. Сборка:
+3. Build:
    ```bash
    go build -o hint cmd/hint/main.go
    ```
-4. Проверка работоспособности:
+4. Verify it works:
    ```bash
    ./hint --help
    ```
 
-4. Установка в систему:
+4. Install to your system:
    ```bash
    # Linux/MacOS
    sudo cp hint /usr/local/bin/
@@ -47,37 +47,37 @@
    cp hint.exe %USERPROFILE%\AppData\Local\bin\
    ```
 
-## Конфигурация
+## Configuration
 
-Утилита поддерживает несколько методов конфигурации:
-### Через флаги командной строки
-
-```bash
-hint --api-key=<ваш_ключ_api> --model=<модель>
-```
-
-### Через переменные окружения
+The utility supports several configuration methods:
+### Via command line flags
 
 ```bash
-export HINT_API_KEY=<ваш_ключ_api>
-export HINT_MODEL=<модель>
-export HINT_API_URL=<url_api>
+hint --api-key=<your_api_key> --model=<model>
 ```
 
-### Через файл конфигурации
+### Via environment variables
 
-Создайте файл `~/.config/hint.yaml` или `./hint.yaml` со следующим содержимым:
+```bash
+export HINT_API_KEY=<your_api_key>
+export HINT_MODEL=<model>
+export HINT_API_URL=<api_url>
+```
+
+### Via configuration file
+
+Create a file `~/.config/hint.yaml` or `./hint.yaml` with the following content:
 
 ```yaml
-api_key: <ваш_ключ_api>
-model: <модель>
-api_url: <url_api>
+api_key: <your_api_key>
+model: <model>
+api_url: <api_url>
 ```
 
-## Использование
+## Usage
 
-### Базоввые примеры
+### Basic examples
 
 ```bash
-hint "Как использовать hint?"
+hint "How to use hint?"
 ```
