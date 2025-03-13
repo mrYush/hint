@@ -35,11 +35,6 @@ func Load() (*Config, error) {
 	// Загрузка конфигурации из файла (если есть)
 	_ = viper.ReadInConfig()
 	
-	// Получение значений из флагов командной строки
-	viper.BindPFlag("api_url", viper.GetViper().GetPFlag("api-url"))
-	viper.BindPFlag("api_key", viper.GetViper().GetPFlag("api-key"))
-	viper.BindPFlag("model", viper.GetViper().GetPFlag("model"))
-	
 	// Создание конфигурации
 	cfg := &Config{
 		APIURL:   viper.GetString("api_url"),

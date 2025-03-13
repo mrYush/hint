@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yourusername/hint/internal/config"
-	"github.com/yourusername/hint/internal/context"
+	"github.com/mrYush/hint/internal/config"
+	"github.com/mrYush/hint/internal/context"
 )
 
 // Request представляет запрос к API LLM

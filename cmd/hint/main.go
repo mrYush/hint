@@ -8,6 +8,7 @@ import (
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/llm"
+	"github.com/spf13/viper"
 )
 
 func main() {
@@ -52,6 +53,11 @@ func main() {
 	rootCmd.PersistentFlags().String("api-url", "", "URL API (по умолчанию используется OpenAI)")
 	rootCmd.PersistentFlags().String("api-key", "", "Ключ API")
 	rootCmd.PersistentFlags().String("model", "gpt-4", "Название модели")
+	
+	// Связывание флагов с Viper
+	viper.BindPFlag("api_url", rootCmd.PersistentFlags().Lookup("api-url"))
+	viper.BindPFlag("api_key", rootCmd.PersistentFlags().Lookup("api-key"))
+	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
 	
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
