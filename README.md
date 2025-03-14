@@ -17,6 +17,14 @@
 - Internet access for downloading dependencies
 - API key for OpenAI or compatible service
 
+### Using Homebrew (macOS/Linux)
+
+The easiest way to install `hint` is using Homebrew:
+
+```bash
+brew install hint
+```
+
 ### Building from source
 
 1. Clone the repository:
