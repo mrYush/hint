@@ -11,12 +11,6 @@
 
 ## Installation
 
-### Requirements
-
-- Go version 1.20 or higher
-- Internet access for downloading dependencies
-- API key for OpenAI or compatible service
-
 ### Using Homebrew (macOS/Linux)
 
 The easiest way to install `hint` is using Homebrew:
@@ -26,6 +20,14 @@ brew install hint
 ```
 
 ### Building from source
+
+If you prefer to build from source, you'll need:
+
+- Go version 1.20 or higher
+- Internet access for downloading dependencies
+- API key for OpenAI or compatible service
+
+Follow these steps:
 
 1. Clone the repository:
    ```bash
@@ -42,12 +44,13 @@ brew install hint
    ```bash
    go build -o hint cmd/hint/main.go
    ```
+
 4. Verify it works:
    ```bash
    ./hint --help
    ```
 
-4. Install to your system:
+5. Install to your system:
    ```bash
    # Linux/MacOS
    sudo cp hint /usr/local/bin/
