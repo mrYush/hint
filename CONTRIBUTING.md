@@ -69,33 +69,40 @@ toward it, not away from it. Two rules worth calling out now:
 
 ## Git workflow
 
-The project uses a **trunk-based** model, not classic GitFlow — there is no
-`develop` or long-lived release branch:
+The project uses a **GitFlow** model with two permanent branches:
 
-- **`main` is the trunk** and must always build and pass tests. Nothing is
-  committed to `main` directly; every change lands through a pull request.
-- **Short-lived branches off `main`**: `feature/<short-name>`,
-  `fix/<short-name>`, or `docs/<short-name>`. Rebase or merge `main` into
-  your branch to stay current — but never rewrite history of a branch someone
-  else may have checked out (no force-push after review has started; add
-  commits instead).
-- **Merging**: PRs are squash-merged by default, so a branch becomes one
-  coherent commit on `main`; keep the PR title in the commit-subject style
-  described below. A regular merge is acceptable for a branch whose
-  individual commits are meaningful on their own (e.g. a multi-WP phase
-  branch).
-- **Releases are tags, not branches**: annotated tags `vX.Y[.Z]` (with
-  pre-releases like `v0.1-alpha`) are cut from `main` and drive goreleaser
-  (WP0.10). The version plan per phase is in [PLAN.md](PLAN.md).
-- **Hotfixes** follow the same flow: `fix/…` branch off `main`, PR, then a
-  patch tag. If a fix must land on top of an older release, branch from the
-  tag (`release/vX.Y`) — this is the only case where a release branch exists,
-  and it is deleted after the patch tag is cut.
+- **`main` — releases only.** Every commit on `main` corresponds to a
+  released (or about-to-be-released) state; nothing is committed to it
+  directly. Release tags live here.
+- **`develop` — working code.** The permanent integration branch: all
+  day-to-day work lands here through pull requests, and it must always build
+  and pass tests.
+
+Flow:
+
+- **Work branches off `develop`**: `feature/<short-name>`,
+  `fix/<short-name>`, or `docs/<short-name>`; short-lived, merged back into
+  `develop` via PR (squash-merge by default, so a branch becomes one coherent
+  commit; keep the PR title in the commit-subject style described below).
+  Rebase or merge `develop` into your branch to stay current — but never
+  rewrite history of a branch someone else may have checked out (no
+  force-push after review has started; add commits instead).
+- **Releases**: a `release/vX.Y` branch is cut from `develop` when the
+  version's scope is complete. Only stabilization fixes and release chores
+  land on it. It is then merged into `main` with a regular merge (`--no-ff`),
+  the merge commit on `main` is tagged with an annotated `vX.Y[.Z]` tag
+  (pre-releases like `v0.1-alpha` included) which drives goreleaser (WP0.10),
+  and the release branch is **merged back into `develop`** so stabilization
+  fixes aren't lost, then deleted. The version plan per phase is in
+  [PLAN.md](PLAN.md).
+- **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
+  **both `main` (then patch-tagged) and `develop`**, and deleted.
 
 ## Making changes
 
-1. Fork the repository (external contributors) or create a branch off `main`
-   as described above.
+1. Fork the repository (external contributors) or create a branch off
+   `develop` as described above. Pull requests target `develop` (only
+   `release/*` and `hotfix/*` PRs target `main`).
 2. Keep PRs focused: one work package, one fix, or one document per PR where
    practical.
 3. Write tests with the change, not after it. Phase 0 targets ≥ 70% coverage
