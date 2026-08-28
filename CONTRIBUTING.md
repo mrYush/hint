@@ -67,10 +67,35 @@ toward it, not away from it. Two rules worth calling out now:
   docs-only decision PR first). An agreement that exists only in a comment
   thread does not exist.
 
+## Git workflow
+
+The project uses a **trunk-based** model, not classic GitFlow — there is no
+`develop` or long-lived release branch:
+
+- **`main` is the trunk** and must always build and pass tests. Nothing is
+  committed to `main` directly; every change lands through a pull request.
+- **Short-lived branches off `main`**: `feature/<short-name>`,
+  `fix/<short-name>`, or `docs/<short-name>`. Rebase or merge `main` into
+  your branch to stay current — but never rewrite history of a branch someone
+  else may have checked out (no force-push after review has started; add
+  commits instead).
+- **Merging**: PRs are squash-merged by default, so a branch becomes one
+  coherent commit on `main`; keep the PR title in the commit-subject style
+  described below. A regular merge is acceptable for a branch whose
+  individual commits are meaningful on their own (e.g. a multi-WP phase
+  branch).
+- **Releases are tags, not branches**: annotated tags `vX.Y[.Z]` (with
+  pre-releases like `v0.1-alpha`) are cut from `main` and drive goreleaser
+  (WP0.10). The version plan per phase is in [PLAN.md](PLAN.md).
+- **Hotfixes** follow the same flow: `fix/…` branch off `main`, PR, then a
+  patch tag. If a fix must land on top of an older release, branch from the
+  tag (`release/vX.Y`) — this is the only case where a release branch exists,
+  and it is deleted after the patch tag is cut.
+
 ## Making changes
 
-1. Fork the repository (external contributors) or create a branch:
-   `feature/<short-name>`, `fix/<short-name>`, or `docs/<short-name>`.
+1. Fork the repository (external contributors) or create a branch off `main`
+   as described above.
 2. Keep PRs focused: one work package, one fix, or one document per PR where
    practical.
 3. Write tests with the change, not after it. Phase 0 targets ≥ 70% coverage
