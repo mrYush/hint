@@ -100,6 +100,17 @@ a one-shot alias for a soft migration and may be removed later.
 | Q3 | Wails vs. native WinUI 3 for the Windows widget | Phase 4 | Spike at the start of Phase 4 |
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
+| Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
+
+## Prior art
+
+No existing tool implements the full product mechanic, but three actively
+developed projects each already cover a large, different subset of it in
+production or public beta (FutureOS's core-as-a-service design, Goose's MCP
+maturity, OpenHuman's voice+desktop-widget experience). See
+[`docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic`](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic)
+for the full comparison, sources, and what it means for the plan. Research
+pass dated 2026-08-29; re-run before Phase 4/5 decisions (Q2–Q4).
 
 ## How this plan is maintained
 
