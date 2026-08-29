@@ -98,6 +98,56 @@ Flow:
 - **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
   **both `main` (then patch-tagged) and `develop`**, and deleted.
 
+## Branch protection and review policy
+
+Both permanent branches (`main` and `develop`) are covered by a repository
+ruleset. What it enforces:
+
+- **A pull request is required** — no direct pushes to either branch.
+- **One approving review**, and it must come from a **code owner**
+  (`Require review from Code Owners`). Anyone may leave a review, but only a
+  code owner's approval unblocks the merge.
+- **Deletions are restricted** and **force pushes are blocked** on both
+  branches.
+- **Merge methods**: merge commits, squash, and rebase are all allowed,
+  because the workflow needs both — squash for `feature/*` → `develop`, and a
+  real merge commit for `release/*` and `hotfix/*` → `main`.
+
+Deliberately **not** enabled, and why:
+
+- `Require linear history` — release and hotfix branches merge into `main`
+  with `--no-ff`, which linear history would forbid.
+- `Require approval of the most recent reviewable push` — it demands that
+  someone *other than the pusher* approves. While there is a single code
+  owner that locks the owner out of their own pull requests. Turn it on once
+  there are at least two code owners.
+- `Require status checks to pass` — there is no CI yet; add the build/test
+  jobs as required checks when WP0.10 lands.
+
+Because GitHub does not let anyone approve their own pull request, the
+repository admin is on the ruleset's **bypass list (for pull requests only)**.
+That keeps the sole maintainer able to merge their own work, while every
+contributor's pull request still needs a code owner's approval.
+
+### Who can approve
+
+Approval rights are not a repository role — they are the combination of:
+
+1. **Write access** to the repository (Settings → Collaborators). Approvals
+   from users without write access are not counted by the ruleset.
+2. **Being listed in [`.github/CODEOWNERS`](.github/CODEOWNERS)** for the
+   paths the pull request touches.
+
+To grant approval rights, add the login to `CODEOWNERS` in a pull request; to
+revoke them, remove the line. Rights can be scoped to part of the tree — for
+example `/docs/ @mrYush @some-writer` lets that person approve only pull
+requests limited to `docs/`. The last matching line in the file wins.
+
+Since `CODEOWNERS` lives in the repository, changing who may approve is
+itself a reviewed, auditable pull request. Note that GitHub reads the file
+from the pull request's **base branch**, so a change to it takes effect only
+after it is merged into `develop`/`main`.
+
 ## Making changes
 
 1. Fork the repository (external contributors) or create a branch off
