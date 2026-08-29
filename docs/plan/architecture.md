@@ -114,6 +114,35 @@ Licensing rule: borrow code only from MIT/Apache projects (archived opencode,
 Aider idea-porting, official SDKs). Crush (FSL) and Claude Code are pattern
 sources only.
 
+## Prior art: does an existing tool already implement the whole mechanic?
+
+> Research pass: 2026-08-29. Revisit before Phase 4 (mobile/desktop
+> convergence) and before deciding Q2 (product naming) in PLAN.md — this
+> space moves fast.
+
+Short answer: **no single existing tool implements the full mechanic** — the
+combination of a Go core, camera/VLM and mic/STT/TTS as first-class declared
+interfaces, device sensors (incl. Raspberry Pi GPIO) exposed as client-hosted
+MCP servers, and a signed/trust-gated third-party catalog does not exist yet
+in one project. But three actively developed projects each already implement
+a large, *different* subset of the mechanic, in production or public beta —
+worth tracking, and worth reusing from where licenses allow.
+
+| Project | Closest to our plan on | Key gaps vs. our plan |
+|---|---|---|
+| [FutureOS](https://www.v2ex.com/t/1235540) ([write-up](https://www.80aj.com/2026/08/19/futureos-ai-agent-rust/)) | **Core-as-a-service, almost exactly as designed**: one local gRPC backend (`127.0.0.1:50051`), with terminal TUI, desktop, mobile (Android+iOS), CLI, and IM bots (Feishu/DingTalk) as thin clients of the same agent/session/memory. Sessions are JSONL with git-like branching (`/fork`, `/tree`) — arguably ahead of our WP0.7 plan, closer to Pi's tree-structured format. "Trust before capability" tiered-sandbox permission model. 140+ providers incl. local deployment (offline fallback). | Rust, not Go. No confirmed MCP client. No VLM/camera, no STT/TTS as core interfaces. No sensor/GPIO abstraction, no Raspberry Pi story. No formal signed package catalog. |
+| [Goose](https://goose-docs.ai/) ([review](https://theaiagentindex.com/agents/goose)) — donated by Block to the Agentic AI Foundation / Linux Foundation, Apache 2.0 | **Most mature MCP ecosystem** (70+ built-in extensions; any MCP server that works with Claude Desktop works with Goose — validates our WP2.1 bet on MCP over a custom plugin format). Multi-provider incl. Ollama (offline fallback). CLI + desktop app. Mobile exists: [`goose-ios`](https://github.com/dhanji/goose-ios) is a thin remote client in the App Store (tunnels back to your desktop agent — **not** on-device/offline), [`goose-android-agent`](https://github.com/block/goose-mobile) is an experimental PoC that automates the whole device (closer to computer-use than to "agent with perception"); a strictly-client Android port is only planned. See the [mobile apps announcement](https://block.github.io/goose/blog/2026/01/20/goose-mobile-apps/). | No native VLM/camera tool, no STT/TTS in core. No sensor/GPIO abstraction. No formal trust/signing model for extensions — an in-app MCP marketplace is only [proposed](https://github.com/block/goose/issues/6648), current discovery is a community [Skills Marketplace](https://github.com/block/goose/discussions/2075) and a static [extensions directory](https://mintlify.wiki/block/goose/concepts/extensions). Rust, not Go. |
+| [OpenHuman](https://github.com/tinyhumansai/openhuman) ([explainer](https://www.mager.co/blog/2026-05-25-openhuman-explainer/), [deep dive](https://pyshine.com/OpenHuman-Personal-AI-Super-Intelligence/)) | **Closest to Phases 3+4 today**: voice built into the core (Whisper STT, ElevenLabs TTS), native system-tray widget on macOS/Windows/Linux (Tauri) — near-equivalent of our planned Phase 4 desktop widget. Long-term memory goes further than our WP2.3 plan: a hierarchical memory tree built from 110+ OAuth-connected services. | Desktop-first, not core-as-a-service — no CLI-first / multi-shell architecture the way FutureOS and Goose have it. No native mobile apps. No camera/VLM. No sensor/GPIO or Raspberry Pi angle. Rust+Tauri, GPL3 (copyleft — code cannot be borrowed under our MIT/Apache-only rule). |
+
+Also checked and ruled out as a closer match: [Open Interpreter's `01` project](https://01.openinterpreter.com/) ([repo](https://github.com/openinterpreter/01)) — the closest in *spirit* to "personal multimodal agent" (voice-first, iOS/Android apps, ESP32 device support), but it is pre-1.0, explicitly [lacks basic safeguards](https://github.com/openinterpreter/01/issues) yet, is not coding-agent-first, and has no core-as-a-service/RPC design or Go/single-binary story.
+
+### What this means for the plan
+
+1. **The core architectural bet is de-risked, not novel.** "One core, thin clients on every platform" (Section 1.2 / this document's opening) is now a validated, shipping pattern (FutureOS, Goose), not a speculative design choice unique to us.
+2. **The unique combination still holds.** Nobody ships VLM+STT+TTS as day-one-declared interfaces *and* GPIO/sensor MCP servers *and* a signed third-party catalog *and* a single Go binary across desktop+mobile+Raspberry Pi. That combination (Section 1.4) remains the actual differentiator — not the core-as-a-service idea by itself.
+3. **Build-vs-adopt is worth an explicit look before Phase 2.** Goose's MCP integration is mature enough that Phase 2 (WP2.1) could validate its client against real-world MCP servers already cataloged by Goose's community, instead of discovering integration issues from scratch. This does not change the Go-core decision (Goose is Rust; embedding it does not serve the Raspberry Pi/mobile/no-cgo goals), but it lowers integration risk for WP2.1.
+4. **Revisit cadence:** this space is moving fast — FutureOS and OpenHuman both surfaced within roughly six months of each other in 2026, after the original product spec (dated 2026-08-28) was written. Re-run this scan before committing to Phase 4/5 architecture decisions (Q2/Q3/Q4 in PLAN.md).
+
 ## Platform matrix
 
 | Platform | Phase | Shell technology | Core | Offline models |
