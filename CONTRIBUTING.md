@@ -107,6 +107,11 @@ ruleset. What it enforces:
 - **One approving review**, and it must come from a **code owner**
   (`Require review from Code Owners`). Anyone may leave a review, but only a
   code owner's approval unblocks the merge.
+- **Stale approvals are dismissed** when new commits are pushed
+  (`Dismiss stale pull request approvals when new commits are pushed`) — an
+  approval only covers the code it was given on.
+- **Conversations must be resolved** before merging
+  (`Require conversation resolution before merging`).
 - **Deletions are restricted** and **force pushes are blocked** on both
   branches.
 - **Merge methods**: merge commits, squash, and rebase are all allowed,
