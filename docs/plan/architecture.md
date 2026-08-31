@@ -31,41 +31,100 @@ hint/
 ├── cmd/hint/main.go            # CLI, flags, wiring
 ├── internal/
 │   ├── agent/                  # loop, turn, compaction, limits
-│   ├── provider/               # modality interfaces
+│   ├── provider/               # implementations of the modality interfaces
 │   │   ├── openai/             # openai-compatible client (chat+stream+tools)
 │   │   └── router/             # default/fallback routing
-│   ├── tool/                   # Tool interface, registry
+│   ├── tool/                   # Tool registry, schema generation
 │   │   └── builtin/            # read,write,edit,ls,glob,grep,bash,todo
-│   ├── permission/             # action classes, modes, allow-list
+│   ├── permission/             # modes, allow-list, prompting
 │   ├── session/                # JSONL store, resume, list
 │   ├── project/                # HINT.md, auto-context, gitignore
 │   └── config/                 # profiles, sources (extends the current package)
-└── pkg/agentapi/               # PUBLIC types (Message, ToolCall, Event) — future SDK base
+└── pkg/agentapi/               # PUBLIC contract — future SDK base:
+                                #   wire types (Message, ContentPart, ToolCall,
+                                #   ToolResult, ToolSchema, Usage, Error),
+                                #   event streams (ChatEvent, Event),
+                                #   interfaces (ChatProvider, Embedder,
+                                #   Transcriber, Speaker, VisionProvider, Tool),
+                                #   ActionClass
 ```
+
+Note the split: the interfaces and the types they exchange live in
+`pkg/agentapi`; `internal/provider` and `internal/tool` hold only
+implementations and wiring. That is what lets a provider or a tool be written
+outside this module. `ActionClass` lives in `pkg/agentapi` for the same
+reason — a third-party tool has to be able to declare its own class, which it
+could not do if the type stayed in `internal/permission`.
 
 ## Key interfaces (contract)
 
 All modality interfaces are declared in the MVP even though only Chat is
 implemented — this freezes the contract for later phases.
 
+All of the below live in `pkg/agentapi` (implemented in WP0.1); see the
+package's doc comment for the full contract.
+
 ```go
+// conversation state — what a provider is given and what a session stores
+type Message struct {
+    Role       Role            // system | user | assistant | tool
+    Content    []ContentPart   // text | thinking | image | audio
+    ToolCalls  []ToolCall      // assistant only
+    ToolCallID string          // tool only, links back to a ToolCall
+}
+
 // provider
 type ChatProvider interface {
+    Name() string
     Stream(ctx context.Context, req ChatRequest) (<-chan ChatEvent, error)
 }
 type ChatRequest struct {
-    Model    string
-    Messages []Message
-    Tools    []ToolSchema
+    Model       string
+    Messages    []Message
+    Tools       []ToolSchema
+    Temperature *float64       // pointer: 0 is a value, not "unset"
+    MaxTokens   int
 }
-type ChatEvent struct { // Delta | ToolCall | Usage | Done | Error
-    Kind  EventKind
-    Text  string
-    Call  *ToolCall
-    Err   error
+type ChatEvent struct { // text_delta | thinking_delta | tool_call | usage | done | error
+    Kind         ChatEventKind
+    Text         string
+    Call         *ToolCall     // always complete; the provider assembles fragments
+    Usage        *Usage
+    FinishReason FinishReason
+    Err          *Error
 }
 
-// declared in MVP, implemented in phases 2–3+
+// agent — the stream a client (CLI, TUI, widget, mobile shell) renders.
+// Separate from ChatEvent on purpose: a client must not have to know that a
+// turn involved several provider calls, a fallback and a compaction.
+type Event struct { // turn_start | text_delta | thinking_delta | message |
+                    // permission | tool_start | tool_end | compaction |
+                    // usage | turn_end | error
+    Kind       EventKind
+    Message    *Message
+    Call       *ToolCall
+    Result     *ToolResult
+    Permission *PermissionRequest
+    Compaction *Compaction
+    Err        *Error
+    // …
+}
+
+// failures, classified by what the caller should do about them
+type Error struct {
+    Kind     ErrorKind        // network | timeout | rate_limited | unavailable |
+                              // auth | invalid_request | model_not_found |
+                              // context_overflow | content_filtered | canceled |
+                              // unknown
+    Message  string
+    Provider string
+    // …
+}
+func (e *Error) Retryable() bool    // same provider again could work
+func (e *Error) Fallbackable() bool // wider: auth and model_not_found too
+
+// declared in MVP, implemented in phases 2–3+.
+// No empty stubs: until the phase arrives there is simply no constructor.
 type Embedder interface {
     Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
@@ -83,11 +142,30 @@ type VisionProvider interface {
 type Tool interface {
     Name() string
     Description() string
-    Schema() json.RawMessage               // JSON Schema of the input
-    Class() permission.Class               // read | write | execute
-    Run(ctx context.Context, input json.RawMessage) (ToolResult, error)
+    InputSchema() json.RawMessage          // JSON Schema of the input
+    Class() ActionClass                    // read | write | execute
+    Run(ctx context.Context, callID string, args json.RawMessage) (ToolResult, error)
 }
 ```
+
+Two rules the wire types follow, because the same values are persisted in
+session files and shipped over RPC:
+
+- **Sum types are structs with a `Kind` discriminator, not sealed
+  interfaces.** A sealed interface is more type-safe in a `switch`, but it
+  cannot be decoded by `encoding/json` without a hand-written `UnmarshalJSON`
+  and a type registry — code that sits on the session-loading path and the
+  RPC path at once. The tagged union costs the ability for `Kind` and payload
+  to disagree, which each such type answers with a `Validate` method.
+- **Every type round-trips losslessly through `encoding/json`**, and the
+  field names of the core types are pinned by a test: renaming one breaks
+  sessions on disk and RPC clients. Raw-JSON fields are `omitempty` so a nil
+  value does not come back as the literal `null`.
+- **Unknown `Kind` values are skippable, not fatal.** `Validate` reports them
+  wrapped in the `ErrUnknownKind` sentinel, so a reader of a newer session
+  file or RPC message distinguishes "written by a later version" from
+  "malformed" with `errors.Is`. This is what lets a new `Kind` be added
+  without a `WireVersion` bump.
 
 ## References and what we take from each
 

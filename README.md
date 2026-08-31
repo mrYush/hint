@@ -23,7 +23,7 @@ brew install hint
 
 If you prefer to build from source, you'll need:
 
-- Go version 1.20 or higher
+- Go 1.22 or higher
 - Internet access for downloading dependencies
 - API key for OpenAI or compatible service
 

@@ -15,7 +15,7 @@ reworked.
 
 Requirements:
 
-- Go ≥ 1.20 today; the MVP (Phase 0) raises this to **Go ≥ 1.22**
+- **Go ≥ 1.22** (raised from 1.20 by WP0.1, the MVP's stated floor)
 - No cgo — the core must always build with `CGO_ENABLED=0` (cgo-dependent
   features live behind build tags; see `docs/plan/risks.md`, R1)
 - An API key for an OpenAI-compatible service, or a local
@@ -81,7 +81,9 @@ The project uses a **GitFlow** model with two permanent branches:
 Flow:
 
 - **Work branches off `develop`**: `feature/<short-name>`,
-  `fix/<short-name>`, or `docs/<short-name>`; short-lived, merged back into
+  `dev/<short-name>`, `fix/<short-name>`, or `docs/<short-name>`
+  (`dev/` and `feature/` are interchangeable; `dev/wp0.1-agentapi` naming a
+  work package is the common case); short-lived, merged back into
   `develop` via PR (squash-merge by default, so a branch becomes one coherent
   commit; keep the PR title in the commit-subject style described below).
   Rebase or merge `develop` into your branch to stay current — but never
