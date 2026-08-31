@@ -1,0 +1,10 @@
+# Code owners: approval from a listed owner is required to merge a PR
+# (the "Require review from Code Owners" rule in the branch ruleset).
+#
+# To grant someone approval rights: give them Write access in
+# Settings -> Collaborators AND add their login to the relevant line below
+# via a normal PR. Remove the login to revoke. Path-scoped lines grant
+# approval rights only for PRs touching those paths; the last matching
+# line wins.
+
+* @mrYush

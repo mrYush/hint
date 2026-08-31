@@ -1,0 +1,43 @@
+# golangci-lint configuration.
+#
+# The gate itself is wired into CI by WP0.10; this file exists now because
+# pkg/agentapi relies on the exhaustive linter for a guarantee Go's compiler
+# does not provide — a switch over a string enum that silently falls through
+# to its default when a new constant is added.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    # Go has no compile-time exhaustiveness check for string enums. The
+    # routing switches in pkg/agentapi/error.go depend on this linter to
+    # catch a newly added ErrorKind that nobody classified.
+    - exhaustive
+    # Errors must be compared with errors.Is/As, not == or type assertion:
+    # *agentapi.Error is routinely wrapped by callers.
+    - errorlint
+    # Doc comments on exported symbols — pkg/agentapi is published SDK
+    # surface, where an undocumented export is a defect.
+    - revive
+    - godot
+    - misspell
+    - unconvert
+    - nilerr
+
+  settings:
+    exhaustive:
+      # A default clause must not excuse a missing case; the point is to be
+      # told about the new constant.
+      default-signifies-exhaustive: false
+    revive:
+      rules:
+        - name: exported
+          arguments: ["disableStutteringCheck"]
+
+  exclusions:
+    rules:
+      # Test helpers may return a nil error alongside a non-nil one when that
+      # is exactly the contract under test (a tool reports a bad model
+      # argument as a result, not as a turn-aborting error).
+      - path: _test\.go
+        linters: [nilerr]
