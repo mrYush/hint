@@ -103,17 +103,17 @@ around it:
   one assistant message are indistinguishable and an approval can authorise
   the wrong call.
 
-### WP0.2 — Config: profiles and sources
+### WP0.2 — Config: profiles and sources — **done**
 
 Extends `internal/config`. Priority: CLI flags → env (`HINT_*`) → project
 `./.hint/config.yaml` → global `~/.config/hint/config.yaml`.
 
-- [ ] Provider profile type: `{name, base_url, api_key, model, kind: openai|ollama}`
-- [ ] Multiple profiles; one `default_provider`, explicit `fallback_provider`
-- [ ] Env references in values (`api_key: ${OPENAI_API_KEY}`)
-- [ ] Secrets never logged; masking helper used by the debug logger
-- [ ] Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
-- [ ] Table-driven tests for source priority and env expansion
+- [x] Provider profile type: `{name, base_url, api_key, model, kind: openai|ollama}`
+- [x] Multiple profiles; one `default_provider`, explicit `fallback_provider`
+- [x] Env references in values (`api_key: ${OPENAI_API_KEY}`)
+- [x] Secrets never logged; masking helper used by the debug logger
+- [x] Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
+- [x] Table-driven tests for source priority and env expansion
 
 Example config:
 
@@ -121,7 +121,7 @@ Example config:
 providers:
   - name: api-bar
     kind: openai
-    base_url: https://api-bar.ru/v1     # pin from the AnyAPI dashboard (see PLAN.md Q1)
+    base_url: https://api-bar.ru/route/openai   # gateway route; the client appends /chat/completions
     api_key: ${API_BAR_KEY}
     model: gpt-4o
   - name: local
@@ -131,6 +131,51 @@ providers:
 default_provider: api-bar
 fallback_provider: local
 ```
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **Viper is gone; the loader is hand-written over `gopkg.in/yaml.v3`.**
+  Viper is a process-global singleton (source-priority tests flake without
+  `viper.Reset()` and cannot run in parallel), and it cannot merge the
+  `providers` *list* by name — a later file replaces the whole list. The
+  loader takes an `Options{HomeDir, WorkingDir, LookupEnv, Flags}` seam, so
+  tests inject a map and `t.TempDir()` instead of process state. `yaml.v3`
+  was already in `go.sum` as Viper's transitive dependency and is now direct;
+  it is archived upstream but stable and ubiquitous (`goccy/go-yaml` is the
+  standby if it ever needs replacing).
+- **The product default endpoint is the api-bar gateway**
+  (`https://api-bar.ru/route/openai`, model `gpt-4o`), not `api.openai.com`.
+  This closes PLAN.md Q1 for chat: the gateway's public contour is
+  `/route/<provider>/…`, so the earlier `https://api-bar.ru/v1` example here
+  was wrong (`{base}/chat/completions` would hit a nonexistent path). OpenAI
+  remains an explicit profile (or the `OPENAI_API_KEY`-only zero-config
+  fallback). Revisit before a public release: a personal gateway as the
+  compiled-in default is fine for the maintainer, not for strangers.
+- **The default profile NAME is resolved before field overlays.**
+  `--provider` → `HINT_PROVIDER` → files; only then do `HINT_API_KEY` /
+  `HINT_API_URL` / `HINT_MODEL` and `--api-*` apply, and only to that
+  selected profile. The fallback keeps its own values — otherwise
+  `HINT_API_KEY` would hand a cloud key to the offline profile.
+- **Usability is validated only for selected profiles.** Every profile must
+  be well-formed (name, known kind), but "openai needs a key / ollama needs
+  a model" is enforced only for `default_provider` and `fallback_provider`.
+  A spare keyless profile (e.g. a local vLLM) must not block the run; it
+  fails when selected.
+- **Implicit key pickup happens only in zero-config synthesis.** With no
+  profiles from any file, one is synthesized from `API_BAR_KEY` /
+  `APIBAR_TOKEN` (api-bar wins) or `OPENAI_API_KEY` (legacy openai.com). An
+  explicit profile must name its key via `${VAR}` — the loader never guesses
+  a key for it, and never sends an OpenAI key to another host.
+- **Flag defaults are empty strings.** The old `--model` default `gpt-4`
+  silently beat every config file; built-in defaults now live in the loader,
+  applied only after all overlays. Legacy paths (`~/.config/hint.yaml`,
+  `./hint.yaml`) are still read with a deprecation warning when the
+  canonical ones are absent.
+- **`$VAR`/`${VAR}` expansion applies to file values only** (profile fields
+  plus `default_provider`/`fallback_provider`), after merge. Flag and env
+  overlay values are not expanded — the shell already did that. No
+  `$(cmd)`, no `${VAR:-default}`.
 
 ### WP0.3 — Provider layer
 
