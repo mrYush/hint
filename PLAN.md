@@ -68,7 +68,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
 ## Current status
 
-- **Active phase:** Phase 0 — MVP CLI (not started; planning complete).
+- **Active phase:** Phase 0 — MVP CLI (in progress).
+- **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
+  streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
+- **Next:** WP0.2 — config profiles and sources.
 - Today's `hint` is a one-shot CLI (cobra + viper + a minimal
   chat-completions client in `internal/llm`). Phase 0 replaces `internal/llm`
   with a streaming provider layer and adds the agent loop, tools, permissions,
@@ -83,7 +86,8 @@ a one-shot alias for a soft migration and may be removed later.
 
 ## Next 5 steps (can start today)
 
-1. Create `pkg/agentapi` with Message/ToolCall/Event types (contract before code).
+1. ~~Create `pkg/agentapi` with Message/ToolCall/Event types (contract before
+   code).~~ Done — see [WP0.1](docs/plan/phase-0-mvp-cli.md#wp01--public-contract-pkgagentapi--done).
 2. Rewrite `internal/llm` → `internal/provider/openai` with streaming and
    tools; test against OpenAI and Ollama.
 3. Implement the agent loop + `read_file`/`list_dir` tools — the first real

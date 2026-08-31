@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: Planned · Target release: **v0.1** · Estimate: 6–10 weeks (part-time)
+> Status: In progress · Target release: **v0.1** · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -27,17 +27,81 @@ git auto-commits, LSP, widgets, and mobile apps — all later phases.
 
 ## Work packages
 
-### WP0.1 — Public contract: `pkg/agentapi`
+### WP0.1 — Public contract: `pkg/agentapi` — **done**
 
 Types before code: `Message`, `ToolCall`, `ToolResult`, `Event`, `ToolSchema`,
 plus the modality interfaces (`ChatProvider`, `Embedder`, `Transcriber`,
 `Speaker`, `VisionProvider`) — only `ChatProvider` gets an implementation in
 this phase.
 
-- [ ] Define message/event/tool types in `pkg/agentapi`
-- [ ] Declare all modality interfaces (empty implementations forbidden — unimplemented ones simply have no constructor yet)
-- [ ] Doc comments on every exported symbol (this becomes the SDK)
-- [ ] Unit tests: JSON round-trip for every wire type
+- [x] Define message/event/tool types in `pkg/agentapi`
+- [x] Declare all modality interfaces (empty implementations forbidden — unimplemented ones simply have no constructor yet)
+- [x] Doc comments on every exported symbol (this becomes the SDK)
+- [x] Unit tests: JSON round-trip for every wire type
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **`Message.Content` is `[]ContentPart`**, not a flat string. Phase 3
+  multimodality then adds a part kind instead of reshaping a published type.
+- **Sum types are structs with a `Kind` discriminator**, not sealed
+  interfaces. The same values are persisted in session files (WP0.7) and
+  shipped over RPC (Phase 1); a sealed interface would need hand-written
+  `(Un)MarshalJSON` on that path. The cost is that `Kind` and payload can
+  disagree, which every such type answers with a `Validate` method.
+- **Modality interfaces live in `pkg/agentapi`**, not `internal/provider`, so
+  a provider can be written outside the module. `architecture.md` updated to
+  match.
+- **Providers assemble streamed tool-call fragments**, so a `ChatToolCall`
+  event always carries a complete, JSON-valid call.
+- **`Message` carries no id or timestamp** — that metadata belongs to the
+  session record wrapping it (WP0.7).
+
+Scope taken beyond the original checklist, because WP0.3–WP0.6 need these
+types to be public and would otherwise have to amend the contract later:
+
+- [x] `ActionClass` (read/write/execute) — the `Tool` interface would
+      otherwise pull `permission.Class` out of `internal/`, putting the class
+      out of reach of third-party tool authors
+- [x] Typed `Error`/`ErrorKind` with `Retryable`/`Fallbackable` — the WP0.3
+      router needs to tell a network failure from a 401 to decide when to
+      fall back
+- [x] `Usage` — the WP0.4 compaction trigger needs token accounting
+- [x] `Tool` interface (declared here, implemented in WP0.5),
+      `PermissionRequest` and `Compaction` payloads (the client-facing
+      `Event` is incomplete without them)
+- [x] `go.mod` raised 1.20 → 1.22, the phase's stated floor
+- [x] `.golangci.yml` — the contract depends on the `exhaustive` linter for a
+      guarantee Go's compiler does not give (a `switch` over a string enum
+      falling through to `default` when a constant is added). CI wires the
+      gate itself in WP0.10; the config lands with the code that needs it.
+
+Rules the wire types hold to, each pinned by a test after review found a way
+around it:
+
+- A **tool message may be empty** — a tool that succeeds silently produces no
+  output, and the message is identified by its `ToolCallID`. Requiring content
+  made `ToolResult.Message()` build a message `Message.Validate` rejected, so
+  a silent `write_file` aborted the next turn with a non-retryable error.
+- **Tool arguments and input schemas must be JSON objects**, not merely valid
+  JSON. `null` — which is what a nil `json.RawMessage` decodes back into —
+  and scalars would otherwise unmarshal into a zeroed argument struct, so a
+  tool would run against empty inputs.
+- **Raw JSON fields are `omitempty`**, so a nil value stays nil across a round
+  trip instead of becoming the four bytes `null` and flipping `Validate` from
+  rejecting to accepting.
+- **Cancellation outranks a provider's own classification** in `KindOf`: an
+  HTTP client reports a cancelled request as a transport failure, and treating
+  that as `ErrNetwork` would make the router fail over on the user's Ctrl-C.
+- **Unknown `Kind` values fail with the `ErrUnknownKind` sentinel**, so a
+  decoder of a newer session file can tell "skip it" from "malformed" with
+  `errors.Is`, as the forward-compatibility rule in the package doc promises.
+- **`FinishReason` is validated strictly.** Providers must map their dialect
+  onto it; forwarding a raw `max_tokens` would make the loop report a
+  truncated answer as a normal stop.
+- **A permission request carries its `CallID`.** Without it, two prompts from
+  one assistant message are indistinguishable and an approval can authorise
+  the wrong call.
 
 ### WP0.2 — Config: profiles and sources
 
