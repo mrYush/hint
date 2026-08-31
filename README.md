@@ -23,7 +23,7 @@ brew install hint
 
 If you prefer to build from source, you'll need:
 
-- Go version 1.20 or higher
+- Go 1.22 or higher
 - Internet access for downloading dependencies
 - API key for OpenAI or compatible service
 
@@ -158,13 +158,9 @@ hint "Your question"
 
 ## Contributing
 
-Contributions are welcome! Here's how you can contribute:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Commit your changes: `git commit -am 'Add some feature'`
-4. Push to the branch: `git push origin feature/your-feature-name`
-5. Submit a pull request
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development setup, conventions, and how work is planned. The project roadmap
+lives in [PLAN.md](PLAN.md).
 
 ## License
 
