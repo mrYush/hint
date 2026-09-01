@@ -1,64 +1,114 @@
+// Package config loads hint's configuration from CLI flags, HINT_*
+// environment variables, and YAML files (project ./.hint/config.yaml and
+// global ~/.config/hint/config.yaml), highest priority first.
+//
+// The result is a set of named provider profiles plus a default/fallback
+// pair. Later packages (the provider router, WP0.3) consume Default() and
+// Fallback() and know nothing about files or environment variables.
 package config
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
-
-	"github.com/spf13/viper"
+	"fmt"
 )
 
-// Config contains application settings
-type Config struct {
-	APIURL   string
-	APIKey   string
-	Model    string
+// Kind identifies the API dialect of a provider profile.
+type Kind string
+
+const (
+	// KindOpenAI is the OpenAI Chat Completions dialect (OpenAI, OpenRouter,
+	// vLLM, api-bar /route/openai, Ollama /v1, ...). The default profile of
+	// this kind must carry an API key.
+	KindOpenAI Kind = "openai"
+	// KindOllama is the same Chat Completions dialect served by a local
+	// Ollama; no API key is required and WP0.3 adds a native client for
+	// health checks and model listing.
+	KindOllama Kind = "ollama"
+)
+
+// Built-in defaults applied to profiles after all overlays, when a field is
+// still empty. The product default endpoint is the api-bar gateway, not
+// api.openai.com; OpenAI remains an explicit opt-in profile.
+const (
+	defaultAPIBarBaseURL = "https://api-bar.ru/route/openai"
+	defaultOpenAIBaseURL = "https://api.openai.com/v1"
+	defaultOpenAIModel   = "gpt-4o"
+	defaultOllamaBaseURL = "http://localhost:11434/v1"
+)
+
+// Profile is one configured provider endpoint.
+type Profile struct {
+	Name    string
+	Kind    Kind
+	BaseURL string
+	// APIKey holds the key after ${VAR} expansion. It must never reach a log
+	// unmasked; String() and the Mask/Redact helpers exist for that.
+	APIKey string
+	Model  string
 }
 
-// Load loads configuration from various sources
-func Load() (*Config, error) {
-	// Configure viper for configuration loading
-	viper.SetConfigName("hint")
-	viper.SetConfigType("yaml")
-	
-	// Paths to search for configuration files
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		viper.AddConfigPath(filepath.Join(homeDir, ".config"))
+// String implements fmt.Stringer with the API key masked, so a Profile
+// printed via %v/%+v/%s can never leak the secret.
+func (p Profile) String() string {
+	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s}",
+		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model)
+}
+
+// Config is the fully resolved configuration.
+type Config struct {
+	Providers        []Profile
+	DefaultProvider  string
+	FallbackProvider string
+	// Debug mirrors HINT_DEBUG (the --debug flag arrives in WP0.9).
+	Debug bool
+	// Warnings collects non-fatal findings (legacy paths, migrated flat
+	// keys, ignored values). The CLI prints them to stderr once per run.
+	Warnings []string
+}
+
+// Profile returns the profile with the given name.
+func (c *Config) Profile(name string) (Profile, error) {
+	for _, p := range c.Providers {
+		if p.Name == name {
+			return p, nil
+		}
 	}
-	viper.AddConfigPath(".")
-	
-	// Setting environment variables
-	viper.SetEnvPrefix("HINT")
-	viper.AutomaticEnv()
-	
-	// Loading configuration from file (if exists)
-	_ = viper.ReadInConfig()
-	
-	// Creating configuration
-	cfg := &Config{
-		APIURL:   viper.GetString("api_url"),
-		APIKey:   viper.GetString("api_key"),
-		Model:    viper.GetString("model"),
+	return Profile{}, fmt.Errorf("config: unknown provider profile %q", name)
+}
+
+// Default returns the profile selected as default_provider.
+func (c *Config) Default() (Profile, error) {
+	if c.DefaultProvider == "" {
+		return Profile{}, fmt.Errorf("config: no default provider configured")
 	}
-	
-	// Setting default values
-	if cfg.APIURL == "" {
-		cfg.APIURL = "https://api.openai.com/v1"
+	return c.Profile(c.DefaultProvider)
+}
+
+// Fallback returns the fallback profile, or false when none is configured.
+func (c *Config) Fallback() (Profile, bool) {
+	if c.FallbackProvider == "" {
+		return Profile{}, false
 	}
-	
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("OPENAI_API_KEY")
+	p, err := c.Profile(c.FallbackProvider)
+	if err != nil {
+		return Profile{}, false
 	}
-	
-	if cfg.Model == "" {
-		cfg.Model = "gpt-4"
+	return p, true
+}
+
+// Secrets returns every distinct non-empty API key in the configuration —
+// the input for Redact when scrubbing log output.
+func (c *Config) Secrets() []string {
+	seen := make(map[string]struct{}, len(c.Providers))
+	var out []string
+	for _, p := range c.Providers {
+		if p.APIKey == "" {
+			continue
+		}
+		if _, ok := seen[p.APIKey]; ok {
+			continue
+		}
+		seen[p.APIKey] = struct{}{}
+		out = append(out, p.APIKey)
 	}
-	
-	// Checking required parameters
-	if cfg.APIKey == "" {
-		return nil, errors.New("API key must be specified using --api-key, HINT_API_KEY, or OPENAI_API_KEY")
-	}
-	
-	return cfg, nil
-} 
+	return out
+}
