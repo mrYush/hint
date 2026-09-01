@@ -60,31 +60,73 @@ Follow these steps:
 
 ## Configuration
 
-The utility supports several configuration methods:
+Configuration is a set of named **provider profiles** plus a default/fallback
+pair. Sources, highest priority first:
 
-### Via command line flags
+1. CLI flags (`--provider`, `--api-url`, `--api-key`, `--model`)
+2. Environment variables (`HINT_*`)
+3. Project file `./.hint/config.yaml`
+4. Global file `~/.config/hint/config.yaml` (respects `$XDG_CONFIG_HOME`)
+
+### Quick start (zero config)
+
+Without any config file, `hint` talks to the [api-bar](https://api-bar.ru)
+gateway by default — one key is enough:
 
 ```bash
-hint --api-key=<your_api_key> --model=<model>
+export API_BAR_KEY=<your_api_bar_key>
+hint "How do I run this project?"
 ```
 
-### Via environment variables
+If only `OPENAI_API_KEY` is set, a legacy `openai` profile on
+`https://api.openai.com/v1` is used instead.
 
-```bash
-export HINT_API_KEY=<your_api_key>
-export HINT_MODEL=<model>
-export HINT_API_URL=<api_url>
-```
-
-### Via configuration file
-
-Create a file `~/.config/hint.yaml` or `./hint.yaml` with the following content:
+### Configuration file
 
 ```yaml
-api_key: <your_api_key>
-model: <model>
-api_url: <api_url>
+providers:
+  - name: api-bar
+    kind: openai                                # OpenAI Chat Completions dialect
+    base_url: https://api-bar.ru/route/openai   # hint appends /chat/completions
+    api_key: ${API_BAR_KEY}                     # $VAR / ${VAR} references are expanded
+    model: gpt-4o
+  - name: local
+    kind: ollama                                # same dialect, no key required
+    base_url: http://localhost:11434/v1
+    model: qwen2.5:7b
+default_provider: api-bar
+fallback_provider: local
 ```
+
+The project file overlays the global one profile-by-profile (matched by
+`name`, non-empty fields win), so a project can override just the model or
+key of a globally defined profile.
+
+### Environment variables
+
+```bash
+export HINT_PROVIDER=<profile_name>    # select the default profile
+export HINT_FALLBACK_PROVIDER=<name>
+export HINT_API_KEY=<key>              # these three override the SELECTED
+export HINT_API_URL=<base_url>         # profile only; the fallback keeps
+export HINT_MODEL=<model>              # its own values
+export HINT_DEBUG=true
+```
+
+### CLI flags
+
+```bash
+hint --provider=local "question"                 # pick a profile for one run
+hint --api-key=<key> --model=gpt-4o-mini "..."   # override the selected profile
+```
+
+### Migrating from the flat config
+
+The pre-profiles format (`api_url`/`api_key`/`model` at the top level of
+`~/.config/hint.yaml` or `./hint.yaml`) is still read: the old paths work
+with a deprecation warning, and the flat keys are mapped onto a single
+profile named `default`. Move to the `providers` list at the new paths at
+your convenience.
 
 ## Usage
 

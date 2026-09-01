@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-08-28
+> Status: living document · Last updated: 2026-08-31
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -71,10 +71,13 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - **Active phase:** Phase 0 — MVP CLI (in progress).
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
-- **Next:** WP0.2 — config profiles and sources.
-- Today's `hint` is a one-shot CLI (cobra + viper + a minimal
-  chat-completions client in `internal/llm`). Phase 0 replaces `internal/llm`
-  with a streaming provider layer and adds the agent loop, tools, permissions,
+  WP0.2 — config profiles and sources (provider profiles,
+  default/fallback pair, `${VAR}` expansion, masking helpers, flat-config
+  migration; Viper replaced by a hand-written loader over `yaml.v3`).
+- **Next:** WP0.3 — provider layer.
+- Today's `hint` is a one-shot CLI (cobra + a minimal chat-completions
+  client in `internal/llm`). Phase 0 replaces `internal/llm` with a
+  streaming provider layer and adds the agent loop, tools, permissions,
   and sessions.
 
 ## Compatibility decision
@@ -99,7 +102,7 @@ a one-shot alias for a soft migration and may be removed later.
 
 | # | Question | Blocking | Resolution path |
 |---|---|---|---|
-| Q1 | api-bar.ru: exact `base_url`, model list, modality support (embeddings/vision/audio) | Phase 0 CI matrix entry only (config-driven, no code impact) | Check the AnyAPI dashboard after registration; behavior is fixed empirically |
+| Q1 | api-bar.ru: exact `base_url`, model list, modality support (embeddings/vision/audio) | Phase 0 CI matrix entry only (config-driven, no code impact) | **Chat resolved by WP0.2**: `base_url` is `https://api-bar.ru/route/openai` (the gateway's public contour is `/route/<provider>/…`; models via `GET /route/openai/models`). Embeddings/vision/audio stay open for Phase 2–3 — other providers use different route shapes |
 | Q2 | Product name: keep `hint` or rebrand? | Phase 7 (public catalog) at the latest; binary/config names are cheap to alias earlier | Decide before v0.5 (first non-CLI audience) |
 | Q3 | Wails vs. native WinUI 3 for the Windows widget | Phase 4 | Spike at the start of Phase 4 |
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |

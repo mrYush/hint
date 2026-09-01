@@ -5,23 +5,28 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/llm"
-	"github.com/spf13/viper"
 )
 
 func main() {
-	var rootCmd = &cobra.Command{
+	var flags config.Flags
+
+	rootCmd := &cobra.Command{
 		Use:   "hint [question]",
 		Short: "A utility for getting contextual hints using LLM",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Load configuration
-			cfg, err := config.Load()
+			cfg, err := config.Load(flags)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 				os.Exit(1)
+			}
+			for _, w := range cfg.Warnings {
+				fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 			}
 
 			// Get directory context
@@ -49,18 +54,16 @@ func main() {
 		},
 	}
 
-	// Configuration flags
-	rootCmd.PersistentFlags().String("api-url", "", "API URL (OpenAI is used by default)")
-	rootCmd.PersistentFlags().String("api-key", "", "API Key")
-	rootCmd.PersistentFlags().String("model", "gpt-4", "Model name")
-	
-	// Binding flags with Viper
-	viper.BindPFlag("api_url", rootCmd.PersistentFlags().Lookup("api-url"))
-	viper.BindPFlag("api_key", rootCmd.PersistentFlags().Lookup("api-key"))
-	viper.BindPFlag("model", rootCmd.PersistentFlags().Lookup("model"))
-	
+	// Configuration flags. Defaults stay empty on purpose: a non-empty flag
+	// default would override values from config files (the pre-WP0.2
+	// --model=gpt-4 bug). Built-in defaults live in internal/config.
+	rootCmd.PersistentFlags().StringVar(&flags.Provider, "provider", "", "Provider profile to use for this run")
+	rootCmd.PersistentFlags().StringVar(&flags.APIURL, "api-url", "", "Base URL of the provider API (overrides the selected profile)")
+	rootCmd.PersistentFlags().StringVar(&flags.APIKey, "api-key", "", "API key (overrides the selected profile)")
+	rootCmd.PersistentFlags().StringVar(&flags.Model, "model", "", "Model name (overrides the selected profile)")
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-} 
+}
