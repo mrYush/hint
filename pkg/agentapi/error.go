@@ -55,6 +55,11 @@ const (
 	// ErrCanceled is the caller's own context being cancelled. Never retried
 	// and never reported as a provider failure.
 	ErrCanceled ErrorKind = "canceled"
+	// ErrTurnLimit is the agent loop (WP0.4) hitting its iteration cap
+	// without the model reaching a final answer. Not retryable — repeating
+	// the same request would hit the same cap — and not a provider failure,
+	// so falling back to another provider would not help either.
+	ErrTurnLimit ErrorKind = "turn_limit"
 )
 
 // Retryable reports whether repeating the same request against the same
@@ -72,7 +77,7 @@ func (k ErrorKind) Retryable() bool {
 	case ErrNetwork, ErrTimeout, ErrRateLimited, ErrUnavailable:
 		return true
 	case ErrAuth, ErrInvalidRequest, ErrModelNotFound, ErrContextOverflow,
-		ErrContentFiltered, ErrCanceled, ErrUnknown:
+		ErrContentFiltered, ErrCanceled, ErrTurnLimit, ErrUnknown:
 		return false
 	default:
 		return false
@@ -87,7 +92,8 @@ func (k ErrorKind) Fallbackable() bool {
 	switch k {
 	case ErrNetwork, ErrTimeout, ErrRateLimited, ErrUnavailable, ErrAuth, ErrModelNotFound:
 		return true
-	case ErrInvalidRequest, ErrContextOverflow, ErrContentFiltered, ErrCanceled, ErrUnknown:
+	case ErrInvalidRequest, ErrContextOverflow, ErrContentFiltered, ErrCanceled,
+		ErrTurnLimit, ErrUnknown:
 		return false
 	default:
 		return false
@@ -99,7 +105,7 @@ func (k ErrorKind) Valid() bool {
 	switch k {
 	case ErrUnknown, ErrNetwork, ErrTimeout, ErrRateLimited, ErrUnavailable,
 		ErrAuth, ErrInvalidRequest, ErrModelNotFound, ErrContextOverflow,
-		ErrContentFiltered, ErrCanceled:
+		ErrContentFiltered, ErrCanceled, ErrTurnLimit:
 		return true
 	default:
 		return false
