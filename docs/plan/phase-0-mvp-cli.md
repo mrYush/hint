@@ -177,16 +177,79 @@ depend on them:
   overlay values are not expanded — the shell already did that. No
   `$(cmd)`, no `${VAR:-default}`.
 
-### WP0.3 — Provider layer
+### WP0.3 — Provider layer — **done**
 
 Replaces `internal/llm` with `internal/provider/openai` + `internal/provider/router`.
 
-- [ ] `openai-compatible` implementation of `ChatProvider`: streaming chat completions + tool calls (covers OpenAI, Azure, OpenRouter, vLLM, LM Studio, aggregator gateways such as api-bar.ru, and Ollama via `/v1`)
-- [ ] `ollama-native` client for health-check and model listing only
-- [ ] Router: on network error/timeout of the default profile, automatically switch to the fallback profile with a notice on stderr
-- [ ] Streaming output to the terminal
-- [ ] Integration tests against OpenAI and Ollama (recorded fixtures for CI; live matrix job optional, incl. api-bar.ru — streaming and tool-calling especially)
-- [ ] Delete `internal/llm`
+- [x] `openai-compatible` implementation of `ChatProvider`: streaming chat completions + tool calls (covers OpenAI, Azure, OpenRouter, vLLM, LM Studio, aggregator gateways such as api-bar.ru, and Ollama via `/v1`)
+- [x] `ollama-native` client for health-check and model listing only
+- [x] Router: on network error/timeout of the default profile, automatically switch to the fallback profile with a notice on stderr
+- [x] Streaming output to the terminal
+- [x] Integration tests against OpenAI and Ollama (recorded fixtures for CI; live matrix job optional, incl. api-bar.ru — streaming and tool-calling especially)
+- [x] Delete `internal/llm`
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **Hand-rolled HTTP + SSE over the stdlib, no `openai-go`.** Fixture tests
+  replay recorded byte streams (`testdata/*.sse`), error mapping is explicit,
+  and dialect quirks stay visible in the package instead of inside an SDK.
+  The streaming-loop and accumulator shape follows Ollama's runner client and
+  the message conversion follows opencode's provider (both MIT, rewritten
+  against `agentapi` types, attributed in the commit).
+- **The wire protocol lives in a sans-IO decoder** (`stream.go`): SSE lines
+  go in, `ChatEvent`s come out, no HTTP anywhere. Protocol edge cases are
+  table-tested from string literals without a server. The decoder implements
+  the real SSE record grammar — multi-line `data:` joining, comment/field
+  skipping, CRLF tolerance, bare-JSON lines from unframed servers, and an
+  unterminated final record at EOF — because gateways in the wild produce all
+  of these.
+- **Streamed tool-call fragments are keyed by `index` (pointer, so absent ≠
+  0), with an id-keyed fallback** for dialects that omit the index. Calls are
+  validated (`ToolCall.Validate`) and emitted in index order only at stream
+  end; truncated arguments JSON becomes a terminal `ChatError`, never a
+  half-built `ChatToolCall`. A missing id is synthesized (`call_<index>`)
+  because the contract requires one for result correlation.
+- **Cancellation shape is pinned by test:** a stream that already delivered
+  events ends with `ChatDone`/`FinishCanceled` (the user interrupted a
+  healthy answer); a cancel that beat the first delivery ends with
+  `ChatError`/`ErrCanceled`.
+- **Two liveness guards beyond the checklist.** A per-chunk idle timeout
+  (default 2 min, `WithIdleTimeout`) turns a provider that stalls mid-stream
+  into `ErrTimeout` instead of a hung run, and a 200-OK stream that ends
+  before sending anything is `ErrUnavailable`, not an empty success. The
+  overall request keeps no deadline — a healthy stream may run for minutes;
+  only `ResponseHeaderTimeout` (60 s TTFT) bounds the connect.
+- **Router policy:** failover (and same-provider retry, two extra attempts
+  with `Retry-After`/jittered-backoff capped at 30 s) applies only while the
+  primary produced no user-visible events; after that a failure is forwarded
+  as-is — splicing two providers' answers mid-stream is worse than an error.
+  `Router.Stream` never returns a synchronous error: all failures arrive on
+  the channel after the policy is exhausted. Usage events are withheld until
+  the terminal so a retried attempt cannot leak a duplicate.
+- **`Router.Name()` is the primary's static name**, deviating from the
+  earlier "active profile" sketch: a router is shared between concurrent
+  turns, so a mutable active-profile name would be a data race. Attribution
+  of failures travels in `Error.Provider`; the switch itself is announced by
+  the stderr notice.
+- **`ReadyChecker` is a consumer-side interface in the router package.** The
+  factory (`provider.Chat`) decorates an `ollama`-kind profile with the
+  native `/api/version` probe; the router discovers it by type assertion, so
+  failing over to a stopped daemon reports one clear `ErrUnavailable`.
+- **Requests send `max_tokens`**, not the newer `max_completion_tokens`:
+  every supported dialect (gateways, vLLM, LM Studio, Ollama) accepts the
+  former, several reject the latter. Revisit if an o-series model profile
+  ever needs it.
+- **`PartThinking` is omitted from outbound requests; media parts fail
+  loudly** with `ErrInvalidRequest` (Phase 3). Inbound
+  `delta.reasoning_content`/`delta.reasoning` map to `ChatThinkingDelta`,
+  which the CLI keeps off stdout.
+- **Azure classic deployments are out of scope**; Azure's OpenAI-compatible
+  `/openai/v1` surface works as any other aggregator profile. Classic
+  (`api-version` query, `api-key` header) would be a WP0.2-shaped config
+  change.
+- **`hint` still does one-shot Q&A** — the WP0.4 loop is next; tool-call and
+  usage events already flow through the CLI but have no consumer yet.
 
 ### WP0.4 — Agent loop
 
