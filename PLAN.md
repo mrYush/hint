@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-01
+> Status: living document · Last updated: 2026-09-02
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -77,10 +77,13 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.3 — provider layer (streaming `internal/provider/openai` over
   hand-rolled SSE, native Ollama health/list client, retry + failover
   router; `internal/llm` deleted).
-- **Next:** WP0.4 — agent loop.
-- Today's `hint` is still a one-shot CLI (cobra), now streaming its answer
-  through the provider layer. Phase 0 adds the agent loop, tools,
-  permissions, and sessions next.
+  WP0.4 — agent loop (`internal/agent`: tool-calling `while`, iteration and
+  context-window limits, LLM-summary compaction with a drop-thinking
+  shortcut; `cmd/hint` now runs its one-shot turn through `Agent.RunTurn`).
+- **Next:** WP0.5 — built-in tools.
+- Today's `hint` is still a one-shot CLI (cobra), now running through the
+  agent loop with no tools registered. Phase 0 adds tools, permissions, and
+  sessions next.
 
 ## Compatibility decision
 
@@ -96,9 +99,11 @@ a one-shot alias for a soft migration and may be removed later.
 2. ~~Rewrite `internal/llm` → `internal/provider/openai` with streaming and
    tools; test against OpenAI and Ollama.~~ Done — see
    [WP0.3](docs/plan/phase-0-mvp-cli.md#wp03--provider-layer--done).
-3. Implement the agent loop + `read_file`/`list_dir` tools — the first real
-   agentic scenario.
-4. Add the permission layer and `bash` with confirmation.
+3. ~~Implement the agent loop (`internal/agent`, tool-calling `while` +
+   limits + compaction).~~ Done — see
+   [WP0.4](docs/plan/phase-0-mvp-cli.md#wp04--agent-loop--done).
+4. Add `read_file`/`list_dir` tools — the first real agentic scenario —
+   then the permission layer and `bash` with confirmation.
 5. JSONL sessions + `-c`. Then tag `v0.1-alpha` and build for Raspberry Pi.
 
 ## Open questions

@@ -97,6 +97,9 @@ type ChatEvent struct { // text_delta | thinking_delta | tool_call | usage | don
 // agent — the stream a client (CLI, TUI, widget, mobile shell) renders.
 // Separate from ChatEvent on purpose: a client must not have to know that a
 // turn involved several provider calls, a fallback and a compaction.
+// Produced by internal/agent.Agent.RunTurn (WP0.4): model responds, tool
+// calls run and feed back, repeat until a final answer, a compaction, or
+// the iteration/turn_limit cap.
 type Event struct { // turn_start | text_delta | thinking_delta | message |
                     // permission | tool_start | tool_end | compaction |
                     // usage | turn_end | error
@@ -115,7 +118,7 @@ type Error struct {
     Kind     ErrorKind        // network | timeout | rate_limited | unavailable |
                               // auth | invalid_request | model_not_found |
                               // context_overflow | content_filtered | canceled |
-                              // unknown
+                              // turn_limit | unknown
     Message  string
     Provider string
     // …
