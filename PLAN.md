@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-08-31
+> Status: living document · Last updated: 2026-09-01
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -74,11 +74,13 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.2 — config profiles and sources (provider profiles,
   default/fallback pair, `${VAR}` expansion, masking helpers, flat-config
   migration; Viper replaced by a hand-written loader over `yaml.v3`).
-- **Next:** WP0.3 — provider layer.
-- Today's `hint` is a one-shot CLI (cobra + a minimal chat-completions
-  client in `internal/llm`). Phase 0 replaces `internal/llm` with a
-  streaming provider layer and adds the agent loop, tools, permissions,
-  and sessions.
+  WP0.3 — provider layer (streaming `internal/provider/openai` over
+  hand-rolled SSE, native Ollama health/list client, retry + failover
+  router; `internal/llm` deleted).
+- **Next:** WP0.4 — agent loop.
+- Today's `hint` is still a one-shot CLI (cobra), now streaming its answer
+  through the provider layer. Phase 0 adds the agent loop, tools,
+  permissions, and sessions next.
 
 ## Compatibility decision
 
@@ -91,8 +93,9 @@ a one-shot alias for a soft migration and may be removed later.
 
 1. ~~Create `pkg/agentapi` with Message/ToolCall/Event types (contract before
    code).~~ Done — see [WP0.1](docs/plan/phase-0-mvp-cli.md#wp01--public-contract-pkgagentapi--done).
-2. Rewrite `internal/llm` → `internal/provider/openai` with streaming and
-   tools; test against OpenAI and Ollama.
+2. ~~Rewrite `internal/llm` → `internal/provider/openai` with streaming and
+   tools; test against OpenAI and Ollama.~~ Done — see
+   [WP0.3](docs/plan/phase-0-mvp-cli.md#wp03--provider-layer--done).
 3. Implement the agent loop + `read_file`/`list_dir` tools — the first real
    agentic scenario.
 4. Add the permission layer and `bash` with confirmation.
