@@ -30,7 +30,7 @@ The pattern is proven in the industry:
 hint/
 ├── cmd/hint/main.go            # CLI, flags, wiring
 ├── internal/
-│   ├── agent/                  # loop, turn, compaction, limits
+│   ├── agent/                  # loop, turn, compaction, limits, tool schedule (WP0.11)
 │   ├── provider/               # implementations of the modality interfaces
 │   │   ├── openai/             # openai-compatible client (chat+stream+tools)
 │   │   └── router/             # default/fallback routing
