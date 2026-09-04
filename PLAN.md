@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-02
+> Status: living document · Last updated: 2026-09-04
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -81,6 +81,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   context-window limits, LLM-summary compaction with a drop-thinking
   shortcut; `cmd/hint` now runs its one-shot turn through `Agent.RunTurn`).
 - **Next:** WP0.5 — built-in tools.
+- **Planned after permissions:** WP0.11 — Agent-built tool schedule
+  (parallel groups + sequential chains; see
+  [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
+  Sequential request order stays the WP0.4 default until then.
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
   agent loop with no tools registered. Phase 0 adds tools, permissions, and
   sessions next.
@@ -116,6 +120,7 @@ a one-shot alias for a soft migration and may be removed later.
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
+| Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains); revisit only with a concrete counterexample |
 
 ## Prior art
 

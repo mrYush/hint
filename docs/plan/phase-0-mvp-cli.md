@@ -272,7 +272,9 @@ depend on them:
   in the commit) and keeps a stable per-call order for WP0.6's confirmation
   prompts, which ask about one call at a time. Parallel execution would
   trade that order — and WP0.6's upcoming per-call gating — for latency
-  this MVP does not need.
+  this MVP does not need. WP0.11 generalizes this into an Agent-built
+  series-parallel schedule (parallel **groups** and sequential **chains**);
+  until that package lands, a batch is exactly one chain, in request order.
 - **Three distinct tool-failure shapes, per the `Tool` interface's own
   contract:** an unknown tool name or `Run` reporting `IsError` become an
   `agentapi.ToolResult` the model gets to react to and the turn continues;
@@ -375,6 +377,80 @@ Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.
 - [ ] Raspberry Pi smoke run of the acceptance scenarios on linux/arm64
 - [ ] Update README for the new CLI surface
 
+### WP0.11 — Tool schedule: groups and chains
+
+The Agent — not the user, not a second planner round-trip — decides the
+order of a turn's tool-call batch. Two composable nodes cover arbitrary
+scenarios:
+
+- **Group (`Par`)** — siblings start together; the loop waits for the
+  whole group before continuing.
+- **Chain (`Seq`)** — each child starts only after the previous child
+  (itself a group, a chain, or a single call) has finished.
+
+A schedule is a series-parallel tree of those nodes. Nesting is the point:
+`Seq(Par(read_a, read_b), edit_file, Par(test, lint))` is one batch, not
+four extra model turns. A missing or invalid schedule degrades to today's
+WP0.4 chain (request order) so the loop never blocks on a planner.
+
+Not on the `v0.1-alpha` critical path (WP0.1–WP0.7). Sequential execution
+remains the Phase 0 acceptance default. Depends on WP0.5 (something to
+schedule) and WP0.6 (gating must stay per-call and ordered).
+
+- [ ] `Schedule` as a closed node tree (`Seq` / `Par` / `Call`) inside
+      `internal/agent` — the loop walks it; `runTools` becomes the `Call`
+      leaf
+- [ ] Agent-built schedule from the model's `ToolCall` list: `ClassRead`
+      calls with disjoint paths may share a `Par`; `ClassWrite` /
+      `ClassExecute` and any call that shares a path with a sibling become
+      `Seq` (never a gated call inside a `Par`)
+- [ ] Deterministic result order: within a `Par`, results append in the
+      model's request order, not finish order — session replay (WP0.7) and
+      WP0.6 prompts stay stable
+- [ ] Existing three tool-failure shapes still apply: `IsError` / unknown /
+      panic of one `Par` leaf does not cancel siblings already started;
+      a machinery `error` cancels the group's `ctx` and aborts the turn
+- [ ] Optional additive `ToolCall.After []string` (call IDs) so the model
+      can tighten a dependency the heuristic cannot see; unknown IDs are
+      ignored and the conservative schedule wins. No `WireVersion` bump
+- [ ] Loop unit tests: a `Par` of two reads; a `Seq` of write-then-read;
+      a nested `Seq(Par(...), Call)`; fallback to a plain chain; a gated
+      call never enters a `Par`
+
+Decisions recorded now, because they constrain WP0.6's confirmation UI
+and the `ToolCall` wire type:
+
+- **Series-parallel tree, not a free DAG.** A group and a chain, nested,
+  express the scenarios we want (fan-out reads, then a write, then a
+  fan-out of checks) without a general topological scheduler, diamond
+  joins, or a second model call that emits a graph. A full `depends_on`
+  DAG is the more powerful alternative: it can say "C waits for A and B"
+  without wrapping A+B in a `Par`. The cost is a real topo-sort, cycle
+  detection, and a prompt/schema the model will get wrong; we would still
+  need a conservative fallback. Start with the tree; promote to a DAG
+  only if a real turn cannot be expressed as nested groups and chains.
+- **The Agent builds the tree; the model does not have to.** Most
+  providers have no schedule field, and asking the model to author a
+  graph is a second source of invalid plans. The model's job stays
+  "which tools, with which arguments". The loop's job is "what can
+  overlap". `ToolCall.After` is an optional hint, not the source of
+  truth: a missing hint must still produce a correct conservative
+  schedule. The opposite (model-authored graph only) would make every
+  provider dialect and every small local model a scheduler bug.
+- **Gated calls stay a chain.** WP0.6 asks about one call at a time.
+  Putting `ClassWrite` / `ClassExecute` in a `Par` would force either a
+  parallel confirmation UI or starting work the user has not approved.
+  Independent `ClassRead` calls are the only things that fan out. The
+  alternative — collect every grant, then start the group — costs a
+  more complex permission client for no MVP win: writes are rarely
+  independent of each other.
+- **Finish order is not append order.** A `Par` that appended results as
+  they completed would make session JSONL and the next `Stream` history
+  non-deterministic across runs of the same batch. Results are gathered,
+  then appended in request order once the group joins. The cost is a
+  few milliseconds of hold-back after the last sibling finishes; the
+  win is a replayable history.
+
 ## Acceptance criteria
 
 1. `hint -p "what files are in this project and what do they do"` — the agent
@@ -391,4 +467,6 @@ Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (read-only tools first) → WP0.6 →
 WP0.5 (write/execute tools) → WP0.7 → WP0.8 → WP0.9 → WP0.10.
+WP0.11 sits after WP0.6 (it needs per-call gating to exist) and is not
+required for `v0.1-alpha`.
 Tag `v0.1-alpha` once WP0.1–WP0.7 land; `v0.1` after acceptance criteria pass.
