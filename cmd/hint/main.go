@@ -14,6 +14,8 @@ import (
 	"github.com/mrYush/hint/internal/config"
 	dirctx "github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/provider"
+	"github.com/mrYush/hint/internal/tool"
+	"github.com/mrYush/hint/internal/tool/builtin"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -85,12 +87,19 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 		agentapi.UserMessage(question),
 	}
 
-	// No WithTools yet: WP0.5's built-in tools plug in here once they
-	// exist, and the loop above already knows how to run them. Without
-	// any, every turn is the single-Stream, plain-text exchange the CLI
-	// had before WP0.4 — RunTurn just runs it through the same tool-calling
-	// state machine that a tool-using turn would.
-	a := agent.New(chat)
+	// File tools are confined to the working directory. Only the read-class
+	// tools (plus todo) are registered until the permission layer lands in
+	// WP0.6: write_file, edit_file and bash exist in the builtin package,
+	// but wiring them in now would run every edit and command unconfirmed.
+	root, err := tool.NewRoot(dc.CurrentDir)
+	if err != nil {
+		return fmt.Errorf("working directory: %w", err)
+	}
+	registry, err := tool.NewRegistry(builtin.ReadOnly(root)...)
+	if err != nil {
+		return fmt.Errorf("registering tools: %w", err)
+	}
+	a := agent.New(chat, agent.WithTools(registry.Tools()...))
 
 	printedText := false
 	// lastErr remembers the most recent EventError. Per the contract,
@@ -105,6 +114,18 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 		case agentapi.EventTextDelta:
 			fmt.Print(ev.Text)
 			printedText = true
+		case agentapi.EventToolStart:
+			// Tool activity goes to stderr so the answer on stdout stays
+			// clean for pipes and scripts.
+			fmt.Fprintf(os.Stderr, "hint: %s %s\n", ev.Call.Name, summarizeArgs(ev.Call.Arguments))
+		case agentapi.EventToolEnd:
+			switch {
+			case ev.Result.IsError:
+				fmt.Fprintf(os.Stderr, "hint: %s failed: %s\n", ev.Result.Name, firstLine(ev.Result.Text()))
+			case ev.Result.Name == "todo":
+				// The plan is for the user as much as for the model.
+				fmt.Fprintln(os.Stderr, ev.Result.Text())
+			}
 		case agentapi.EventCompaction:
 			fmt.Fprintf(os.Stderr, "hint: compacted %d messages into a summary\n", ev.Compaction.MessagesReplaced)
 		case agentapi.EventError:
@@ -131,15 +152,35 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 	return runErr
 }
 
-// systemPrompt is the same prompt the pre-WP0.3 CLI sent; WP0.8 replaces it
-// with real project context.
+// systemPrompt is the pre-WP0.3 prompt plus a pointer at the tools; WP0.8
+// replaces it with real project context.
 func systemPrompt(dc *dirctx.DirectoryContext) string {
 	return fmt.Sprintf(
 		"You are a helpful assistant aiding a developer with their project. "+
 			"Current directory: %s\n"+
-			"Files in directory: %s\n\n"+
-			"Answer the developer's question with this context in mind.",
+			"Top-level entries: %s\n\n"+
+			"You have tools to explore the project: list_dir, read_file, glob and grep. "+
+			"Use them to look at the actual code before answering instead of guessing, "+
+			"and refer to files by their paths. Use todo to show a plan for multi-step work.",
 		dc.CurrentDir,
 		strings.Join(dc.Files, ", "),
 	)
+}
+
+// summarizeArgs renders a tool call's arguments on one short line.
+func summarizeArgs(raw []byte) string {
+	const max = 120
+	s := strings.Join(strings.Fields(string(raw)), " ")
+	if len(s) > max {
+		s = s[:max] + "..."
+	}
+	return s
+}
+
+// firstLine returns the first line of s, for a one-line stderr notice.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
