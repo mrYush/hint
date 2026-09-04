@@ -251,12 +251,72 @@ depend on them:
 - **`hint` still does one-shot Q&A** — the WP0.4 loop is next; tool-call and
   usage events already flow through the CLI but have no consumer yet.
 
-### WP0.4 — Agent loop
+### WP0.4 — Agent loop — **done**
 
-- [ ] Claude Code pattern: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
-- [ ] Limits: max iterations per turn (default 25), max context tokens
-- [ ] Compaction at 80% of the window: summarize old turns into one system block (reference — auto-compact in opencode/Crush)
-- [ ] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
+- [x] Claude Code pattern: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
+- [x] Limits: max iterations per turn (default 25), max context tokens
+- [x] Compaction at 80% of the window: summarize old turns into one system block (reference — auto-compact in opencode/Crush)
+- [x] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **`internal/agent.Agent.RunTurn` never returns a synchronous error** — the
+  same shape as `router.Router.Stream` (WP0.3): a failure arrives as
+  `EventError` followed by a terminal `EventTurnEnd` on the returned
+  channel. `RunTurn` is stateless between turns; it takes the full history
+  as an argument and never retains it — a stateful `Agent` would be the
+  start of a session, which is WP0.7's job.
+- **Tool calls run sequentially, in request order**, not through a parallel
+  `errgroup.Group`. This follows opencode's loop (MIT, adapted, attributed
+  in the commit) and keeps a stable per-call order for WP0.6's confirmation
+  prompts, which ask about one call at a time. Parallel execution would
+  trade that order — and WP0.6's upcoming per-call gating — for latency
+  this MVP does not need.
+- **Three distinct tool-failure shapes, per the `Tool` interface's own
+  contract:** an unknown tool name or `Run` reporting `IsError` become an
+  `agentapi.ToolResult` the model gets to react to and the turn continues;
+  a panic inside `Run` is recovered into the same shape, so a tool's own
+  bug cannot take the process down; only `Run` returning a non-nil error —
+  the tool's machinery itself breaking, not the action failing — aborts the
+  turn with no further `Stream` call.
+- **New `agentapi.ErrorKind`: `ErrTurnLimit`.** Neither retryable nor
+  fallbackable — repeating the same request hits the same cap, and it is
+  not a provider failure, so another provider would not help either. Added
+  to the `errorKindRouting` exhaustiveness table in
+  `pkg/agentapi/error_test.go`; `WireVersion` was not bumped, since adding
+  an `ErrorKind` value is additive.
+- **Compaction is one attempt per iteration, in two internal steps, not two
+  round-trips to the provider.** `Agent.compact` first drops every
+  `PartThinking` part (cheap, and the contract already promises this
+  happens first); only if the configured window says that was not enough
+  does it fall through, within the same call, to summarizing the middle of
+  the conversation via the injected `Compactor`. The loop only ever retries
+  the actual model `Stream` call once after `compact` returns.
+- **Occupancy tracking reuses the last call's real `Usage` when there is
+  one:** `lastUsage.InputTokens` plus an estimate of the messages appended
+  since, rather than re-estimating the whole history every iteration. The
+  estimator itself (`chars/4`, no tokenizer, no cgo — see `estimate.go`)
+  only has to be good enough to trigger compaction a bit before the real
+  limit; the provider's own `ErrContextOverflow` remains the ground truth
+  it anticipates, and `MaxContextTokens: 0` disables only the proactive
+  check — the reactive path on `ErrContextOverflow` always applies.
+- **The prefix/body/tail split never cuts a `ToolCall`/`RoleTool` pair
+  apart.** The tail (from the last `RoleUser` message onward) is only
+  shrunk, when it alone is heavier than half the window, to whole
+  assistant+tool groups. A compaction summary is itself a `RoleSystem`
+  message, so it is absorbed into the fixed prefix on any later compaction
+  pass — this is what actually bounds a repeated compact-and-retry cycle:
+  once a pass finds nothing left between prefix and tail, it fails fatally
+  instead of retrying forever.
+- **`cmd/hint`'s one-shot path now calls `agent.New(chat).RunTurn`** instead
+  of `chat.Stream` directly, with no tools registered yet — WP0.5's
+  built-in tools plug into the same `WithTools` option once they exist,
+  with no further changes to `main.go`'s event loop. A non-terminal
+  `EventError` (e.g. a failed proactive compaction) is remembered but only
+  becomes the command's exit error if the turn's `EventTurnEnd` actually
+  closes with `FinishError` — the turn is allowed to recover and finish
+  normally otherwise.
 
 ### WP0.5 — Built-in tools
 
