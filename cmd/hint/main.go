@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	dirctx "github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/provider"
@@ -79,45 +80,55 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 	if err != nil {
 		return fmt.Errorf("getting context: %w", err)
 	}
-	req := agentapi.ChatRequest{
-		Messages: []agentapi.Message{
-			agentapi.SystemMessage(systemPrompt(dc)),
-			agentapi.UserMessage(question),
-		},
+	history := []agentapi.Message{
+		agentapi.SystemMessage(systemPrompt(dc)),
+		agentapi.UserMessage(question),
 	}
 
-	events, err := chat.Stream(ctx, req)
-	if err != nil {
-		return err
-	}
+	// No WithTools yet: WP0.5's built-in tools plug in here once they
+	// exist, and the loop above already knows how to run them. Without
+	// any, every turn is the single-Stream, plain-text exchange the CLI
+	// had before WP0.4 — RunTurn just runs it through the same tool-calling
+	// state machine that a tool-using turn would.
+	a := agent.New(chat)
 
 	printedText := false
-	for ev := range events {
+	// lastErr remembers the most recent EventError. Per the contract,
+	// EventError does not necessarily end the turn — a non-terminal
+	// compaction failure is reported this way too, and the turn carries on
+	// — so it only becomes the command's result if EventTurnEnd actually
+	// closes with FinishError.
+	var lastErr *agentapi.Error
+	var runErr error
+	for ev := range a.RunTurn(ctx, history) {
 		switch ev.Kind {
-		case agentapi.ChatTextDelta:
+		case agentapi.EventTextDelta:
 			fmt.Print(ev.Text)
 			printedText = true
-		case agentapi.ChatThinkingDelta, agentapi.ChatUsage, agentapi.ChatToolCall:
-			// Thinking stays off stdout; usage and tool calls have no
-			// consumer until WP0.4.
-		case agentapi.ChatDone:
+		case agentapi.EventCompaction:
+			fmt.Fprintf(os.Stderr, "hint: compacted %d messages into a summary\n", ev.Compaction.MessagesReplaced)
+		case agentapi.EventError:
+			lastErr = ev.Err
+		case agentapi.EventTurnEnd:
 			if printedText {
 				fmt.Println()
 			}
-			if ev.FinishReason == agentapi.FinishCanceled {
-				return fmt.Errorf("interrupted")
-			}
-			if ev.FinishReason == agentapi.FinishLength {
+			switch ev.FinishReason {
+			case agentapi.FinishStop, agentapi.FinishToolCalls, agentapi.FinishContentFilter:
+				// Nothing beyond the newline above: a normal stop, and
+				// FinishToolCalls never actually reaches EventTurnEnd (a
+				// tool round always loops back into the agent, never ends
+				// the turn directly).
+			case agentapi.FinishCanceled:
+				runErr = fmt.Errorf("interrupted")
+			case agentapi.FinishLength:
 				fmt.Fprintln(os.Stderr, "hint: response was truncated by the provider's token limit")
+			case agentapi.FinishError:
+				runErr = lastErr
 			}
-		case agentapi.ChatError:
-			if printedText {
-				fmt.Println()
-			}
-			return ev.Err
 		}
 	}
-	return nil
+	return runErr
 }
 
 // systemPrompt is the same prompt the pre-WP0.3 CLI sent; WP0.8 replaces it

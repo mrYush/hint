@@ -33,6 +33,7 @@ var errorKindRouting = []struct {
 	{agentapi.ErrContextOverflow, false, false},
 	{agentapi.ErrContentFiltered, false, false},
 	{agentapi.ErrCanceled, false, false},
+	{agentapi.ErrTurnLimit, false, false},
 	{agentapi.ErrUnknown, false, false},
 }
 
