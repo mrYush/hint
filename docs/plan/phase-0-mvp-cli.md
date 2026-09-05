@@ -413,7 +413,12 @@ depend on them:
   glob or regex gets one message regardless of engine; the RE2 vs Rust
   regex dialect difference is accepted. Parity tests run when rg is in
   PATH. `grep` stops reading rg's output at the cap and cancels it rather
-  than let a match-everything pattern scan the whole tree.
+  than let a match-everything pattern scan the whole tree. `grep`'s
+  `include` is anchored to the working directory in both engines — a
+  slash-free pattern selects by file name anywhere, `cmd/**/*.go` by path
+  from the root — which for rg means running it with the root as cwd and
+  a relative target, since `--glob` patterns with a slash are anchored to
+  rg's cwd (review finding: the walk matched on the base name only).
 - **`edit_file` matches in four steps and never guesses.** Exact unique
   substring → the same with CRLF line endings when the file uses them →
   whole-line match ignoring a uniform indentation difference, re-indenting
@@ -427,10 +432,14 @@ depend on them:
   no "read before you edit" bookkeeping (opencode's `lastRead` map): it is
   cross-tool state that belongs with a session (WP0.7), if anywhere.
 - **`write_file` and `edit_file` write atomically** — temp file in the same
-  directory, then rename, mode preserved — so a reader never sees a
-  half-written file and a failure leaves the original intact. The result
-  of `edit_file` echoes the changed region with line numbers so the model
-  can verify without a second `read_file`.
+  directory, fsync, then rename, mode preserved — so a reader never sees a
+  half-written file and a crash cannot leave an empty one. A symlink at
+  the target is written *through*, not replaced: rename alone would swap
+  a link the user placed on purpose for a plain file (review finding);
+  `Root.Resolve` has already confirmed the link's target is inside the
+  root, so following it stays confined. The result of `edit_file` echoes
+  the changed region with line numbers so the model can verify without a
+  second `read_file`.
 - **`bash` runs a fresh `bash -c` (or `sh -c`) per call**, not opencode's
   persistent shell: shell state between calls is exactly the kind of
   hidden state a replayed session (WP0.7) cannot reproduce. The command

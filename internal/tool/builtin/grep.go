@@ -35,7 +35,7 @@ Use it to find where something is defined or used before reading the file. The p
 type grepArgs struct {
 	Pattern string `json:"pattern" jsonschema_description:"Regular expression to search for"`
 	Path    string `json:"path,omitempty" jsonschema_description:"File or directory to search, relative to the working directory (default: the working directory)"`
-	Include string `json:"include,omitempty" jsonschema_description:"Only search files whose name matches this glob, e.g. \"*.go\" or \"*.{ts,tsx}\""`
+	Include string `json:"include,omitempty" jsonschema_description:"Only search files matching this glob: a file-name pattern such as \"*.go\" or \"*.{ts,tsx}\", or a path pattern relative to the working directory such as \"cmd/**/*.go\""`
 	Literal bool   `json:"literal,omitempty" jsonschema_description:"Treat pattern as literal text rather than a regular expression"`
 }
 
@@ -102,7 +102,7 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		matches, err = t.grepRipgrep(ctx, target, in)
 	}
 	if t.rg == "" || err != nil {
-		matches, err = grepWalk(ctx, target, re, include)
+		matches, err = grepWalk(ctx, t.root, target, re, include)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -135,6 +135,12 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 // grepRipgrep runs ripgrep and parses its `path\0line:text` output. It
 // stops reading after the cap so a pattern that matches everything does
 // not have to finish scanning the tree.
+//
+// ripgrep runs with the working directory as its cwd and a target path
+// relative to it, because `--glob` patterns containing a slash are anchored
+// to rg's cwd: this is what makes `include: "cmd/**/*.go"` mean the same
+// thing here as in the pure-Go walk, which matches it against the path
+// relative to the root.
 func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) ([]grepMatch, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -148,9 +154,10 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 		args = append(args, "--glob", in.Include)
 	}
 	args = append(args, rgExcludeArgs()...)
-	args = append(args, "--regexp", in.Pattern, "--", target)
+	args = append(args, "--regexp", in.Pattern, "--", t.root.Rel(target))
 
 	cmd := exec.CommandContext(ctx, t.rg, args...)
+	cmd.Dir = t.root.Dir()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -177,7 +184,7 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 		if err != nil {
 			continue
 		}
-		matches = append(matches, grepMatch{path: path, line: line, text: text})
+		matches = append(matches, grepMatch{path: filepath.Join(t.root.Dir(), path), line: line, text: text})
 	}
 	if len(matches) > maxGrepMatches {
 		cancel() // enough; stop rg early
@@ -201,11 +208,14 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 }
 
 // grepWalk is the pure-Go search: walk target (or read it, if a file), skip
-// what glob skips plus binary files, and test every line.
-func grepWalk(ctx context.Context, target string, re *regexp.Regexp, include *globMatcher) ([]grepMatch, error) {
+// what glob skips plus binary files, and test every line. include is
+// matched against the path relative to the root, so a slash-free pattern
+// selects by file name anywhere and a path pattern is anchored to the
+// working directory — the same reading ripgrep gives it.
+func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *globMatcher) ([]grepMatch, error) {
 	var matches []grepMatch
 	visit := func(path string) error {
-		if include != nil && !include.Match(filepath.Base(path)) {
+		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {
 			return nil
 		}
 		found, err := grepFile(path, re, maxGrepMatches+1-len(matches))

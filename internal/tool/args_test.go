@@ -2,6 +2,7 @@ package tool_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/mrYush/hint/internal/tool"
@@ -59,5 +60,15 @@ func TestDecodeArgs_WrongTypeIsError(t *testing.T) {
 	}
 	if err := tool.DecodeArgs(json.RawMessage(`{"path":123}`), &in); err == nil {
 		t.Fatal("expected an error for a number where a string is required")
+	}
+}
+
+func TestInvalidArgs(t *testing.T) {
+	res := tool.InvalidArgs("c1", "read_file", errors.New("path is required"))
+	if !res.IsError || res.CallID != "c1" || res.Name != "read_file" || res.Text() != "path is required" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if err := res.Validate(); err != nil {
+		t.Fatal(err)
 	}
 }

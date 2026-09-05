@@ -66,6 +66,25 @@ func TestWriteFile_PreservesModeAndLeavesNoTemp(t *testing.T) {
 	}
 }
 
+func TestWriteFile_WritesThroughSymlinkInsideRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	root := newRoot(t, map[string]string{"real/config.yaml": "old\n"})
+	link := filepath.Join(root.Dir(), "config.yaml")
+	if err := os.Symlink(filepath.Join(root.Dir(), "real", "config.yaml"), link); err != nil {
+		t.Fatal(err)
+	}
+	ok(t, run(t, builtin.NewWriteFile(root), `{"path":"config.yaml","content":"new\n"}`))
+
+	if readBack(t, root, "real/config.yaml") != "new\n" {
+		t.Fatal("target of the symlink not updated")
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("symlink replaced by a regular file: %v %v", info, err)
+	}
+}
+
 func TestWriteFile_Errors(t *testing.T) {
 	root := newRoot(t, map[string]string{"dir/x": ""})
 	tl := builtin.NewWriteFile(root)
