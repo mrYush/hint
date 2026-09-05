@@ -391,8 +391,15 @@ depend on them:
   ancestor's symlinks (dangling links by hand, since `EvalSymlinks` fails
   on them) and checks again, so `../..` and a link to `~/.ssh` both fail
   with `ErrOutsideRoot`. WP0.6's checkbox stays for the run-mode override;
-  the mechanism is not optional per CONTRIBUTING. Go 1.22 has no `os.Root`,
-  which is what ollama's tools use.
+  the mechanism is not optional per CONTRIBUTING. **Known limit: the check
+  is not atomic with the file operation.** Go 1.22 has no `os.Root` (Go
+  1.24; ollama's tools use it), which opens every path component with
+  `openat` and so leaves no window. `Root.Resolve` runs before
+  `os.Open`/`os.Rename`, so a symlink swapped in between (TOCTOU) escapes
+  the root. Acceptable for a local single-user CLI, where the only other
+  writer to the tree is the user; not acceptable once the core serves
+  several users on one host. Recorded as risk R8; migrate to `os.Root`
+  when the Go floor reaches 1.24, the `Root` type is the seam.
 - **`glob` and `grep` shell out to ripgrep when it is installed and fall
   back to a pure-Go walk otherwise** (chat decision; the pure-Go path is
   the reference behaviour and the one every platform is guaranteed).
@@ -431,9 +438,14 @@ depend on them:
   MIT), with `WaitDelay` so a detached child holding the pipes does not
   hang the call. Non-zero exit and timeout are `IsError` results carrying
   the output gathered so far; a missing shell is a machinery error.
-  `timeout` is in seconds (default 60, max 600). There is no command
-  blocklist — WP0.6's confirmation is the control, and a blocklist gives
-  false confidence. Windows uses `cmd.exe /C` and plain `Process.Kill`.
+  `timeout` is in seconds (default 60, max 600). **`bash` is not confined
+  to the working directory and cannot be**: `cmd.Dir` only sets where the
+  shell starts, and `cd / && cat ~/.ssh/id_rsa` runs as written. The
+  confinement `tool.Root` gives the file tools does not extend to a
+  subprocess. There is no command blocklist either — WP0.6's confirmation,
+  with the command shown, is the control, and a blocklist gives false
+  confidence. Until WP0.6 the tool is simply not registered. Windows uses
+  `cmd.exe /C` and plain `Process.Kill`.
 - **`todo` keeps the plan in memory** (`builtin.TodoList`, mutex-guarded
   for WP0.11's parallel groups) and returns it rendered as a checklist;
   `cmd/hint` prints that result to stderr, which is how the plan is
@@ -474,7 +486,9 @@ References — Crush, Codex CLI.
       policy around it)
 - [ ] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
       `cmd/hint` behind the permission layer — WP0.5 deliberately wired
-      only `builtin.ReadOnly`
+      only `builtin.ReadOnly`. `bash` is the one tool `tool.Root` cannot
+      confine (a subprocess goes where it likes), so its prompt must show
+      the full command and `--auto-edit` must keep asking for it
 - [ ] Classify a tool's `error` in `internal/agent.runTools` before
       wrapping it: a `context.Canceled` / `DeadlineExceeded` that a tool
       passes through (the WP0.5 limits decorator forwards a caller's
