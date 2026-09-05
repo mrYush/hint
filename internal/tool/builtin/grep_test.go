@@ -36,6 +36,8 @@ func TestGrep_PureGo(t *testing.T) {
 			"a.go:3: func Hello() {}\nsub/b.go:2: // Hello again\nsub/notes.txt:1: Hello from notes"},
 		{"case-insensitive flag", `{"pattern":"(?i)hello\\d"}`, "a.go:4: func hello2() {}"},
 		{"include glob", `{"pattern":"Hello","include":"*.txt"}`, "sub/notes.txt:1: Hello from notes"},
+		{"include path glob", `{"pattern":"Hello","include":"sub/**/*.go"}`, "sub/b.go:2: // Hello again"},
+		{"include path glob with path", `{"pattern":"Hello","path":"sub","include":"sub/*.txt"}`, "sub/notes.txt:1: Hello from notes"},
 		{"directory path", `{"pattern":"Hello","path":"sub"}`, "sub/b.go:2: // Hello again\nsub/notes.txt:1: Hello from notes"},
 		{"file path", `{"pattern":"Hello","path":"a.go"}`, "a.go:3: func Hello() {}"},
 		{"literal dot", `{"pattern":"a.b","literal":true}`, "dots.txt:1: a.b"},
@@ -85,6 +87,7 @@ func TestGrep_RipgrepAgreesWithPureGo(t *testing.T) {
 
 	for _, args := range []string{
 		`{"pattern":"Hello"}`, `{"pattern":"(?i)hello\\d"}`, `{"pattern":"Hello","include":"*.txt"}`,
+		`{"pattern":"Hello","include":"sub/**/*.go"}`, `{"pattern":"Hello","path":"sub","include":"sub/*.txt"}`,
 		`{"pattern":"Hello","path":"sub"}`, `{"pattern":"Hello","path":"a.go"}`,
 		`{"pattern":"a.b","literal":true}`, `{"pattern":"zzz"}`,
 	} {

@@ -95,7 +95,17 @@ func pathError(root tool.Root, abs string, err error) string {
 // directory and a rename, so a reader never observes a half-written file
 // and a failure mid-write leaves the original intact. perm is used for a
 // new file; an existing file keeps its mode.
+//
+// A symlink at abs is written through, not replaced: rename would swap the
+// link for a regular file, which surprises a user who linked a file into
+// the tree on purpose. Root.Resolve has already checked that the link's
+// target lies inside the root, so following it here stays confined. The
+// temporary file is fsynced before the rename so that a crash cannot leave
+// an empty file where the old content was.
 func writeAtomic(abs string, data []byte, perm os.FileMode) error {
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
 	dir := filepath.Dir(abs)
 	if info, err := os.Stat(abs); err == nil {
 		perm = info.Mode().Perm()
@@ -113,6 +123,11 @@ func writeAtomic(abs string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		cleanup()
 		return err
