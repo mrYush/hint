@@ -72,6 +72,27 @@ func TestWithLimits_ParentCancelIsNotRelabelled(t *testing.T) {
 	}
 }
 
+func TestWithLimits_ParentDeadlineIsNotRelabelled(t *testing.T) {
+	slow := stubTool{name: "slow", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
+		<-ctx.Done()
+		return agentapi.ToolResult{}, ctx.Err()
+	}}
+	// The decorator promises a minute; the caller's budget is 20ms. The
+	// caller's deadline must win and pass through as its own error, not
+	// come back as a "timed out after 1m0s" result the model would act on.
+	wrapped := tool.WithLimits(slow, tool.Limits{Timeout: time.Minute})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	res, err := wrapped.Run(ctx, "c1", json.RawMessage(`{}`))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the caller's deadline passed through", err)
+	}
+	if res.IsError || strings.Contains(res.Text(), "timed out") {
+		t.Fatalf("parent deadline relabelled as the tool's own timeout: %+v", res)
+	}
+}
+
 func TestWithLimits_TruncatesTextParts(t *testing.T) {
 	big := strings.Repeat("line of output\n", 1000)
 	chatty := stubTool{name: "chatty", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
