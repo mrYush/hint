@@ -28,6 +28,12 @@ func DefaultLimits() Limits {
 	return Limits{Timeout: 30 * time.Second, MaxOutput: 50_000}
 }
 
+// errLimitTimeout marks a deadline set by WithLimits itself, so that Run
+// can tell its own timer from a deadline or cancellation inherited from
+// the caller's context — both surface as context.DeadlineExceeded /
+// context.Canceled on ctx.Err(), but only ours carries this cause.
+var errLimitTimeout = errors.New("tool: limit timeout")
+
 // WithLimits wraps t so that every Run honours l. The wrapper is itself an
 // [agentapi.Tool]: name, description, schema and class pass through
 // untouched, only Run changes.
@@ -56,17 +62,20 @@ func (l *limited) Unwrap() agentapi.Tool { return l.Tool }
 func (l *limited) Run(ctx context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
 	if l.limits.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, l.limits.Timeout)
+		ctx, cancel = context.WithTimeoutCause(ctx, l.limits.Timeout, errLimitTimeout)
 		defer cancel()
 	}
 
 	res, err := l.Tool.Run(ctx, callID, args)
 	if err != nil {
-		// Hitting the cap is a failure of the action, not of the tool
+		// Hitting our own cap is a failure of the action, not of the tool
 		// machinery: the model should see it and try something smaller,
-		// not have the whole turn aborted. A cancel coming from above
-		// (Ctrl-C) is left alone — the loop already knows what it did.
-		if errors.Is(err, context.DeadlineExceeded) && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		// not have the whole turn aborted. A cancel or deadline coming
+		// from above (Ctrl-C, a turn budget) is the caller's decision and
+		// passes through untouched. context.Cause is set atomically by
+		// whichever side finished first, so there is no window in which
+		// the parent's expiry could be mistaken for ours.
+		if errors.Is(context.Cause(ctx), errLimitTimeout) {
 			return agentapi.ErrorResult(callID, l.Name(),
 				fmt.Sprintf("%s timed out after %s", l.Name(), l.limits.Timeout)), nil
 		}

@@ -352,8 +352,13 @@ depend on them:
   `context.WithTimeout` and `Truncate` every text part. A tool that hits
   the cap is reported as an `IsError` result, not a machinery error: the
   model should see "timed out after 30s" and try something smaller, not
-  have the turn aborted. `Unwrap()` exposes the inner tool, the same
-  convention as `errors.Unwrap`. Defaults: 30 s, 50 kB (~12k tokens).
+  have the turn aborted. The decorator's own timer is told apart from a
+  deadline or cancel inherited from the caller by `context.Cause`: the
+  timer is created with `WithTimeoutCause` and a sentinel, so a caller's
+  5 s budget expiring first passes through as the caller's error instead
+  of being relabelled "timed out after 30s" (review finding, pinned by
+  test). `Unwrap()` exposes the inner tool, the same convention as
+  `errors.Unwrap`. Defaults: 30 s, 50 kB (~12k tokens).
   `bash` opts out of the decorator's timeout (zero) because it enforces its
   own per-call one, which may legitimately exceed the default for a build.
 - **Truncation keeps head and tail, cut on line boundaries, marker in the
