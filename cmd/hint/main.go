@@ -87,15 +87,11 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 		agentapi.UserMessage(question),
 	}
 
-	// File tools are confined to the working directory. Only the read-class
-	// tools (plus todo) are registered until the permission layer lands in
-	// WP0.6: write_file, edit_file and bash exist in the builtin package,
-	// but wiring them in now would run every edit and command unconfirmed.
 	root, err := tool.NewRoot(dc.CurrentDir)
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
-	registry, err := tool.NewRegistry(builtin.ReadOnly(root)...)
+	registry, err := toolRegistry(root)
 	if err != nil {
 		return fmt.Errorf("registering tools: %w", err)
 	}
@@ -150,6 +146,17 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 		}
 	}
 	return runErr
+}
+
+// toolRegistry builds the tool set the CLI offers the model.
+//
+// Only the read-class tools (plus todo) are registered until the permission
+// layer lands in WP0.6: write_file, edit_file and bash exist in the builtin
+// package, but wiring them in now would run every edit and command
+// unconfirmed. main_test.go pins this — switching to builtin.All here must
+// arrive together with the gating that makes it safe.
+func toolRegistry(root tool.Root) (*tool.Registry, error) {
+	return tool.NewRegistry(builtin.ReadOnly(root)...)
 }
 
 // systemPrompt is the pre-WP0.3 prompt plus a pointer at the tools; WP0.8
