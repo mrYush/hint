@@ -80,14 +80,20 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.4 — agent loop (`internal/agent`: tool-calling `while`, iteration and
   context-window limits, LLM-summary compaction with a drop-thinking
   shortcut; `cmd/hint` now runs its one-shot turn through `Agent.RunTurn`).
-- **Next:** WP0.5 — built-in tools.
+  WP0.5 — built-in tools (`internal/tool`: registry, schema generation,
+  timeout/truncation decorator, working-directory root;
+  `internal/tool/builtin`: read_file, write_file, edit_file, list_dir,
+  glob, grep, bash, todo; `cmd/hint` registers the read-only set).
+- **Next:** WP0.6 — permission system, which also wires the write/execute
+  tools into `cmd/hint`.
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
   Sequential request order stays the WP0.4 default until then.
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
-  agent loop with no tools registered. Phase 0 adds tools, permissions, and
-  sessions next.
+  agent loop with the read-only tools registered (it explores the project
+  itself). Phase 0 adds permissions, the write/execute tools, and sessions
+  next.
 
 ## Compatibility decision
 
@@ -106,8 +112,9 @@ a one-shot alias for a soft migration and may be removed later.
 3. ~~Implement the agent loop (`internal/agent`, tool-calling `while` +
    limits + compaction).~~ Done — see
    [WP0.4](docs/plan/phase-0-mvp-cli.md#wp04--agent-loop--done).
-4. Add `read_file`/`list_dir` tools — the first real agentic scenario —
-   then the permission layer and `bash` with confirmation.
+4. ~~Add `read_file`/`list_dir` tools — the first real agentic scenario~~
+   Done — see [WP0.5](docs/plan/phase-0-mvp-cli.md#wp05--built-in-tools--done).
+   Next: the permission layer and `bash` with confirmation (WP0.6).
 5. JSONL sessions + `-c`. Then tag `v0.1-alpha` and build for Raspberry Pi.
 
 ## Open questions
