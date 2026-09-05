@@ -320,21 +320,168 @@ depend on them:
   closes with `FinishError` — the turn is allowed to recover and finish
   normally otherwise.
 
-### WP0.5 — Built-in tools
+### WP0.5 — Built-in tools — **done**
 
 Each tool: JSON Schema input, text output, timeout, large-output truncation
 (head+tail with a marker).
 
-- [ ] `read_file(path, offset?, limit?)`
-- [ ] `write_file(path, content)`
-- [ ] `edit_file(path, old_str, new_str)` — unique search/replace (Aider editblock format)
-- [ ] `list_dir(path)`
-- [ ] `glob(pattern)`
-- [ ] `grep(pattern, path?)`
-- [ ] `bash(command, timeout?)` — confirmation-gated (WP0.6)
-- [ ] `todo(items[])` — current-task plan, shown to the user
-- [ ] Tool registry + schema generation for the provider layer
-- [ ] Per-tool unit tests incl. truncation and timeout behavior
+- [x] `read_file(path, offset?, limit?)`
+- [x] `write_file(path, content)`
+- [x] `edit_file(path, old_str, new_str)` — unique search/replace (Aider editblock format)
+- [x] `list_dir(path)`
+- [x] `glob(pattern)`
+- [x] `grep(pattern, path?)`
+- [x] `bash(command, timeout?)` — confirmation-gated (WP0.6); built and
+      tested here, registered in `cmd/hint` only once WP0.6 gates it
+- [x] `todo(items[])` — current-task plan, shown to the user
+- [x] Tool registry + schema generation for the provider layer
+- [x] Per-tool unit tests incl. truncation and timeout behavior
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **Two packages, per `architecture.md`: `internal/tool` and
+  `internal/tool/builtin`.** The parent holds everything that is not about
+  a specific tool — `Registry`, `MustSchema`, the `WithLimits` decorator,
+  `Root`, `DecodeArgs`/`Int` — and knows no tool by name, so the Phase 2
+  MCP adapter gets the same registry, limits and confinement by being
+  wrapped, not by copying code.
+- **Timeout and truncation are one decorator, `tool.WithLimits`, not
+  per-tool code.** It embeds the `agentapi.Tool` interface (the four
+  descriptive methods pass through) and overrides `Run` to apply a
+  `context.WithTimeout` and `Truncate` every text part. A tool that hits
+  the cap is reported as an `IsError` result, not a machinery error: the
+  model should see "timed out after 30s" and try something smaller, not
+  have the turn aborted. The decorator's own timer is told apart from a
+  deadline or cancel inherited from the caller by `context.Cause`: the
+  timer is created with `WithTimeoutCause` and a sentinel, so a caller's
+  5 s budget expiring first passes through as the caller's error instead
+  of being relabelled "timed out after 30s" (review finding, pinned by
+  test). `Unwrap()` exposes the inner tool, the same convention as
+  `errors.Unwrap`. Defaults: 30 s, 50 kB (~12k tokens).
+  `bash` opts out of the decorator's timeout (zero) because it enforces its
+  own per-call one, which may legitimately exceed the default for a build.
+- **Truncation keeps head and tail, cut on line boundaries, marker in the
+  middle**, because the end of a command's output (the failing assertion,
+  the summary line) is the most informative part. `tool.BoundedBuffer` is
+  the streaming form for subprocess output — it retains head and a ring of
+  the tail so a command printing gigabytes cannot exhaust memory — and a
+  test pins that it renders byte-for-byte what `Truncate` would on the
+  same bytes. (Idea from opencode and ollama, both MIT; rewritten.)
+- **Schemas are generated from the argument structs with
+  `invopop/jsonschema`** (chat decision; the alternatives were hand-written
+  JSON literals, which drift from the struct, or a ~150-line reflection
+  generator of our own). Required fields are those without `omitempty`,
+  the same rule `encoding/json` applies, so schema and wire format cannot
+  disagree; `$schema`, `$id`, `$ref`/`$defs` are stripped because provider
+  requests embed the schema verbatim and resolve nothing. **Pinned to
+  v0.13.0:** v0.14 requires Go 1.24, above the phase's 1.22 floor. It brings
+  four indirect modules (`wk8/go-ordered-map`, `bahlo/generic-list-go`,
+  `buger/jsonparser`, `mailru/easyjson`); raising the Go floor later
+  unlocks the newer version. A test pins the complete generated document
+  for a sample struct, since any drift changes every request.
+- **`tool.Int` accepts a quoted number** (`"offset": "10"`) because small
+  local models — the offline fallback profile — routinely quote integers,
+  and rejecting an unambiguous call costs a round-trip. The advertised
+  schema still says `integer` (the type implements `JSONSchema()`): the
+  leniency is on the way in, not part of the contract.
+- **Working-directory confinement is enforced now, by construction.**
+  Every path a tool receives goes through `tool.Root.Resolve`, which checks
+  the cleaned path lexically and then resolves the deepest existing
+  ancestor's symlinks (dangling links by hand, since `EvalSymlinks` fails
+  on them) and checks again, so `../..` and a link to `~/.ssh` both fail
+  with `ErrOutsideRoot`. WP0.6's checkbox stays for the run-mode override;
+  the mechanism is not optional per CONTRIBUTING. **Known limit: the check
+  is not atomic with the file operation.** Go 1.22 has no `os.Root` (Go
+  1.24; ollama's tools use it), which opens every path component with
+  `openat` and so leaves no window. `Root.Resolve` runs before
+  `os.Open`/`os.Rename`, so a symlink swapped in between (TOCTOU) escapes
+  the root. Acceptable for a local single-user CLI, where the only other
+  writer to the tree is the user; not acceptable once the core serves
+  several users on one host. Recorded as risk R8; migrate to `os.Root`
+  when the Go floor reaches 1.24, the `Root` type is the seam.
+- **`glob` and `grep` shell out to ripgrep when it is installed and fall
+  back to a pure-Go walk otherwise** (chat decision; the pure-Go path is
+  the reference behaviour and the one every platform is guaranteed).
+  Both prune the same set — hidden entries and `node_modules`, `vendor`,
+  `target`, `dist`, `__pycache__` — which for rg means `--no-config`,
+  `--glob '!.*'` and one `--glob '!name'` per directory, placed *after* the
+  caller's own glob: rg gives later globs precedence and an explicit
+  positive glob otherwise re-admits hidden files (found by test). rg
+  additionally honours `.gitignore`; WP0.8 closes that gap in the walk.
+  The pattern is always validated by the Go matcher first so an invalid
+  glob or regex gets one message regardless of engine; the RE2 vs Rust
+  regex dialect difference is accepted. Parity tests run when rg is in
+  PATH. `grep` stops reading rg's output at the cap and cancels it rather
+  than let a match-everything pattern scan the whole tree. `grep`'s
+  `include` is anchored to the working directory in both engines — a
+  slash-free pattern selects by file name anywhere, `cmd/**/*.go` by path
+  from the root — which for rg means running it with the root as cwd and
+  a relative target, since `--glob` patterns with a slash are anchored to
+  rg's cwd (review finding: the walk matched on the base name only).
+- **`edit_file` matches in four steps and never guesses.** Exact unique
+  substring → the same with CRLF line endings when the file uses them →
+  whole-line match ignoring a uniform indentation difference, re-indenting
+  `new_str` to fit (an idea port of Aider's
+  `replace_part_with_missing_leading_whitespace`, Apache 2.0) → failure
+  with the closest lines rendered with visible whitespace (`→`, `·`).
+  Any step that finds more than one candidate fails as ambiguous, listing
+  line numbers; editing the wrong site is the one outcome worse than a
+  failed call. An empty `old_str` creates a missing file or appends to an
+  existing one, which is what Aider's edit-block format defines. There is
+  no "read before you edit" bookkeeping (opencode's `lastRead` map): it is
+  cross-tool state that belongs with a session (WP0.7), if anywhere.
+- **`write_file` and `edit_file` write atomically** — temp file in the same
+  directory, fsync, then rename, mode preserved — so a reader never sees a
+  half-written file and a crash cannot leave an empty one. A symlink at
+  the target is written *through*, not replaced: rename alone would swap
+  a link the user placed on purpose for a plain file (review finding);
+  `Root.Resolve` has already confirmed the link's target is inside the
+  root, so following it stays confined. The result of `edit_file` echoes
+  the changed region with line numbers so the model can verify without a
+  second `read_file`.
+- **`bash` runs a fresh `bash -c` (or `sh -c`) per call**, not opencode's
+  persistent shell: shell state between calls is exactly the kind of
+  hidden state a replayed session (WP0.7) cannot reproduce. The command
+  gets its own process group, killed whole on timeout (ollama's approach,
+  MIT), with `WaitDelay` so a detached child holding the pipes does not
+  hang the call. Non-zero exit and timeout are `IsError` results carrying
+  the output gathered so far; a missing shell is a machinery error.
+  `timeout` is in seconds (default 60, max 600). **`bash` is not confined
+  to the working directory and cannot be**: `cmd.Dir` only sets where the
+  shell starts, and `cd / && cat ~/.ssh/id_rsa` runs as written. The
+  confinement `tool.Root` gives the file tools does not extend to a
+  subprocess. There is no command blocklist either — WP0.6's confirmation,
+  with the command shown, is the control, and a blocklist gives false
+  confidence. Until WP0.6 the tool is simply not registered. Windows uses
+  `cmd.exe /C` and plain `Process.Kill`.
+- **`todo` keeps the plan in memory** (`builtin.TodoList`, mutex-guarded
+  for WP0.11's parallel groups) and returns it rendered as a checklist;
+  `cmd/hint` prints that result to stderr, which is how the plan is
+  "shown to the user". No new `Event` kind: `EventToolEnd` already carries
+  it, and a display concern does not justify touching the WP0.1 contract.
+  Persistence is WP0.7's.
+- **`list_dir` is recursive**, capped at 500 entries with a pointer at
+  `glob`; `read_file` pages 2000 lines with a 1-based `offset` and
+  `cat -n` numbering, refuses binaries by NUL probe and files over 50 MB.
+- **`cmd/hint` registers `builtin.ReadOnly` only** (chat decision):
+  `read_file`, `list_dir`, `glob`, `grep`, `todo`. `builtin.All` exists and
+  is tested; wiring `write_file`/`edit_file`/`bash` before WP0.6 would make
+  the binary run in what WP0.6 calls `--yolo` without the loud warning.
+  The wiring itself is pinned by `cmd/hint/main_test.go` (every registered
+  tool is `ClassRead`), so the switch to `builtin.All` has to land with
+  the gating, not before it.
+  Tool starts and failures are announced on stderr so stdout stays clean
+  for pipes. Acceptance scenario 1 (`list_dir`/`read_file` without manual
+  context assembly) is therefore live; scenario 2 waits for WP0.6.
+- **Registry validates at registration**, not at request time: a
+  malformed schema, unknown class or duplicate name fails `hint` at
+  startup instead of as a provider 400 mid-turn. `Tools()`/`Schemas()` are
+  sorted by name, matching `agent.schemas()`'s determinism rule.
+- Crush was consulted for the todo and whitespace-hint patterns only. Its
+  tree in `agents-research/` is now 0BSD-licensed, not FSL as
+  CONTRIBUTING records; no code was copied either way — updating the rule
+  is a separate docs decision.
 
 ### WP0.6 — Permission system
 
@@ -343,7 +490,23 @@ References — Crush, Codex CLI.
 - [ ] Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
 - [ ] Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
 - [ ] Session allow-list of remembered grants ("always allow `go test`")
-- [ ] File tools confined to the working directory by default
+- [ ] File tools confined to the working directory by default (the
+      mechanism, `tool.Root`, landed in WP0.5; this covers the run-mode
+      policy around it)
+- [ ] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
+      `cmd/hint` behind the permission layer — WP0.5 deliberately wired
+      only `builtin.ReadOnly`. `bash` is the one tool `tool.Root` cannot
+      confine (a subprocess goes where it likes), so its prompt must show
+      the full command and `--auto-edit` must keep asking for it
+- [ ] Classify a tool's `error` in `internal/agent.runTools` before
+      wrapping it: a `context.Canceled` / `DeadlineExceeded` that a tool
+      passes through (the WP0.5 limits decorator forwards a caller's
+      cancel or deadline untouched) currently becomes `ErrUnknown` "tool
+      machinery failed" and ends the turn with `FinishError` instead of
+      `FinishCanceled`. Route it through `agentapi.KindOf` so Ctrl-C
+      during a running tool ends the turn the same way it does between
+      tools — a denied permission (WP0.6's own new outcome) needs the
+      same seam, so fix both together
 - [ ] Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
 
 ### WP0.7 — Sessions
@@ -465,8 +628,9 @@ and the `ToolCall` wire type:
 
 ## Suggested order
 
-WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (read-only tools first) → WP0.6 →
-WP0.5 (write/execute tools) → WP0.7 → WP0.8 → WP0.9 → WP0.10.
+WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
+ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 → WP0.9 →
+WP0.10.
 WP0.11 sits after WP0.6 (it needs per-call gating to exist) and is not
 required for `v0.1-alpha`.
 Tag `v0.1-alpha` once WP0.1–WP0.7 land; `v0.1` after acceptance criteria pass.
