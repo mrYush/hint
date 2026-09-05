@@ -472,6 +472,15 @@ References — Crush, Codex CLI.
 - [ ] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
       `cmd/hint` behind the permission layer — WP0.5 deliberately wired
       only `builtin.ReadOnly`
+- [ ] Classify a tool's `error` in `internal/agent.runTools` before
+      wrapping it: a `context.Canceled` / `DeadlineExceeded` that a tool
+      passes through (the WP0.5 limits decorator forwards a caller's
+      cancel or deadline untouched) currently becomes `ErrUnknown` "tool
+      machinery failed" and ends the turn with `FinishError` instead of
+      `FinishCanceled`. Route it through `agentapi.KindOf` so Ctrl-C
+      during a running tool ends the turn the same way it does between
+      tools — a denied permission (WP0.6's own new outcome) needs the
+      same seam, so fix both together
 - [ ] Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
 
 ### WP0.7 — Sessions
