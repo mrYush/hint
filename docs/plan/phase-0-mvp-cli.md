@@ -447,6 +447,9 @@ depend on them:
   `read_file`, `list_dir`, `glob`, `grep`, `todo`. `builtin.All` exists and
   is tested; wiring `write_file`/`edit_file`/`bash` before WP0.6 would make
   the binary run in what WP0.6 calls `--yolo` without the loud warning.
+  The wiring itself is pinned by `cmd/hint/main_test.go` (every registered
+  tool is `ClassRead`), so the switch to `builtin.All` has to land with
+  the gating, not before it.
   Tool starts and failures are announced on stderr so stdout stays clean
   for pipes. Acceptance scenario 1 (`list_dir`/`read_file` without manual
   context assembly) is therefore live; scenario 2 waits for WP0.6.
