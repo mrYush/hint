@@ -11,55 +11,104 @@ import (
 // each via EventToolStart/EventToolEnd as it runs.
 //
 // Sequential, not a parallel errgroup.Group: opencode's loop runs calls one
-// at a time, and it keeps a stable order for WP0.6's confirmation prompts,
+// at a time, and it keeps a stable order for the confirmation prompts,
 // which ask about one call at a time. A parallel batch would trade that
-// order — and WP0.6's per-call gating — for latency this MVP does not need.
+// order — and the per-call gating — for latency this MVP does not need.
 //
-// Three distinct outcomes per call, all from [agentapi.Tool]'s contract:
-//   - unknown tool name, or Run reporting IsError: fed back to the model as
-//     an [agentapi.ToolResult], the batch continues.
+// Outcomes per call, all from [agentapi.Tool]'s contract plus the
+// permission layer's:
+//   - unknown tool name, the user denying the call, or Run reporting
+//     IsError: fed back to the model as an [agentapi.ToolResult], the
+//     batch continues. A denied call is never announced with
+//     EventToolStart — it did not start.
 //   - Run panics: recovered into an error ToolResult, same as above — a
 //     tool's internal bug should not take the whole process down.
-//   - Run returns a non-nil error (the tool machinery itself broke, not the
-//     action failing): the batch — and the turn — aborts. No result is fed
-//     back for the call that broke it.
-//
-// ctx cancellation between calls stops the batch and turns every remaining
-// call into a "canceled" ToolResult rather than simply dropping it, so the
-// model (if the turn is ever resumed) sees why those calls never ran.
+//   - Run returns a non-nil error with ctx still alive (the tool machinery
+//     itself broke, not the action failing): the batch — and the turn —
+//     aborts. No result is fed back for the call that broke it.
+//   - ctx ends — between calls, inside a running tool, or while a prompt
+//     waits for an answer: the batch stops and the interrupted call plus
+//     every remaining one become a "canceled" ToolResult rather than
+//     simply being dropped, so the model (if the turn is ever resumed)
+//     sees why those calls never ran. A tool passing a caller's
+//     context.Canceled or DeadlineExceeded through is classified by the
+//     context, not wrapped as a machinery failure.
 func (a *Agent) runTools(ctx context.Context, calls []agentapi.ToolCall, out chan<- agentapi.Event) (results []agentapi.ToolResult, abortErr error, canceled bool) {
 	for i, call := range calls {
-		select {
-		case <-ctx.Done():
-			for _, c := range calls[i:] {
-				results = append(results, agentapi.ErrorResult(c.ID, c.Name, "canceled"))
+		if ctx.Err() != nil {
+			return cancelFrom(results, calls, i), nil, true
+		}
+
+		tool, ok := a.tools[call.Name]
+		if !ok {
+			out <- agentapi.Event{Kind: agentapi.EventToolStart, Call: &call}
+			res := agentapi.ErrorResult(call.ID, call.Name, fmt.Sprintf("unknown tool %q", call.Name))
+			out <- agentapi.Event{Kind: agentapi.EventToolEnd, Result: &res}
+			results = append(results, res)
+			continue
+		}
+
+		if a.authorizer != nil {
+			req, ask := a.authorizer.Review(ctx, call, tool)
+			if ask {
+				// The event goes out before the blocking Authorize so a
+				// client that renders prompts from the stream (Phase 1)
+				// sees the question while it is being asked.
+				out <- agentapi.Event{Kind: agentapi.EventPermission, Permission: &req}
+				allowed, err := a.authorizer.Authorize(ctx, req)
+				if err != nil {
+					return a.abort(ctx, results, calls, i, fmt.Errorf("authorizing %s: %w", call.Name, err))
+				}
+				if !allowed {
+					res := agentapi.ErrorResult(call.ID, call.Name, deniedMessage(req))
+					out <- agentapi.Event{Kind: agentapi.EventToolEnd, Result: &res}
+					results = append(results, res)
+					continue
+				}
 			}
-			return results, nil, true
-		default:
 		}
 
 		out <- agentapi.Event{Kind: agentapi.EventToolStart, Call: &call}
-
-		res, err := a.runOneTool(ctx, call)
+		res, err := a.runOneTool(ctx, tool, call)
 		if err != nil {
-			return results, err, false
+			return a.abort(ctx, results, calls, i, err)
 		}
-
 		out <- agentapi.Event{Kind: agentapi.EventToolEnd, Result: &res}
 		results = append(results, res)
 	}
 	return results, nil, false
 }
 
-// runOneTool runs a single call, converting an unknown tool name or a panic
-// into an error [agentapi.ToolResult] instead of letting either abort the
-// turn or crash the process.
-func (a *Agent) runOneTool(ctx context.Context, call agentapi.ToolCall) (res agentapi.ToolResult, err error) {
-	tool, ok := a.tools[call.Name]
-	if !ok {
-		return agentapi.ErrorResult(call.ID, call.Name, fmt.Sprintf("unknown tool %q", call.Name)), nil
+// abort classifies the error that stopped the batch at calls[i]: if the
+// turn's context has ended, the batch is canceled — the error is the
+// context's own, passed through — and the unfinished calls get "canceled"
+// results; otherwise it is a machinery failure that aborts the turn.
+func (a *Agent) abort(ctx context.Context, results []agentapi.ToolResult, calls []agentapi.ToolCall, i int, err error) ([]agentapi.ToolResult, error, bool) {
+	if ctx.Err() != nil {
+		return cancelFrom(results, calls, i), nil, true
 	}
+	return results, err, false
+}
 
+// cancelFrom appends a "canceled" result for every call from calls[i] on.
+func cancelFrom(results []agentapi.ToolResult, calls []agentapi.ToolCall, i int) []agentapi.ToolResult {
+	for _, c := range calls[i:] {
+		results = append(results, agentapi.ErrorResult(c.ID, c.Name, "canceled"))
+	}
+	return results
+}
+
+// deniedMessage is what the model reads when the user refuses a call. It
+// says what not to do next: a model that simply retries the same call
+// would put the same prompt back in front of the user.
+func deniedMessage(req agentapi.PermissionRequest) string {
+	return fmt.Sprintf("permission denied: the user did not approve %q. "+
+		"Do not retry the same action unchanged; explain what you intended or propose a different approach.", req.Summary)
+}
+
+// runOneTool runs a single call, converting a panic into an error
+// [agentapi.ToolResult] instead of letting it crash the process.
+func (a *Agent) runOneTool(ctx context.Context, tool agentapi.Tool, call agentapi.ToolCall) (res agentapi.ToolResult, err error) {
 	// A tool's own bug must not take the agent process down with it: recover
 	// converts a panic into the same shape as a returned IsError result. The
 	// named return values are what let the deferred recover hand back a

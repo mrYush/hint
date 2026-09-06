@@ -40,6 +40,26 @@ type Compactor interface {
 	Compact(ctx context.Context, messages []agentapi.Message) (summary string, err error)
 }
 
+// Authorizer decides whether a tool call may run, before it does. It is
+// the loop's view of the permission layer (WP0.6), declared here — on the
+// consumer's side, as small as the loop needs — so that internal/agent
+// depends on no permission package and a test can stand in a fake.
+//
+// Review is called for every call the loop is about to run; when it
+// reports ask == true the loop emits the request as [agentapi.EventPermission]
+// and then blocks in Authorize until there is an answer. Read-class calls
+// and calls an earlier grant covers come back with ask == false and are
+// never announced.
+type Authorizer interface {
+	// Review says whether the user has to be asked about call and, if so,
+	// what to show them.
+	Review(ctx context.Context, call agentapi.ToolCall, tool agentapi.Tool) (req agentapi.PermissionRequest, ask bool)
+	// Authorize asks. allowed reports the answer; err is non-nil only when
+	// no answer could be obtained — ctx ended, or the channel to the user
+	// broke — and the call is then not allowed either way.
+	Authorize(ctx context.Context, req agentapi.PermissionRequest) (allowed bool, err error)
+}
+
 // Agent runs the tool-calling loop over one [agentapi.ChatProvider].
 //
 // An Agent is stateless between turns: [Agent.RunTurn] takes the full
@@ -51,6 +71,10 @@ type Agent struct {
 	limits    Limits
 	compactor Compactor
 	estimator Estimator
+	// authorizer gates write- and execute-class calls; nil runs every
+	// call unasked, which is what a test without permissions wants and
+	// what cmd/hint must never do.
+	authorizer Authorizer
 }
 
 // Option configures an [Agent] built by [New].
@@ -85,6 +109,12 @@ func WithLimits(l Limits) Option {
 // does not make a real call.
 func WithCompactor(c Compactor) Option {
 	return func(a *Agent) { a.compactor = c }
+}
+
+// WithAuthorizer gates tool calls through a — the permission layer. Unset
+// means no gate: every call runs as soon as the model asks for it.
+func WithAuthorizer(a Authorizer) Option {
+	return func(ag *Agent) { ag.authorizer = a }
 }
 
 // WithEstimator overrides the default character-based token [Estimator].

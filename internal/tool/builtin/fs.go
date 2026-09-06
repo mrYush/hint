@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mrYush/hint/internal/tool"
 )
@@ -61,6 +62,24 @@ func skipDir(name string) bool {
 // isHidden reports whether name is a dot-file; "." and ".." are not.
 func isHidden(name string) bool {
 	return len(name) > 1 && name[0] == '.' && name != ".."
+}
+
+// isBinaryData is [isBinary] over bytes already in memory.
+func isBinaryData(data []byte) bool {
+	return bytes.IndexByte(data[:min(len(data), binaryProbe)], 0) >= 0
+}
+
+// splitKeepNL splits s into lines that keep their terminator, the shape
+// the diff package's line-level functions expect.
+func splitKeepNL(s string) []string {
+	if s == "" {
+		return nil
+	}
+	lines := strings.SplitAfter(s, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 // isBinary reports whether r's leading bytes contain a NUL. It consumes up

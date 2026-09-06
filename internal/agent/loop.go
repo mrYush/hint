@@ -118,8 +118,12 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 		}
 
 		if abortErr != nil {
+			// runTools has already routed a context-caused failure into the
+			// canceled path, so what is left is a genuine machinery error;
+			// KindOf keeps a classified *agentapi.Error's kind instead of
+			// flattening everything to ErrUnknown.
 			out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.WrapError(
-				agentapi.ErrUnknown, abortErr, "tool machinery failed")}
+				agentapi.KindOf(abortErr), abortErr, "tool machinery failed")}
 			out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
 			return
 		}
