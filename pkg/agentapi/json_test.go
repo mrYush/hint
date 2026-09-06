@@ -145,6 +145,11 @@ func TestEventRoundTrip(t *testing.T) {
 		"tool end":   {Kind: agentapi.EventToolEnd, Result: &result},
 		"compaction": {Kind: agentapi.EventCompaction, Compaction: &agentapi.Compaction{
 			MessagesReplaced: 12, TokensBefore: 100_000, TokensAfter: 8_000, Summary: "earlier: refactored config",
+			History: []agentapi.Message{
+				agentapi.SystemMessage("you are hint"),
+				agentapi.SystemMessage("earlier: refactored config"),
+				agentapi.UserMessage("now add tests"),
+			},
 		}},
 		"usage":    {Kind: agentapi.EventUsage, Usage: &usage},
 		"turn end": {Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishStop},

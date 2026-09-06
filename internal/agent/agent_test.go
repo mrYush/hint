@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -479,6 +480,12 @@ func TestRunTurn_ProactiveCompaction(t *testing.T) {
 	}
 	if second[1].Role != agentapi.RoleSystem || second[1].Text() != "SUMMARY" {
 		t.Errorf("second request[1] = %+v, want the summary system message", second[1])
+	}
+	// The compaction event is what a session store checkpoints from, so
+	// its History must be exactly the history the loop went on to send —
+	// not the pre-compaction messages, not a subset.
+	if !reflect.DeepEqual(comp.Compaction.History, second) {
+		t.Errorf("compaction History = %+v\nwant the next request's messages %+v", comp.Compaction.History, second)
 	}
 	end := lastEvent(events, agentapi.EventTurnEnd)
 	if end == nil || end.FinishReason != agentapi.FinishStop {
