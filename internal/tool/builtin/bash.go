@@ -54,6 +54,41 @@ func (*bash) Description() string          { return bashDescription }
 func (*bash) InputSchema() json.RawMessage { return bashSchema }
 func (*bash) Class() agentapi.ActionClass  { return agentapi.ClassExecute }
 
+// Describe implements tool.Describer. Detail is the command and nothing
+// else: the permission layer derives its allow-list key from it, and a
+// user confirming a command must see exactly what the shell will get.
+func (*bash) Describe(_ context.Context, args json.RawMessage) (tool.Description, error) {
+	var in bashArgs
+	if err := tool.DecodeArgs(args, &in); err != nil {
+		return tool.Description{}, err
+	}
+	cmd := strings.TrimSpace(in.Command)
+	if cmd == "" {
+		return tool.Description{}, errors.New("command is required")
+	}
+	summary := fmt.Sprintf("run %q", firstLineOf(cmd, 80))
+	if in.Timeout > 0 {
+		summary += fmt.Sprintf(" (timeout %ds)", int(in.Timeout))
+	}
+	return tool.Description{Summary: summary, Detail: cmd}, nil
+}
+
+// firstLineOf returns the first line of s cut at max bytes, with an
+// ellipsis when anything was left out.
+func firstLineOf(s string, max int) string {
+	cut := false
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s, cut = s[:i], true
+	}
+	if len(s) > max {
+		s, cut = s[:max], true
+	}
+	if cut {
+		s += "..."
+	}
+	return s
+}
+
 // Run implements agentapi.Tool.
 func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
 	var in bashArgs

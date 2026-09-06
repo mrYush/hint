@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	dirctx "github.com/mrYush/hint/internal/context"
+	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
@@ -21,6 +23,7 @@ import (
 
 func main() {
 	var flags config.Flags
+	var ask, autoEdit, yolo bool
 
 	rootCmd := &cobra.Command{
 		Use:   "hint [question]",
@@ -33,9 +36,18 @@ func main() {
 			// fake failover.
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return run(ctx, flags, strings.Join(args, " "))
+			return run(ctx, flags, runMode(ask, autoEdit, yolo), strings.Join(args, " "))
 		},
 	}
+
+	// Run modes are a policy of this run, not part of a provider profile,
+	// so they are plain flags rather than config.Flags. --ask exists so
+	// that a script can spell the default out; the three are exclusive
+	// and cobra rejects two at once.
+	rootCmd.Flags().BoolVar(&ask, "ask", false, "Confirm every file edit and shell command (the default)")
+	rootCmd.Flags().BoolVar(&autoEdit, "auto-edit", false, "Apply file edits without asking; still confirm shell commands")
+	rootCmd.Flags().BoolVar(&yolo, "yolo", false, "Run every edit and command without asking (dangerous)")
+	rootCmd.MarkFlagsMutuallyExclusive("ask", "auto-edit", "yolo")
 
 	// Configuration flags. Defaults stay empty on purpose: a non-empty flag
 	// default would override values from config files (the pre-WP0.2
@@ -51,9 +63,24 @@ func main() {
 	}
 }
 
+// runMode maps the three exclusive flags onto a [permission.Mode]; none
+// set is ask.
+func runMode(ask, autoEdit, yolo bool) permission.Mode {
+	switch {
+	case yolo:
+		return permission.ModeYolo
+	case autoEdit:
+		return permission.ModeAutoEdit
+	case ask:
+		return permission.ModeAsk
+	default:
+		return permission.ModeAsk
+	}
+}
+
 // run loads the configuration, builds the provider stack, and streams one
 // answer to stdout.
-func run(ctx context.Context, flags config.Flags, question string) error {
+func run(ctx context.Context, flags config.Flags, mode permission.Mode, question string) error {
 	cfg, err := config.Load(flags)
 	if err != nil {
 		return fmt.Errorf("loading configuration: %w", err)
@@ -95,7 +122,9 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 	if err != nil {
 		return fmt.Errorf("registering tools: %w", err)
 	}
-	a := agent.New(chat, agent.WithTools(registry.Tools()...))
+	warnMode(os.Stderr, mode, os.Stdin)
+	gate := permission.New(mode, permission.NewReaderPrompter(os.Stdin, os.Stderr))
+	a := agent.New(chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate))
 
 	printedText := false
 	// lastErr remembers the most recent EventError. Per the contract,
@@ -110,6 +139,11 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 		case agentapi.EventTextDelta:
 			fmt.Print(ev.Text)
 			printedText = true
+		case agentapi.EventPermission:
+			// The prompt itself is drawn by the gate's ReaderPrompter,
+			// which also reads the answer; rendering it here too would
+			// print it twice. The event still travels the stream for a
+			// Phase 1 client that answers over RPC.
 		case agentapi.EventToolStart:
 			// Tool activity goes to stderr so the answer on stdout stays
 			// clean for pipes and scripts.
@@ -148,15 +182,35 @@ func run(ctx context.Context, flags config.Flags, question string) error {
 	return runErr
 }
 
-// toolRegistry builds the tool set the CLI offers the model.
-//
-// Only the read-class tools (plus todo) are registered until the permission
-// layer lands in WP0.6: write_file, edit_file and bash exist in the builtin
-// package, but wiring them in now would run every edit and command
-// unconfirmed. main_test.go pins this — switching to builtin.All here must
-// arrive together with the gating that makes it safe.
+// toolRegistry builds the tool set the CLI offers the model: every
+// built-in, write_file, edit_file and bash included. They are only safe
+// to register because run() puts the agent behind a permission.Gate;
+// main_test.go pins both halves of that.
 func toolRegistry(root tool.Root) (*tool.Registry, error) {
-	return tool.NewRegistry(builtin.ReadOnly(root)...)
+	return tool.NewRegistry(builtin.All(root)...)
+}
+
+// warnMode prints the one-time notices a run mode deserves: --yolo is
+// loud because nothing will ask again, and a run that cannot ask at all —
+// stdin is not a terminal — says so up front instead of surprising the
+// user with a string of denials.
+func warnMode(w io.Writer, mode permission.Mode, stdin *os.File) {
+	if mode == permission.ModeYolo {
+		fmt.Fprintln(w, "hint: WARNING: --yolo: file edits and shell commands will run WITHOUT confirmation")
+		return
+	}
+	if info, err := stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice == 0 {
+		fmt.Fprintf(w, "hint: stdin is not a terminal; %s will be denied (use --auto-edit or --yolo for unattended runs)\n",
+			needsAnswer(mode))
+	}
+}
+
+// needsAnswer names what mode would have to ask about.
+func needsAnswer(mode permission.Mode) string {
+	if mode == permission.ModeAutoEdit {
+		return "shell commands"
+	}
+	return "file edits and shell commands"
 }
 
 // systemPrompt is the pre-WP0.3 prompt plus a pointer at the tools; WP0.8
@@ -168,7 +222,10 @@ func systemPrompt(dc *dirctx.DirectoryContext) string {
 			"Top-level entries: %s\n\n"+
 			"You have tools to explore the project: list_dir, read_file, glob and grep. "+
 			"Use them to look at the actual code before answering instead of guessing, "+
-			"and refer to files by their paths. Use todo to show a plan for multi-step work.",
+			"and refer to files by their paths. Use todo to show a plan for multi-step work. "+
+			"You can change the project with edit_file (preferred for targeted changes) and write_file, "+
+			"and run commands with bash; the user is shown each edit as a diff and each command "+
+			"before it runs and may decline it. A declined action must not be retried unchanged.",
 		dc.CurrentDir,
 		strings.Join(dc.Files, ", "),
 	)

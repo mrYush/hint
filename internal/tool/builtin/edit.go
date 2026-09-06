@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mrYush/hint/internal/diff"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -40,85 +41,145 @@ func (*editFile) Description() string          { return editFileDescription }
 func (*editFile) InputSchema() json.RawMessage { return editFileSchema }
 func (*editFile) Class() agentapi.ActionClass  { return agentapi.ClassWrite }
 
-// Run implements agentapi.Tool.
-func (t *editFile) Run(_ context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
+// editPlan is a resolved, not yet applied edit: what the file holds now
+// and what it would hold afterwards. Run and Describe both start from it,
+// so the diff a user confirms and the write that follows cannot disagree
+// about what the edit does (the file changing in between is the TOCTOU
+// limit WP0.5 already accepts for tool.Root).
+type editPlan struct {
+	kind     editKind
+	abs, rel string
+	before   string
+	after    string
+	// at and n locate the replacement in after, for the result snippet.
+	at, n int
+	// note explains a non-exact match ("matched with CRLF line endings").
+	note string
+}
+
+// editKind says how an edit applies: the usual replacement, or one of the
+// two empty-old_str forms the Aider edit-block format defines.
+type editKind int
+
+const (
+	editReplace editKind = iota
+	// editCreate writes a file that does not exist yet.
+	editCreate
+	// editAppend adds new_str to the end of an existing file.
+	editAppend
+)
+
+// plan validates args and computes the edit without touching the file.
+// A failure of the action (bad path, old_str not found) comes back as an
+// error result the model should see; a machinery failure is impossible
+// here, so the returned result is always populated when ok is false.
+func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res agentapi.ToolResult, ok bool) {
 	var in editFileArgs
 	if err := tool.DecodeArgs(args, &in); err != nil {
-		return tool.InvalidArgs(callID, editFileName, err), nil
+		return p, tool.InvalidArgs(callID, editFileName, err), false
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return tool.InvalidArgs(callID, editFileName, errors.New("path is required")), nil
+		return p, tool.InvalidArgs(callID, editFileName, errors.New("path is required")), false
 	}
 	if in.OldStr == in.NewStr {
-		return tool.InvalidArgs(callID, editFileName, errors.New("old_str and new_str are identical; nothing to change")), nil
+		return p, tool.InvalidArgs(callID, editFileName, errors.New("old_str and new_str are identical; nothing to change")), false
 	}
 
 	abs, err := t.root.Resolve(in.Path)
 	if err != nil {
-		return agentapi.ErrorResult(callID, editFileName, err.Error()), nil
+		return p, agentapi.ErrorResult(callID, editFileName, err.Error()), false
 	}
-	rel := t.root.Rel(abs)
-
-	if in.OldStr == "" {
-		return t.createOrAppend(callID, abs, rel, in.NewStr)
-	}
+	p = editPlan{abs: abs, rel: t.root.Rel(abs)}
 
 	data, _, err := readWhole(abs, maxEditSize)
-	if err != nil {
-		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
+	switch {
+	case errors.Is(err, os.ErrNotExist) && in.OldStr == "":
+		// The empty-old_str case the Aider edit-block format defines: a
+		// missing file is created with the new text.
+		p.kind, p.after, p.n = editCreate, in.NewStr, len(in.NewStr)
+		return p, agentapi.ToolResult{}, true
+	case err != nil:
+		return p, agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), false
 	}
-	content := string(data)
+	p.before = string(data)
 
-	updated, at, note, err := replaceUnique(content, in.OldStr, in.NewStr)
-	if err != nil {
-		return agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: %v", rel, err)), nil
-	}
-	if updated == content {
-		return agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: the edit produced no change", rel)), nil
-	}
-	if err := writeAtomic(abs, []byte(updated), 0o644); err != nil {
-		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
+	if in.OldStr == "" {
+		// ... and an existing one gets it appended.
+		content := p.before
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		p.kind, p.after, p.at, p.n = editAppend, content+in.NewStr, len(content), len(in.NewStr)
+		return p, agentapi.ToolResult{}, true
 	}
 
+	updated, at, note, err := replaceUnique(p.before, in.OldStr, in.NewStr)
+	if err != nil {
+		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: %v", p.rel, err)), false
+	}
+	if updated == p.before {
+		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: the edit produced no change", p.rel)), false
+	}
+	p.after, p.at, p.n, p.note = updated, at, len(in.NewStr), note
+	return p, agentapi.ToolResult{}, true
+}
+
+// Run implements agentapi.Tool.
+func (t *editFile) Run(_ context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
+	p, res, ok := t.plan(callID, args)
+	if !ok {
+		return res, nil
+	}
+	if p.kind == editCreate {
+		if err := os.MkdirAll(filepath.Dir(p.abs), 0o755); err != nil {
+			return agentapi.ErrorResult(callID, editFileName, pathError(t.root, p.abs, err)), nil
+		}
+	}
+	if err := writeAtomic(p.abs, []byte(p.after), 0o644); err != nil {
+		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, p.abs, err)), nil
+	}
+
+	switch p.kind {
+	case editCreate:
+		return agentapi.TextResult(callID, editFileName, fmt.Sprintf("Created %s (%d bytes)", p.rel, len(p.after))), nil
+	case editAppend:
+		return agentapi.TextResult(callID, editFileName,
+			fmt.Sprintf("Appended %d bytes to %s. The end of the file now reads:\n%s", p.n, p.rel, snippet(p.after, p.at, p.n))), nil
+	case editReplace:
+	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "Edited %s", rel)
-	if note != "" {
+	fmt.Fprintf(&out, "Edited %s", p.rel)
+	if p.note != "" {
 		out.WriteString(" (")
-		out.WriteString(note)
+		out.WriteString(p.note)
 		out.WriteString(")")
 	}
 	out.WriteString(". The changed region now reads:\n")
-	out.WriteString(snippet(updated, at, len(in.NewStr)))
+	out.WriteString(snippet(p.after, p.at, p.n))
 	return agentapi.TextResult(callID, editFileName, out.String()), nil
 }
 
-// createOrAppend implements the empty-old_str case the Aider edit-block
-// format defines: a missing file is created with the new text, an existing
-// one gets it appended.
-func (t *editFile) createOrAppend(callID, abs, rel, text string) (agentapi.ToolResult, error) {
-	data, _, err := readWhole(abs, maxEditSize)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
-		}
-		if err := writeAtomic(abs, []byte(text), 0o644); err != nil {
-			return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
-		}
-		return agentapi.TextResult(callID, editFileName, fmt.Sprintf("Created %s (%d bytes)", rel, len(text))), nil
-	case err != nil:
-		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
+// Describe implements tool.Describer: the unified diff the edit would
+// produce. An edit that cannot be planned — old_str not found, ambiguous
+// — reports the same message Run would, as the preview's error.
+func (t *editFile) Describe(_ context.Context, args json.RawMessage) (tool.Description, error) {
+	p, res, ok := t.plan("preview", args)
+	if !ok {
+		return tool.Description{}, errors.New(res.Text())
 	}
-	content := string(data)
-	if content != "" && !strings.HasSuffix(content, "\n") {
-		content += "\n"
+	var summary string
+	switch p.kind {
+	case editCreate:
+		summary = fmt.Sprintf("create %s (%d bytes)", p.rel, len(p.after))
+	case editAppend, editReplace:
+		added, removed := diff.Stat(diff.Lines(splitKeepNL(p.before), splitKeepNL(p.after)))
+		summary = fmt.Sprintf("edit %s (+%d -%d lines)", p.rel, added, removed)
 	}
-	updated := content + text
-	if err := writeAtomic(abs, []byte(updated), 0o644); err != nil {
-		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), nil
-	}
-	return agentapi.TextResult(callID, editFileName,
-		fmt.Sprintf("Appended %d bytes to %s. The end of the file now reads:\n%s", len(text), rel, snippet(updated, len(content), len(text)))), nil
+	return tool.Description{
+		Summary: summary,
+		Detail:  diff.Unified(p.rel, p.before, p.after),
+		Path:    p.rel,
+	}, nil
 }
 
 // replaceUnique finds old in content exactly once and replaces it with new.
