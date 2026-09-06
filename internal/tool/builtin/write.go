@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mrYush/hint/internal/diff"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -77,4 +78,54 @@ func (t *writeFile) Run(_ context.Context, callID string, args json.RawMessage) 
 	}
 	return agentapi.TextResult(callID, writeFileName,
 		fmt.Sprintf("Overwrote %s (%d bytes, was %d)", rel, len(in.Content), previous)), nil
+}
+
+// Describe implements tool.Describer: the unified diff between the file as
+// it is and the content the call would write, without writing anything.
+// A binary or oversized current file gets a size-only summary — a diff of
+// it would be noise — but the write is still previewed as a write.
+func (t *writeFile) Describe(_ context.Context, args json.RawMessage) (tool.Description, error) {
+	var in writeFileArgs
+	if err := tool.DecodeArgs(args, &in); err != nil {
+		return tool.Description{}, err
+	}
+	if strings.TrimSpace(in.Path) == "" {
+		return tool.Description{}, errors.New("path is required")
+	}
+	abs, err := t.root.Resolve(in.Path)
+	if err != nil {
+		return tool.Description{}, err
+	}
+	rel := t.root.Rel(abs)
+
+	data, info, err := readWhole(abs, maxEditSize)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return tool.Description{
+			Summary: fmt.Sprintf("create %s (%d bytes)", rel, len(in.Content)),
+			Detail:  diff.Unified(rel, "", in.Content),
+			Path:    rel,
+		}, nil
+	case err != nil && info != nil && !info.IsDir():
+		// Too large to diff: still a legitimate overwrite to confirm.
+		return tool.Description{
+			Summary: fmt.Sprintf("overwrite %s (%d bytes, was %d; too large to diff)", rel, len(in.Content), info.Size()),
+			Path:    rel,
+		}, nil
+	case err != nil:
+		return tool.Description{}, fmt.Errorf("%s: %w", rel, err)
+	}
+	if isBinaryData(data) {
+		return tool.Description{
+			Summary: fmt.Sprintf("overwrite %s (%d bytes, was %d, binary)", rel, len(in.Content), len(data)),
+			Path:    rel,
+		}, nil
+	}
+	edits := diff.Lines(splitKeepNL(string(data)), splitKeepNL(in.Content))
+	added, removed := diff.Stat(edits)
+	return tool.Description{
+		Summary: fmt.Sprintf("overwrite %s (+%d -%d lines)", rel, added, removed),
+		Detail:  diff.Unified(rel, string(data), in.Content),
+		Path:    rel,
+	}, nil
 }

@@ -37,6 +37,7 @@ hint/
 │   ├── tool/                   # Tool registry, schema generation
 │   │   └── builtin/            # read,write,edit,ls,glob,grep,bash,todo
 │   ├── permission/             # modes, allow-list, prompting
+│   ├── diff/                   # line diff + unified rendering (permission previews, TUI)
 │   ├── session/                # JSONL store, resume, list
 │   ├── project/                # HINT.md, auto-context, gitignore
 │   └── config/                 # profiles, sources (extends the current package)
