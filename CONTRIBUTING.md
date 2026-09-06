@@ -45,7 +45,7 @@ but breaks `GOOS=linux GOARCH=arm64 go build ./...`, it will not be merged.
 
 Today's code is small (`cmd/hint`, `internal/config`, `internal/provider`,
 `internal/agent`, `internal/tool`, `internal/permission`, `internal/diff`,
-`internal/session`, `internal/console`, `internal/context`). The target
+`internal/session`, `internal/console`, `internal/project`). The target
 layout is
 described in
 [docs/plan/architecture.md](docs/plan/architecture.md); new code should move

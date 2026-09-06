@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -23,7 +24,7 @@ const (
 
 const listDirDescription = `List the files and directories under a path in the working directory, recursively, as an indented tree.
 
-Use it to get oriented in a project. Hidden entries (dot-files) and dependency or build directories (node_modules, vendor, target, dist, __pycache__) are skipped. Large trees are cut at 500 entries; list a subdirectory or use glob for a narrower view.`
+Use it to get oriented in a project. Hidden entries (dot-files), dependency or build directories (node_modules, vendor, target, dist, __pycache__) and, inside a git repository, anything .gitignore excludes are skipped. Large trees are cut at 500 entries; list a subdirectory or use glob for a narrower view.`
 
 type listDirArgs struct {
 	Path string `json:"path,omitempty" jsonschema_description:"Directory to list, relative to the working directory (default: the working directory itself)"`
@@ -32,11 +33,12 @@ type listDirArgs struct {
 var listDirSchema = tool.MustSchema(listDirArgs{})
 
 type listDir struct {
-	root tool.Root
+	root  tool.Root
+	rules project.Rules
 }
 
 func newListDir(root tool.Root, o options) agentapi.Tool {
-	return tool.WithLimits(&listDir{root: root}, o.limits)
+	return tool.WithLimits(&listDir{root: root, rules: o.rules()}, o.limits)
 }
 
 func (*listDir) Name() string                 { return listDirName }
@@ -65,6 +67,12 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 		return agentapi.ErrorResult(callID, listDirName, fmt.Sprintf("%s is a file, not a directory; use read_file", rel)), nil
 	}
 
+	// git answering for the listed directory is best effort: when it
+	// cannot, the walk keeps the hidden-and-dependency rule, which is what
+	// it applied before .gitignore support. cmd/hint reports the same
+	// failure once per run when it loads the project context.
+	ig, _ := t.rules.Ignorer(ctx, abs)
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%c\n", rel, filepath.Separator)
 	entries := 0
@@ -83,10 +91,10 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if d.IsDir() && skipDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		if !d.IsDir() && isHidden(d.Name()) {
+		if ig.Ignored(relSlash(abs, path), d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if entries >= maxListEntries {
@@ -115,6 +123,16 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 		fmt.Fprintf(&b, "\n(listing cut at %d entries; list a subdirectory or use glob for a narrower view)", maxListEntries)
 	}
 	return agentapi.TextResult(callID, listDirName, b.String()), nil
+}
+
+// relSlash is path relative to base, slash-separated, as an Ignorer
+// expects it.
+func relSlash(base, path string) string {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return filepath.ToSlash(path)
+	}
+	return filepath.ToSlash(rel)
 }
 
 // indentFor returns two spaces per directory level of path below base.

@@ -16,8 +16,8 @@ import (
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/console"
-	dirctx "github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/session"
 	"github.com/mrYush/hint/internal/tool"
@@ -149,13 +149,24 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, smode se
 		return err
 	}
 
-	dc, err := dirctx.GetDirectoryContext()
-	if err != nil {
-		return fmt.Errorf("getting context: %w", err)
-	}
-	root, err := tool.NewRoot(dc.CurrentDir)
+	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
+	}
+	root, err := tool.NewRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("working directory: %w", err)
+	}
+	// The project context is this run's view of the directory: the
+	// instruction files, the overview and git's ignore rules. Its
+	// warnings (a cut HINT.md, git refusing to answer) are printed once
+	// here; the tools that meet the same git failure stay quiet.
+	pc, err := project.Load(ctx, root.Dir())
+	if err != nil {
+		return err
+	}
+	for _, w := range pc.Warnings {
+		fmt.Fprintf(os.Stderr, "hint: warning: %s\n", w)
 	}
 	registry, err := toolRegistry(root)
 	if err != nil {
@@ -185,9 +196,9 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, smode se
 	}
 
 	// The preamble is this run's, not the conversation's: it is rebuilt
-	// every time (WP0.8 will derive it from HINT.md) and never stored, so
-	// the Recorder is told how long it is.
-	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(dc))}
+	// every time from the project context and never stored, so the
+	// Recorder is told how long it is.
+	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(pc))}
 	user := agentapi.UserMessage(question)
 	history := append([]agentapi.Message(nil), preamble...)
 	if sess != nil {
@@ -354,22 +365,41 @@ func needsAnswer(mode permission.Mode) string {
 	return "file edits and shell commands"
 }
 
-// systemPrompt is the pre-WP0.3 prompt plus a pointer at the tools; WP0.8
-// replaces it with real project context.
-func systemPrompt(dc *dirctx.DirectoryContext) string {
-	return fmt.Sprintf(
-		"You are a helpful assistant aiding a developer with their project. "+
-			"Current directory: %s\n"+
-			"Top-level entries: %s\n\n"+
-			"You have tools to explore the project: list_dir, read_file, glob and grep. "+
-			"Use them to look at the actual code before answering instead of guessing, "+
-			"and refer to files by their paths. Use todo to show a plan for multi-step work. "+
-			"You can change the project with edit_file (preferred for targeted changes) and write_file, "+
-			"and run commands with bash; the user is shown each edit as a diff and each command "+
-			"before it runs and may decline it. A declined action must not be retried unchanged.",
-		dc.CurrentDir,
-		strings.Join(dc.Files, ", "),
-	)
+// systemPrompt assembles the run's system message: the assistant's
+// standing orders, then the project context — where it is, what it looks
+// like, and what the project's own instruction files say. The instruction
+// files come last so they read as the most specific guidance; they are
+// the user's words to the agent, not tool output, which is why they
+// belong in the system message at all.
+func systemPrompt(pc *project.Context) string {
+	var b strings.Builder
+	b.WriteString("You are a helpful assistant aiding a developer with their project.\n\n" +
+		"You have tools to explore the project: list_dir, read_file, glob and grep. " +
+		"Use them to look at the actual code before answering instead of guessing, " +
+		"and refer to files by their paths. Use todo to show a plan for multi-step work. " +
+		"You can change the project with edit_file (preferred for targeted changes) and write_file, " +
+		"and run commands with bash; the user is shown each edit as a diff and each command " +
+		"before it runs and may decline it. A declined action must not be retried unchanged.\n\n")
+
+	fmt.Fprintf(&b, "Working directory: %s\n", pc.Dir)
+	switch {
+	case pc.GitRoot == "":
+		b.WriteString("Not inside a git repository.\n")
+	case pc.GitRoot == pc.Dir:
+		b.WriteString("It is the root of a git repository.\n")
+	default:
+		fmt.Fprintf(&b, "Git repository root: %s\n", pc.GitRoot)
+	}
+	if pc.Overview != "" {
+		fmt.Fprintf(&b, "\nContents of the working directory:\n%s\n", pc.Overview)
+	}
+	if instr := project.RenderInstructions(pc.Instructions); instr != "" {
+		b.WriteString("\nThe project keeps instructions for assistants; follow them. " +
+			"When files at several levels disagree, the one nearest the working directory wins.\n")
+		b.WriteString(instr)
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // summarizeArgs renders a tool call's arguments on one short line.
