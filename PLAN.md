@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-05
+> Status: living document · Last updated: 2026-09-06
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -89,7 +89,14 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   prompter; `tool.Describe` previews with a hand-written `internal/diff`;
   `cmd/hint` now registers every built-in behind the gate, so edits show
   a diff and commands are confirmed before they run).
-- **Next:** WP0.7 — sessions (append-only JSONL, `-c`/`-r`).
+  WP0.7 — sessions (`internal/session`: append-only JSONL per
+  conversation under `~/.local/share/hint/sessions/<project-hash>/`,
+  compaction checkpoints via the new `agentapi.Compaction.History`,
+  golden format test; `internal/console`: the one stdin reader shared by
+  the permission prompter and the session picker; `hint -c`, `hint -r`,
+  `hint --no-session`).
+- **Next:** WP0.8 — project context (`HINT.md`, `.gitignore`-aware
+  auto-context).
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
@@ -97,7 +104,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
   agent loop with every built-in tool registered behind the permission
   gate (it explores the project itself and can edit it and run commands
-  with confirmation). Phase 0 adds sessions next.
+  with confirmation), and every run is recorded as a session that `-c`
+  continues. The REPL is WP0.9's.
 
 ## Compatibility decision
 
@@ -120,7 +128,9 @@ a one-shot alias for a soft migration and may be removed later.
    Done — see [WP0.5](docs/plan/phase-0-mvp-cli.md#wp05--built-in-tools--done)
    and [WP0.6](docs/plan/phase-0-mvp-cli.md#wp06--permission-system--done)
    for the permission layer and `bash` with confirmation.
-5. JSONL sessions + `-c`. Then tag `v0.1-alpha` and build for Raspberry Pi.
+5. ~~JSONL sessions + `-c`.~~ Done — see
+   [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done). Then tag
+   `v0.1-alpha` and build for Raspberry Pi.
 
 ## Open questions
 

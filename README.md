@@ -142,6 +142,25 @@ not confined, which is why `--auto-edit` keeps asking for it. Without a
 terminal on stdin (a script, `< /dev/null`) anything that needs an answer
 is denied.
 
+### Sessions
+
+Every run is recorded, so a later run can pick the conversation up:
+
+```bash
+hint "what does main.go do?"          # starts a new session
+hint -c "and where is it tested?"     # continues the most recent session of this directory
+hint -r "..."                         # lists this directory's sessions and asks which one
+hint --no-session "..."               # records nothing
+```
+
+Sessions are one JSONL file each under
+`~/.local/share/hint/sessions/<project>/` (`$XDG_DATA_HOME` is respected),
+one per working directory; delete a file to forget the conversation. The
+system prompt is not stored — each run builds it afresh — and neither are
+`a(lways)` answers, so a continued session asks again before running
+commands. When the conversation outgrows the model's context window it is
+summarized, and the summary is what a later run continues from.
+
 ### Migrating from the flat config
 
 The pre-profiles format (`api_url`/`api_key`/`model` at the top level of

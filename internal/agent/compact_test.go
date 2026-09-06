@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -104,6 +105,9 @@ func TestCompact_ThinkingOnlyShortcut(t *testing.T) {
 	if comp.Compaction.Summary != "" || comp.Compaction.MessagesReplaced != 0 {
 		t.Errorf("compaction = %+v, want an empty summary and 0 messages replaced", comp.Compaction)
 	}
+	if !reflect.DeepEqual(comp.Compaction.History, result) {
+		t.Errorf("compaction History = %+v, want the stripped history %+v", comp.Compaction.History, result)
+	}
 }
 
 // collectEventChan drains an already-closed or about-to-close buffered
@@ -174,6 +178,9 @@ func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
 	comp := lastAgentEvent(events, agentapi.EventCompaction)
 	if comp == nil || comp.Compaction.Summary != "SUMMARY" || comp.Compaction.MessagesReplaced != 2 {
 		t.Fatalf("compaction event = %+v, want Summary=SUMMARY, MessagesReplaced=2", comp)
+	}
+	if !reflect.DeepEqual(comp.Compaction.History, result) {
+		t.Errorf("compaction History = %+v, want the returned history %+v", comp.Compaction.History, result)
 	}
 }
 
