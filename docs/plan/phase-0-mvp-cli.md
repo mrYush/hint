@@ -483,22 +483,22 @@ depend on them:
   CONTRIBUTING records; no code was copied either way — updating the rule
   is a separate docs decision.
 
-### WP0.6 — Permission system
+### WP0.6 — Permission system — **done**
 
 References — Crush, Codex CLI.
 
-- [ ] Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
-- [ ] Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
-- [ ] Session allow-list of remembered grants ("always allow `go test`")
-- [ ] File tools confined to the working directory by default (the
+- [x] Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
+- [x] Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
+- [x] Session allow-list of remembered grants ("always allow `go test`")
+- [x] File tools confined to the working directory by default (the
       mechanism, `tool.Root`, landed in WP0.5; this covers the run-mode
       policy around it)
-- [ ] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
+- [x] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
       `cmd/hint` behind the permission layer — WP0.5 deliberately wired
       only `builtin.ReadOnly`. `bash` is the one tool `tool.Root` cannot
       confine (a subprocess goes where it likes), so its prompt must show
       the full command and `--auto-edit` must keep asking for it
-- [ ] Classify a tool's `error` in `internal/agent.runTools` before
+- [x] Classify a tool's `error` in `internal/agent.runTools` before
       wrapping it: a `context.Canceled` / `DeadlineExceeded` that a tool
       passes through (the WP0.5 limits decorator forwards a caller's
       cancel or deadline untouched) currently becomes `ErrUnknown` "tool
@@ -507,7 +507,102 @@ References — Crush, Codex CLI.
       during a running tool ends the turn the same way it does between
       tools — a denied permission (WP0.6's own new outcome) needs the
       same seam, so fix both together
-- [ ] Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
+- [x] Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **Three packages share the work, by dependency direction.**
+  `internal/permission` is pure policy over an `agentapi.PermissionRequest`
+  — `Mode`, the allow-list, the `Prompter` — and knows no tool by name.
+  The preview a prompt shows (`tool.Describer`, `tool.Describe`) is tool
+  machinery and lives in `internal/tool` next to `WithLimits`, so
+  `builtin` implements a preview without importing the policy package,
+  and an MCP-provided tool (Phase 2) that has no preview is described by
+  its name and raw arguments. The diff itself is `internal/diff`, a
+  hand-written Myers line diff with unified rendering (the stdlib has
+  none and CONTRIBUTING prefers no new module). `internal/agent` imports
+  neither: it declares the consumer-side `Authorizer` interface
+  (`Review` + `Authorize`) that `permission.Gate` satisfies, and a test
+  stands in a fake.
+- **The prompt is emitted before it blocks, and only when it is really
+  asked.** `Review` decides — mode first, then the allow-list — and only
+  builds the preview (a diff means reading the file) when somebody will
+  look at it; the loop emits `EventPermission` and then blocks in
+  `Authorize`. Read-class calls, calls a mode silences, and calls an
+  earlier "always" covers are never announced. `cmd/hint` ignores the
+  event because the gate's `ReaderPrompter` already drew the question on
+  stderr; the event still travels the stream for Phase 1's RPC client,
+  which will answer it instead. No `PermissionResponse` wire type was
+  added — that is Phase 1's, with the transport that carries it.
+- **"Always" exists for commands only, and only as `program subcommand`.**
+  A grant is the program plus the word after it, for programs whose first
+  argument names the action (`go`, `git`, `npm`, `cargo`, `docker`,
+  `kubectl`, `pip`, …): `go test ./...` grants `go test`, which then
+  covers `go test ./internal/...` but not `go testify` or `go build`. A
+  later command matches only if the text after the scope carries no shell
+  metacharacter (`; & | < > $ \` ( )` or a newline), so `go test; rm -rf ~`
+  is not covered. Nothing else is granted: not a bare program name
+  (`sudo`, `bash -c`, `python -c`, `xargs`, `env` run whatever follows,
+  and `curl` or `make` take their whole behaviour from arguments a prefix
+  does not look at), not a program whose next word is a flag, not a
+  command that starts with `VAR=value`. Those are confirmed one at a time
+  — a list of programs safe to grant by name is never complete, so there
+  is none. Review finding: the first cut scoped unknown programs to their
+  first word, which made `sudo x` cover `sudo rm -rf /`. The remaining,
+  accepted limit of a prefix grant: `go test` covers `go test -exec
+  'rm -rf /'`; the user who answers "always" trusts the program, not each
+  future argument. Writes get no "always" at all: a per-file grant would
+  hide the next diff to that file, and a run-wide one is `--auto-edit`
+  with a keystroke, which exists as the flag where it is visible. The
+  list lives in memory for the process; persisting grants is a WP0.7
+  decision, not an oversight.
+- **The stdin prompter owns stdin.** A blocked read cannot be interrupted,
+  so `ReaderPrompter` reads lines on one goroutine for the life of the
+  process and a prompt cancelled by Ctrl-C leaves it parked on the next
+  line; a line typed while no prompt was waiting is discarded before the
+  next question, so it cannot be taken as its answer. Consequence for
+  WP0.9: the REPL must take its input through the same reader, not open
+  stdin beside it. The prompt shows at most 16 kB of a diff
+  (`tool.Truncate`, head and tail); the `PermissionRequest` on the event
+  stream stays whole — how to show a long `Detail` is the client's call,
+  per the contract.
+- **Fail closed.** No prompter, a prompter error with the context still
+  alive, stdin at EOF (`hint … < /dev/null`, a closed pipe), or an empty
+  answer all deny; only `y`/`yes`/`a`/`always` allow. `cmd/hint` says up
+  front when stdin is not a terminal and what will be denied, and
+  `--yolo` prints a loud warning before the first request. The model
+  reads a denial as an error result telling it not to retry the same
+  action unchanged; the turn continues.
+- **Preview cost.** `Gate.Review` checks the mode before building a
+  preview and the allow-list after, because a command grant needs the
+  command text. Only execute-class calls can be granted and their preview
+  is the command itself, so no diff is ever computed for a call a grant
+  then silences.
+- **No mode lifts `tool.Root`.** `--yolo` stops asking; it does not let
+  `write_file ../secret` through. Pinned by `TestYoloDoesNotLiftRoot`.
+- **Cancel is classified by the context, not by the error's type.**
+  `runTools` now treats any error — from a tool, or from the prompt —
+  with `ctx.Err() != nil` as a cancel: the interrupted call and every
+  call after it get a `canceled` result and the turn ends
+  `FinishCanceled`, exactly as a cancel between calls did. An error with
+  the context alive is a machinery failure and aborts the turn, wrapped
+  with `KindOf(err)` so a classified `*agentapi.Error` keeps its kind
+  instead of flattening to `ErrUnknown`.
+- **`edit_file`'s preview and edit share one plan.** Run and Describe
+  both start from `editFile.plan`, which resolves the path and computes
+  the new content without writing, so the diff the user confirms and the
+  bytes that land cannot disagree; the file changing in between is the
+  TOCTOU limit WP0.5 already accepts. `write_file` previews a binary or
+  oversized target with a size-only summary rather than a diff.
+- **Modes are flags, not config.** `--ask`/`--auto-edit`/`--yolo` are
+  mutually exclusive cobra flags and not part of `config.Flags`: a run
+  policy is not a provider profile. A config or environment default for
+  the mode is a possible later addition, not part of this package.
+- Crush and Codex were consulted for the approval-mode vocabulary and
+  the grant/deny shape (pattern references only); the prompter-plus-scope
+  idea follows ollama's `ApprovalPrompter` (MIT), rewritten around
+  `agentapi.PermissionRequest`. No code was copied.
 
 ### WP0.7 — Sessions
 

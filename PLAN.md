@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-04
+> Status: living document · Last updated: 2026-09-05
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -83,17 +83,21 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.5 — built-in tools (`internal/tool`: registry, schema generation,
   timeout/truncation decorator, working-directory root;
   `internal/tool/builtin`: read_file, write_file, edit_file, list_dir,
-  glob, grep, bash, todo; `cmd/hint` registers the read-only set).
-- **Next:** WP0.6 — permission system, which also wires the write/execute
-  tools into `cmd/hint`.
+  glob, grep, bash, todo).
+  WP0.6 — permission system (`internal/permission`: run modes
+  ask/auto-edit/yolo, in-memory allow-list with command scopes, stdin
+  prompter; `tool.Describe` previews with a hand-written `internal/diff`;
+  `cmd/hint` now registers every built-in behind the gate, so edits show
+  a diff and commands are confirmed before they run).
+- **Next:** WP0.7 — sessions (append-only JSONL, `-c`/`-r`).
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
   Sequential request order stays the WP0.4 default until then.
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
-  agent loop with the read-only tools registered (it explores the project
-  itself). Phase 0 adds permissions, the write/execute tools, and sessions
-  next.
+  agent loop with every built-in tool registered behind the permission
+  gate (it explores the project itself and can edit it and run commands
+  with confirmation). Phase 0 adds sessions next.
 
 ## Compatibility decision
 
@@ -113,8 +117,9 @@ a one-shot alias for a soft migration and may be removed later.
    limits + compaction).~~ Done — see
    [WP0.4](docs/plan/phase-0-mvp-cli.md#wp04--agent-loop--done).
 4. ~~Add `read_file`/`list_dir` tools — the first real agentic scenario~~
-   Done — see [WP0.5](docs/plan/phase-0-mvp-cli.md#wp05--built-in-tools--done).
-   Next: the permission layer and `bash` with confirmation (WP0.6).
+   Done — see [WP0.5](docs/plan/phase-0-mvp-cli.md#wp05--built-in-tools--done)
+   and [WP0.6](docs/plan/phase-0-mvp-cli.md#wp06--permission-system--done)
+   for the permission layer and `bash` with confirmation.
 5. JSONL sessions + `-c`. Then tag `v0.1-alpha` and build for Raspberry Pi.
 
 ## Open questions

@@ -120,6 +120,28 @@ hint --provider=local "question"                 # pick a profile for one run
 hint --api-key=<key> --model=gpt-4o-mini "..."   # override the selected profile
 ```
 
+### Run modes
+
+`hint` can edit files in the working directory and run shell commands.
+What it may do without asking is a per-run choice:
+
+```bash
+hint "add a --version flag"               # --ask (default): every edit shows a
+                                          # diff, every command is shown, and
+                                          # you answer y / n / a(lways)
+hint --auto-edit "fix the failing test"   # edits apply silently, commands still ask
+hint --yolo "..."                         # nothing asks; prints a loud warning
+```
+
+Answering `a` to a command remembers its program and subcommand for the
+rest of the run: `go test` covers `go test ./...` but not `go build`, and
+it is offered only for programs with subcommands (`go`, `git`, `npm`,
+`cargo`, `docker`, …); anything else, and every edit, is confirmed each
+time. File tools never leave the working directory in any mode; `bash` is
+not confined, which is why `--auto-edit` keeps asking for it. Without a
+terminal on stdin (a script, `< /dev/null`) anything that needs an answer
+is denied.
+
 ### Migrating from the flat config
 
 The pre-profiles format (`api_url`/`api_key`/`model` at the top level of
