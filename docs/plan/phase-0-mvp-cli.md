@@ -710,10 +710,103 @@ depend on them:
   `RunE`, so flag errors keep cobra's usage text and everything else is
   printed once.
 
-### WP0.8 — Project context
+### WP0.8 — Project context — **done**
 
-- [ ] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
-- [ ] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+References — codex (`agents_md.rs`: root-bounded walk, shared byte
+budget), openhuman (bounded read), gemini-cli (`getFolderStructure`: item
+cap), Crush (prompt placement; pattern reference only, FSL).
+
+- [x] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
+- [x] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **`internal/project` replaces `internal/context`** (the layout in
+  `architecture.md` already named it). The old package was fifty lines
+  of `os.ReadDir`; nothing of it survives, and the `dirctx` import alias
+  that dodged `context.Context` goes with it.
+- **`.gitignore` is git's job: `git ls-files --cached --others
+  --exclude-standard`** (chat decision, the same shape as WP0.5's
+  ripgrep: an external tool as the fast, exact path and pure Go as the
+  fallback). Alternatives priced and rejected: `go-git`'s gitignore
+  package plus a hand-built hierarchical matcher (Crush's route — ~200
+  lines and a large module for one subpackage), `sabhiram/go-gitignore`
+  (unmaintained, known negation bugs, used by nobody in the research
+  tree), a home-grown parser (gitignore semantics — anchoring, `**`,
+  negation, dir-only — are deceptively deep). Cost accepted: outside a
+  repository, or without git installed, only the hidden-and-dependency
+  rule applies; a process is spawned per listing, which the cold-start
+  budget absorbs. `project.Rules` is the one seam: `cmd/hint` builds
+  the overview through it and `internal/tool/builtin` gives it to the
+  pure-Go walks of `list_dir`, `glob` and `grep` (`WithGit`), which
+  closes the difference WP0.5 recorded between the walks and ripgrep.
+  A `git ls-files` listing is turned into an `Ignorer` — kept if git
+  listed the path or something beneath it, everything under a listed
+  path kept wholesale so a submodule's contents are not hidden — and
+  `project.Basic` (hidden entries, `node_modules`/`vendor`/`target`/
+  `dist`/`__pycache__`) still applies on top, so a committed `vendor/`
+  is pruned as before.
+- **Instruction files are searched from the git root down to the
+  working directory, outermost first** (chat decision; codex, gemini-cli
+  and goose do the same, opencode-TS and pi-mono too). In each
+  directory the first of `HINT.md` > `AGENTS.md` > `CLAUDE.md` wins and
+  the others are not read, so a project keeping both is not told the
+  same thing twice (opencode-TS's argument). The root is the nearest
+  ancestor with a `.git` entry (directory or worktree file); without
+  one only the working directory is searched. A global
+  `~/.config/hint/HINT.md` was deferred to WP0.9 with the other flags.
+- **One 32 KiB budget for all instruction files, shared, truncating**
+  (chat decision; codex's number and policy). The budget is shared
+  rather than per file because it is the total that competes with the
+  conversation for the context window, and the preamble is the one
+  part of a request that compaction never touches. A file that
+  overflows is cut at the remaining budget and marked; later files are
+  skipped; each cut or skip is a stderr warning. The read itself is
+  bounded (`io.LimitReader`, openhuman's detail), so a symlinked log
+  is never loaded to be discarded. claurst's per-file skip was
+  rejected because one large file would silently leave a project with
+  no instructions at all. Whitespace-only files cost nothing.
+- **The overview is a `project.Overview` strategy; `Tree{Depth: 2,
+  MaxEntries: 100}` is the default** and `None` exists. gemini-cli's
+  200-item cap and qwen-code's 20 bracket the number; two levels is
+  what a developer glances at. Truncation says so in the listing so
+  the model reaches for `list_dir`. The interface, rather than a
+  constant, is deliberate: the user's intent is to let the *agent*
+  choose the overview shape later from the conversation history
+  (which files it has been reading, what the user keeps asking
+  about). That is a Phase 1–2 item once there is a per-turn hook to
+  hang it on; it is not scheduled here.
+- **Placement stays one `SystemMessage`.** codex sends instructions as
+  a user-role message so they can be swapped mid-session without
+  invalidating a cached system prefix; `hint` rebuilds the preamble
+  every run and never stores it (WP0.7), so the swap has nothing to
+  buy. `session.NewRecorder(sess, len(preamble))` is unchanged.
+  Instruction files render as `<project_instructions><file path=…>`
+  blocks after the overview, with a line saying the nearest file wins.
+  They are the one file content placed in the system prompt rather
+  than quoted as untrusted tool output, because they are the user's
+  own words to the agent.
+- **Limits are functional options on `project.Load`** (`WithGit`,
+  `WithInstructionBudget`, `WithInstructionNames`, `WithOverview`)
+  with package constants as defaults, so WP0.9's flags and config keys
+  attach without changing a signature. The overview walks an `fs.FS`
+  (`os.DirFS` in production, `fstest.MapFS` in tests); instruction
+  files are read through `os` directly, since walking up past a
+  working directory does not fit a rooted `fs.FS` cleanly.
+- **Failures degrade to warnings, printed once by `cmd/hint`.** Only a
+  working directory that cannot be read is an error. A git failure
+  that is not "not a repository" (a corrupt index, a killed process)
+  is reported by `Load`; the tools that meet the same failure fall back
+  to `Basic` silently rather than report it on every call.
+- Known limits, deliberately not addressed: `.hintignore` (Crush has
+  `.crushignore`); `@import` expansion inside instruction files
+  (gemini-cli, goose, claurst); just-in-time loading of a
+  subdirectory's instructions when the agent first reads a file there
+  (goose's `SubdirectoryHintTracker`, opencode's `Instruction.resolve`)
+  — that one is worth revisiting alongside the agent-chosen overview;
+  case-insensitive filesystems where `HINT.md` and `hint.md` are one
+  file are not special-cased.
 
 ### WP0.9 — Run modes and CLI surface
 

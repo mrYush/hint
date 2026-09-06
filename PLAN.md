@@ -95,8 +95,15 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   golden format test; `internal/console`: the one stdin reader shared by
   the permission prompter and the session picker; `hint -c`, `hint -r`,
   `hint --no-session`).
-- **Next:** WP0.8 — project context (`HINT.md`, `.gitignore`-aware
-  auto-context).
+  WP0.8 — project context (`internal/project` replaces
+  `internal/context`: `HINT.md`/`AGENTS.md`/`CLAUDE.md` read from the git
+  root down to the working directory under one 32 KiB budget, a depth-2
+  overview behind a pluggable `Overview`, `.gitignore` honoured through
+  `git ls-files` with the hidden-and-dependency rule as the fallback —
+  shared with the pure-Go walks of `list_dir`, `glob` and `grep`).
+- **Next:** WP0.9 — run modes and CLI surface (REPL, `hint -p`,
+  `--debug` file log, flags for the WP0.8 limits and a global
+  `~/.config/hint/HINT.md`).
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
@@ -104,8 +111,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
   agent loop with every built-in tool registered behind the permission
   gate (it explores the project itself and can edit it and run commands
-  with confirmation), and every run is recorded as a session that `-c`
-  continues. The REPL is WP0.9's.
+  with confirmation), reads the project's `HINT.md`, and every run is
+  recorded as a session that `-c` continues. The REPL is WP0.9's.
 
 ## Compatibility decision
 
