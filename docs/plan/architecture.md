@@ -38,7 +38,8 @@ hint/
 │   │   └── builtin/            # read,write,edit,ls,glob,grep,bash,todo
 │   ├── permission/             # modes, allow-list, prompting
 │   ├── diff/                   # line diff + unified rendering (permission previews, TUI)
-│   ├── session/                # JSONL store, resume, list
+│   ├── session/                # JSONL store, resume, list (WP0.7)
+│   ├── console/                # the one stdin line reader: prompts, session picker, REPL
 │   ├── project/                # HINT.md, auto-context, gitignore
 │   └── config/                 # profiles, sources (extends the current package)
 └── pkg/agentapi/               # PUBLIC contract — future SDK base:

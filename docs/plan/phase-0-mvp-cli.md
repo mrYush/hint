@@ -604,14 +604,111 @@ depend on them:
   idea follows ollama's `ApprovalPrompter` (MIT), rewritten around
   `agentapi.PermissionRequest`. No code was copied.
 
-### WP0.7 — Sessions
+### WP0.7 — Sessions — **done**
 
 Reference — Pi session format.
 
-- [ ] Append-only JSONL, one file per session: `~/.local/share/hint/sessions/<project-hash>/<id>.jsonl`
-- [ ] Record kinds: user/assistant/tool_call/tool_result/system/compaction
-- [ ] Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
-- [ ] Golden tests for the session format (backward-compat gate)
+- [x] Append-only JSONL, one file per session:
+      `~/.local/share/hint/sessions/<project-hash>/<created>_<id>.jsonl`
+      (`$XDG_DATA_HOME` respected; the creation timestamp in the name makes
+      a plain listing sort by age, the hash is SHA-256 of the resolved
+      working directory, the header records the path in clear)
+- [x] Record kinds: `session` (header), `message` (one `agentapi.Message`
+      verbatim — user/assistant/tool/system are its roles, and a tool call
+      travels inside its assistant message), `compaction` (checkpoint)
+- [x] Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
+- [x] Golden tests for the session format (backward-compat gate)
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **A record wraps an `agentapi.Message` verbatim** (chat decision). The
+  checklist's kind list — user/assistant/tool_call/tool_result/system —
+  is the message's role, not a record kind of its own: splitting a tool
+  call out of the assistant message that made it would force every reader
+  to reassemble what `Message.Validate` already guarantees, and the
+  contract promises sessions are persisted in its terms. The file is
+  therefore a `Record{Kind, At, …}` tagged union in the pkg/agentapi
+  style, round-tripping through `encoding/json` with no custom
+  marshalling; `session.FormatVersion` (1) and `agentapi.WireVersion`
+  both sit in the header.
+- **A compaction is a checkpoint, and `agentapi.Compaction` gained
+  `History`** (chat decision; Pi's `retainedTail`). The event carried
+  only the summary and a count, from which the post-compaction history
+  cannot be rebuilt — the replaced region is not contiguous once the
+  tail has been shrunk, and the split is the loop's private policy. The
+  loop now fills `History` with the exact messages the next request
+  carries (pinned against the fake provider's next request), the
+  `compaction` record stores it, and loading a file is "the last
+  checkpoint, then every message after it". The field is optional on the
+  wire, so `WireVersion` stays 1; the cost is the retained tail written
+  twice, which compaction's rarity and the window bound make cheap. The
+  alternatives — re-compacting on every resume (an LLM call per `-c` of
+  a long session, the earlier summary thrown away) or exporting the
+  split algorithm for the loader to replay (a session then depends on
+  the estimator's arithmetic) — were rejected.
+- **The system prompt is not stored** (chat decision, as Pi does).
+  WP0.8 derives it from HINT.md and the project, both of which change
+  between runs; a frozen copy would go stale. `cmd/hint` prepends a fresh
+  preamble every run and tells `session.Recorder` its length, and the
+  Recorder strips exactly that many leading messages from a checkpoint's
+  History — safe because compaction keeps the leading system run
+  verbatim and inserts its summary after it. Earlier summaries are
+  `RoleSystem` too and stay in the file; the preamble count, not the
+  role, is what tells them apart.
+- **"Always" grants stay in the process** (chat decision). `hint -c`
+  starts with an empty allow-list: a grant given yesterday must not run a
+  command silently today. A `grant` record kind can be added later
+  without a format bump.
+- **`internal/console.LineReader` is the one reader of stdin.** WP0.6's
+  prompter owned stdin on a goroutine; the session picker needs the same
+  stream before the first prompt, and two `bufio.Reader`s on one
+  descriptor would race for bytes. The reader moved to its own package —
+  `DiscardPending` and a sticky terminal error included — and
+  `permission.NewLinePrompter` and `session.Choose` share one instance
+  built in `cmd/hint`. WP0.9's REPL takes its input through it as well.
+- **A torn tail is truncated on open, like a journal.** A crash mid-write
+  leaves a partial last line; readers ignore it with a warning, and
+  `Store.Open` truncates the file back to the last complete record
+  before appending, since the bytes can never parse and the next record
+  would otherwise garble with them. That is the only time bytes are
+  removed from a session file. `List` is read-only and skips a file it
+  cannot read, so one damaged session does not hide the others.
+- **Forward compatibility follows the wire types' rule.** An unknown
+  record kind, or a message carrying an unknown part kind
+  (`agentapi.ErrUnknownKind`), is skipped with a warning the CLI prints
+  when it continues the session; a header with a newer `FormatVersion`
+  is refused with a message naming both versions; a malformed complete
+  line is an error, not a skip — silently dropping real data would be
+  worse than failing.
+- **Dangling tool calls are repaired on read.** A run interrupted
+  mid-batch leaves an assistant message whose tool calls have no
+  results (a machinery abort writes none for the failing call), and
+  every supported dialect rejects that history. `Session.Messages`
+  synthesizes an error result saying no result was recorded; it is a
+  view — `Len` still counts the file's records — so the file is never
+  rewritten to hide the interruption.
+- **Recording is best effort once the answer streams.** Writing the
+  user message fails the run before the first request (a read-only
+  disk is better learned about now); a later write failure sticks in
+  the Recorder and is reported once at the end, with the exit status
+  still the turn's.
+- **"Latest" is modification time**, not creation: `-c` continues the
+  conversation that last grew. The picker lists at most 20, newest
+  first, with the first prompt's first line, and accepts a number or an
+  id prefix (older sessions stay reachable by id). It refuses — rather
+  than silently starting a new session — when nobody answers, while
+  `-c` or `-r` in a directory with no sessions starts one with a
+  notice.
+- Known limits, deliberately not addressed: two concurrent `hint -c` in
+  one directory both append to the same file (a single-user CLI; a lock
+  is a Phase 1 concern with the core as a service); the `todo` list is
+  not restored on resume (the model resends the full list); `--session
+  <id>` and `hint sessions` listing are WP0.9's CLI surface.
+- Incidental: `cmd/hint` printed a run-time error twice (cobra and
+  main); `SilenceErrors` is now set alongside `SilenceUsage` inside
+  `RunE`, so flag errors keep cobra's usage text and everything else is
+  printed once.
 
 ### WP0.8 — Project context
 
@@ -724,8 +821,8 @@ and the `ToolCall` wire type:
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
-ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 → WP0.9 →
-WP0.10.
+ones wired) → WP0.6 (wires write/execute tools) → WP0.7 (done) → WP0.8 →
+WP0.9 → WP0.10.
 WP0.11 sits after WP0.6 (it needs per-call gating to exist) and is not
 required for `v0.1-alpha`.
 Tag `v0.1-alpha` once WP0.1–WP0.7 land; `v0.1` after acceptance criteria pass.

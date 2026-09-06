@@ -1,13 +1,12 @@
 package permission
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 
+	"github.com/mrYush/hint/internal/console"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -54,83 +53,39 @@ type Prompter interface {
 	Prompt(ctx context.Context, ask Ask) (Decision, error)
 }
 
-// ReaderPrompter asks on an io.Writer and reads one-line answers from an
-// io.Reader — the CLI's stderr and stdin.
+// ReaderPrompter asks on an io.Writer and reads one-line answers through a
+// [console.LineReader] — the CLI's stderr and stdin.
 //
 // Answers: y/yes, n/no, a/always; an empty line is no, so that Enter alone
 // is the safe choice. Reaching EOF denies: an unattended run (stdin from
 // /dev/null, a pipe that closed) must not approve anything by accident.
 //
-// The prompter owns its reader for the life of the process: a blocked
-// Read cannot be interrupted, so lines are read on one goroutine that
-// outlives any single prompt, and a prompt cancelled by ctx leaves that
-// goroutine parked on the next line. Nothing else may read the same
-// stream — WP0.9's REPL has to take its own input through this reader
-// rather than open stdin beside it. A line that arrived while no prompt
-// was waiting (typed after a Ctrl-C, say) is discarded before the next
-// question is printed, so it cannot be taken as the answer to it.
+// The line reader is shared with every other prompt in the process (the
+// session picker, WP0.9's REPL): nothing else may read the same stream
+// beside it. A line that arrived while no prompt was waiting (typed after
+// a Ctrl-C, say) is discarded before the next question is printed, so it
+// cannot be taken as the answer to it.
 type ReaderPrompter struct {
-	out io.Writer
-
-	once  sync.Once
-	in    io.Reader
-	lines chan lineResult
-	// eof is the reader's terminal error once it has been observed, kept
-	// so that a later prompt denies immediately instead of waiting on a
-	// goroutine that has exited. Prompts are sequential (the agent loop
-	// asks about one call at a time), so no lock guards it.
-	eof error
+	out   io.Writer
+	lines *console.LineReader
 }
 
-type lineResult struct {
-	text string
-	err  error
-}
-
-// NewReaderPrompter returns a prompter over in and out.
+// NewReaderPrompter returns a prompter over in and out. It owns in for the
+// life of the process; when another component needs the same stream, build
+// one [console.LineReader] and use [NewLinePrompter] instead.
 func NewReaderPrompter(in io.Reader, out io.Writer) *ReaderPrompter {
-	return &ReaderPrompter{in: in, out: out, lines: make(chan lineResult)}
+	return NewLinePrompter(console.NewLineReader(in), out)
 }
 
-// start launches the reader goroutine on first use.
-func (p *ReaderPrompter) start() {
-	p.once.Do(func() {
-		go func() {
-			r := bufio.NewReader(p.in)
-			for {
-				line, err := r.ReadString('\n')
-				if line != "" || err == nil {
-					p.lines <- lineResult{text: line}
-				}
-				if err != nil {
-					p.lines <- lineResult{err: err}
-					return
-				}
-			}
-		}()
-	})
-}
-
-// discardPending drops lines the reader goroutine has already collected
-// while no prompt was waiting. It only sees a line the goroutine is
-// currently offering; one still being typed is, by definition, meant for
-// the prompt about to be printed.
-func (p *ReaderPrompter) discardPending() {
-	for p.eof == nil {
-		select {
-		case line := <-p.lines:
-			p.eof = line.err
-		default:
-			return
-		}
-	}
+// NewLinePrompter returns a prompter that reads answers from lines and
+// writes questions to out.
+func NewLinePrompter(lines *console.LineReader, out io.Writer) *ReaderPrompter {
+	return &ReaderPrompter{out: out, lines: lines}
 }
 
 // Prompt implements Prompter.
 func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) {
-	p.start()
-
-	p.discardPending()
+	p.lines.DiscardPending()
 
 	req := ask.Request
 	fmt.Fprintf(p.out, "\nhint: %s\n", req.Summary)
@@ -144,22 +99,17 @@ func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) 
 
 	for {
 		fmt.Fprintf(p.out, "Allow? %s: ", options)
-		line := lineResult{err: p.eof}
-		if p.eof == nil {
-			select {
-			case <-ctx.Done():
+		text, err := p.lines.ReadLine(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
 				fmt.Fprintln(p.out)
 				return Deny, ctx.Err()
-			case line = <-p.lines:
 			}
-		}
-		if line.err != nil {
 			// EOF or a broken pipe: nobody is there to answer.
-			p.eof = line.err
-			fmt.Fprintf(p.out, "\nhint: no answer (%v); denied\n", line.err)
+			fmt.Fprintf(p.out, "\nhint: no answer (%v); denied\n", err)
 			return Deny, nil
 		}
-		switch strings.ToLower(strings.TrimSpace(line.text)) {
+		switch strings.ToLower(strings.TrimSpace(text)) {
 		case "y", "yes":
 			return Allow, nil
 		case "n", "no", "":

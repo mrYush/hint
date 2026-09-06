@@ -65,6 +65,12 @@ func (a *Agent) overflowing(tokens int64) bool {
 // against the configured window does it summarize the middle of the
 // conversation via the [Compactor].
 //
+// Either way the emitted [agentapi.EventCompaction] carries the resulting
+// history in Compaction.History: the region a summary replaces is not
+// contiguous once the tail has been shrunk, so an observer (the WP0.7
+// session store) could not rebuild the post-compaction state from the
+// summary and a count alone.
+//
 // One call here is "one attempt" in the loop's "no more than one compaction
 // attempt per iteration" rule — both steps happen without going back to the
 // provider in between, so the caller only ever needs to retry the actual
@@ -79,6 +85,7 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 			out <- agentapi.Event{Kind: agentapi.EventCompaction, Compaction: &agentapi.Compaction{
 				TokensBefore: int(before),
 				TokensAfter:  int(after),
+				History:      stripped,
 			}}
 			return stripped, nil
 		}
@@ -110,6 +117,7 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 		TokensBefore:     int(before),
 		TokensAfter:      int(a.estimator.Estimate(result)),
 		Summary:          summary,
+		History:          result,
 	}}
 	return result, nil
 }
