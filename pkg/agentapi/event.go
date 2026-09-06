@@ -303,4 +303,16 @@ type Compaction struct {
 	TokensAfter  int `json:"tokens_after,omitempty"`
 	// Summary is the text that replaced them.
 	Summary string `json:"summary,omitempty"`
+	// History is the conversation as it stands after the compaction — the
+	// messages the next provider request will carry, leading system
+	// messages included. The in-process agent loop always fills it. It
+	// exists so that an observer of the event stream (a session store
+	// writing a checkpoint, a client re-rendering its transcript) can take
+	// the post-compaction state as given instead of re-deriving which
+	// messages the summary stood in for: that region need not be
+	// contiguous, and the split is the loop's private policy.
+	//
+	// Optional on the wire, so a transport that finds it too heavy may
+	// omit it; a consumer then knows only that a compaction happened.
+	History []Message `json:"history,omitempty"`
 }

@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
+	"github.com/mrYush/hint/internal/console"
 	dirctx "github.com/mrYush/hint/internal/context"
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/provider"
+	"github.com/mrYush/hint/internal/session"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -24,19 +28,24 @@ import (
 func main() {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
+	var continueLast, resume, noSession bool
 
 	rootCmd := &cobra.Command{
 		Use:   "hint [question]",
 		Short: "A utility for getting contextual hints using LLM",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// A run-time failure is printed once, by main; cobra keeps
+			// reporting flag errors itself, since those never reach here.
 			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
 			// Ctrl-C cancels the context, which the provider layer reports
 			// as a cancel — never as a network failure that would trigger a
 			// fake failover.
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return run(ctx, flags, runMode(ask, autoEdit, yolo), strings.Join(args, " "))
+			return run(ctx, flags, runMode(ask, autoEdit, yolo),
+				sessionModeOf(continueLast, resume, noSession), strings.Join(args, " "))
 		},
 	}
 
@@ -48,6 +57,13 @@ func main() {
 	rootCmd.Flags().BoolVar(&autoEdit, "auto-edit", false, "Apply file edits without asking; still confirm shell commands")
 	rootCmd.Flags().BoolVar(&yolo, "yolo", false, "Run every edit and command without asking (dangerous)")
 	rootCmd.MarkFlagsMutuallyExclusive("ask", "auto-edit", "yolo")
+
+	// Session selection. A run records its conversation by default; -c
+	// and -r pick an earlier one of this directory to continue instead.
+	rootCmd.Flags().BoolVarP(&continueLast, "continue", "c", false, "Continue the most recent session of this directory")
+	rootCmd.Flags().BoolVarP(&resume, "resume", "r", false, "Pick a session of this directory to continue")
+	rootCmd.Flags().BoolVar(&noSession, "no-session", false, "Do not record this conversation")
+	rootCmd.MarkFlagsMutuallyExclusive("continue", "resume", "no-session")
 
 	// Configuration flags. Defaults stay empty on purpose: a non-empty flag
 	// default would override values from config files (the pre-WP0.2
@@ -78,9 +94,37 @@ func runMode(ask, autoEdit, yolo bool) permission.Mode {
 	}
 }
 
+// sessionMode says which session a run records into.
+type sessionMode int
+
+const (
+	// sessionNew starts a fresh session. The default.
+	sessionNew sessionMode = iota
+	// sessionContinue appends to the directory's most recent session.
+	sessionContinue
+	// sessionResume lets the user pick one of the directory's sessions.
+	sessionResume
+	// sessionOff records nothing.
+	sessionOff
+)
+
+// sessionModeOf maps the exclusive session flags onto a sessionMode.
+func sessionModeOf(continueLast, resume, noSession bool) sessionMode {
+	switch {
+	case noSession:
+		return sessionOff
+	case resume:
+		return sessionResume
+	case continueLast:
+		return sessionContinue
+	default:
+		return sessionNew
+	}
+}
+
 // run loads the configuration, builds the provider stack, and streams one
 // answer to stdout.
-func run(ctx context.Context, flags config.Flags, mode permission.Mode, question string) error {
+func run(ctx context.Context, flags config.Flags, mode permission.Mode, smode sessionMode, question string) error {
 	cfg, err := config.Load(flags)
 	if err != nil {
 		return fmt.Errorf("loading configuration: %w", err)
@@ -109,11 +153,6 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, question
 	if err != nil {
 		return fmt.Errorf("getting context: %w", err)
 	}
-	history := []agentapi.Message{
-		agentapi.SystemMessage(systemPrompt(dc)),
-		agentapi.UserMessage(question),
-	}
-
 	root, err := tool.NewRoot(dc.CurrentDir)
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
@@ -122,8 +161,49 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, question
 	if err != nil {
 		return fmt.Errorf("registering tools: %w", err)
 	}
+
+	// One reader owns stdin for the whole run: the session picker and the
+	// permission prompter both ask through it, so neither can swallow the
+	// other's answer.
+	lines := console.NewLineReader(os.Stdin)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "" // sessions then land under the relative default; better than refusing to run
+	}
+	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
+	sess, err := openSession(ctx, store, root.Dir(), smode, lines, os.Stderr)
+	if err != nil {
+		return err
+	}
+	if sess != nil {
+		defer func() {
+			if err := sess.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "hint: warning: %v\n", err)
+			}
+		}()
+	}
+
+	// The preamble is this run's, not the conversation's: it is rebuilt
+	// every time (WP0.8 will derive it from HINT.md) and never stored, so
+	// the Recorder is told how long it is.
+	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(dc))}
+	user := agentapi.UserMessage(question)
+	history := append([]agentapi.Message(nil), preamble...)
+	if sess != nil {
+		history = append(history, sess.Messages()...)
+		// Fail before the first request if the session cannot be written
+		// at all; a read-only disk is better learned about now than after
+		// the answer.
+		if err := sess.AppendMessage(user); err != nil {
+			return err
+		}
+	}
+	history = append(history, user)
+	rec := session.NewRecorder(sess, len(preamble))
+
 	warnMode(os.Stderr, mode, os.Stdin)
-	gate := permission.New(mode, permission.NewReaderPrompter(os.Stdin, os.Stderr))
+	gate := permission.New(mode, permission.NewLinePrompter(lines, os.Stderr))
 	a := agent.New(chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate))
 
 	printedText := false
@@ -135,6 +215,7 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, question
 	var lastErr *agentapi.Error
 	var runErr error
 	for ev := range a.RunTurn(ctx, history) {
+		rec.Observe(ev)
 		switch ev.Kind {
 		case agentapi.EventTextDelta:
 			fmt.Print(ev.Text)
@@ -179,7 +260,67 @@ func run(ctx context.Context, flags config.Flags, mode permission.Mode, question
 			}
 		}
 	}
+	if err := rec.Err(); err != nil {
+		// Recording is best effort once the answer is streaming: say so,
+		// but the exit status stays the turn's.
+		fmt.Fprintf(os.Stderr, "hint: warning: the session was not fully saved: %v\n", err)
+	}
 	return runErr
+}
+
+// openSession returns the session this run records into per smode, or nil
+// for sessionOff. Continuing or resuming an existing session prints a
+// one-line notice on stderr, and any load warnings after it; a directory
+// with nothing to continue falls back to a new session rather than
+// refusing to run.
+func openSession(ctx context.Context, store *session.Store, cwd string, smode sessionMode, lines *console.LineReader, stderr io.Writer) (*session.Session, error) {
+	switch smode {
+	case sessionOff:
+		return nil, nil
+	case sessionNew:
+		return store.Create(cwd)
+	case sessionContinue:
+		sess, err := store.Latest(cwd)
+		if errors.Is(err, session.ErrNoSessions) {
+			fmt.Fprintln(stderr, "hint: no previous session in this directory; starting a new one")
+			return store.Create(cwd)
+		}
+		if err != nil {
+			return nil, err
+		}
+		announce(stderr, sess)
+		return sess, nil
+	case sessionResume:
+		infos, err := store.List(cwd)
+		if err != nil {
+			return nil, err
+		}
+		if len(infos) == 0 {
+			fmt.Fprintln(stderr, "hint: no previous session in this directory; starting a new one")
+			return store.Create(cwd)
+		}
+		info, err := session.Choose(ctx, stderr, lines, infos)
+		if err != nil {
+			return nil, err
+		}
+		sess, err := store.Open(info.Path)
+		if err != nil {
+			return nil, err
+		}
+		announce(stderr, sess)
+		return sess, nil
+	default:
+		return nil, fmt.Errorf("unknown session mode %d", smode)
+	}
+}
+
+// announce says which session a run continues.
+func announce(stderr io.Writer, sess *session.Session) {
+	fmt.Fprintf(stderr, "hint: continuing session %s (%d messages, started %s)\n",
+		sess.ID(), sess.Len(), session.Age(sess.Created(), time.Now()))
+	for _, w := range sess.Warnings() {
+		fmt.Fprintf(stderr, "hint: warning: %s: %s\n", sess.Path(), w)
+	}
 }
 
 // toolRegistry builds the tool set the CLI offers the model: every
