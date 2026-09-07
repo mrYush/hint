@@ -9,8 +9,9 @@
 // Only the dialogue: user, assistant and tool messages, plus the summaries
 // compaction produced — every one an [agentapi.Message] written verbatim.
 // The system prompt is not stored. It is the run's, not the
-// conversation's: WP0.8 derives it from HINT.md and the project, both of
-// which change between runs, and a frozen copy would go stale. The CLI
+// conversation's: internal/project derives it from HINT.md and the
+// directory, both of which change between runs, and a frozen copy would
+// go stale. The CLI
 // prepends a fresh preamble on every run and tells the Recorder how many
 // leading messages that preamble is, so that a compaction checkpoint can
 // leave it out.

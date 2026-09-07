@@ -95,17 +95,32 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   golden format test; `internal/console`: the one stdin reader shared by
   the permission prompter and the session picker; `hint -c`, `hint -r`,
   `hint --no-session`).
-- **Next:** WP0.8 — project context (`HINT.md`, `.gitignore`-aware
-  auto-context).
+  WP0.8 — project context (`internal/project` replaces
+  `internal/context`: `HINT.md`/`AGENTS.md`/`CLAUDE.md` read from the git
+  root down to the working directory under one 32 KiB budget, a depth-2
+  overview behind a pluggable `Overview`, `.gitignore` honoured through
+  `git ls-files` with the hidden-and-dependency rule as the fallback —
+  shared with the pure-Go walks of `list_dir`, `glob` and `grep`).
+- **Next:** WP0.9 — run modes and CLI surface (REPL, `hint -p`,
+  `--debug` file log, flags for the WP0.8 limits and a global
+  `~/.config/hint/HINT.md`).
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
   Sequential request order stays the WP0.4 default until then.
+- **Planned after project context:** WP0.12 — what the agent does when
+  the instruction files do not fit the budget: a budget scaled to the
+  model's window, outlines instead of blind cuts, an `instructions` tool
+  that fetches a section or answers "where does this rule come from",
+  opt-in cached summaries, and splitting `HINT.md` into `.hint/rules/`
+  loaded on first touch (see
+  [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget)).
+  Until then WP0.8's cut-and-warn applies.
 - Today's `hint` is still a one-shot CLI (cobra), now running through the
   agent loop with every built-in tool registered behind the permission
   gate (it explores the project itself and can edit it and run commands
-  with confirmation), and every run is recorded as a session that `-c`
-  continues. The REPL is WP0.9's.
+  with confirmation), reads the project's `HINT.md`, and every run is
+  recorded as a session that `-c` continues. The REPL is WP0.9's.
 
 ## Compatibility decision
 
@@ -143,6 +158,7 @@ a one-shot alias for a soft migration and may be removed later.
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains); revisit only with a concrete counterexample |
+| Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | Decide when WP0.12 starts; the first three rungs do not depend on it |
 
 ## Prior art
 

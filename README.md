@@ -4,7 +4,8 @@
 
 ## Features
 
-- Automatic analysis of the current directory to create context
+- Automatic analysis of the current directory to create context (respects
+  `.gitignore`), plus your own standing instructions from a `HINT.md`
 - Support for various configuration methods (command line, environment variables, file)
 - Compatibility with OpenAI and other compatible APIs (Azure OpenAI, etc.)
 - Simple and intuitive interface
@@ -206,10 +207,20 @@ cd src/components/
 hint "What do these components do?"
 ```
 
+## Project instructions
+
+Put a `HINT.md` in your project to tell the assistant how to work there —
+conventions, commands to run, things to avoid. `AGENTS.md` and `CLAUDE.md`
+are read as compatible names, so a project that already keeps one for
+another tool needs nothing new. `hint` reads the first of the three it
+finds in each directory from the repository root down to the directory you
+run it in, so a nearer file can refine the outer one. All of them together
+are limited to 32 KiB; a longer file is cut and a warning says so.
+
 ## How it works
 
 1. When you run `hint` with a question, it captures your current working directory path
-2. It scans the directory contents to create context
+2. It reads the project's instruction files and lists the top two levels of the directory, skipping hidden entries, dependency directories and whatever `.gitignore` excludes (inside a git repository, with git installed)
 3. This context along with your question is sent to the configured LLM API
 4. The LLM generates a response based on the context and question
 5. The response is displayed in your terminal
