@@ -1,5 +1,8 @@
 # Hint - Context-aware assistant for developers
 
+[![CI](https://github.com/mrYush/hint/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mrYush/hint/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mrYush/hint?include_prereleases)](https://github.com/mrYush/hint/releases)
+
 `hint` is a CLI agent for the directory you run it in. It reads your
 project, answers questions about it, and — with your confirmation — edits
 files and runs commands. It talks to any OpenAI-compatible API and can fall
@@ -20,52 +23,61 @@ back to a local [Ollama](https://github.com/ollama/ollama).
 
 ## Installation
 
-### Using Homebrew (macOS/Linux)
+Every release ships prebuilt binaries for Linux, macOS and Windows on
+amd64 and arm64 (a Raspberry Pi 4/5 runs the `linux_arm64` build) on the
+[Releases page](https://github.com/mrYush/hint/releases). `hint --version`
+tells which build you have.
 
-The easiest way to install `hint` is using Homebrew:
+`hint` uses [ripgrep](https://github.com/BurntSushi/ripgrep) for its `grep`
+and `glob` tools when it is installed and falls back to a pure-Go search
+otherwise: recommended, not required. To answer anything it needs an
+OpenAI-compatible endpoint or a local Ollama; see
+[Configuration](#configuration).
+
+### Homebrew (macOS/Linux)
 
 ```bash
-brew install hint
+brew install --cask mrYush/hint/hint
 ```
+
+The tap is `mrYush/hint`; the cask installs the release binary and brings
+ripgrep with it. Pre-releases are not published to the tap.
+
+### Release archive
+
+Download the archive for your platform, check it against `checksums.txt`
+from the same release, and put the binary on your `PATH`:
+
+```bash
+tar xzf hint_<version>_linux_arm64.tar.gz
+sudo install hint /usr/local/bin/
+hint --version
+```
+
+On Windows unpack the `.zip` and put `hint.exe` somewhere on `%PATH%`.
+
+### go install
+
+```bash
+go install github.com/mrYush/hint/cmd/hint@latest
+```
+
+`hint --version` then reports the module version the toolchain recorded.
 
 ### Building from source
 
-If you prefer to build from source, you'll need:
+You need Go 1.22 or higher.
 
-- Go 1.22 or higher
-- Internet access for downloading dependencies
-- API key for OpenAI or compatible service
+```bash
+git clone https://github.com/mrYush/hint.git
+cd hint
+go build -o hint ./cmd/hint
+./hint --version        # dev (commit <hash>, built <commit time>)
+```
 
-Follow these steps:
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/mrYush/hint.git
-   cd hint
-   ```
-
-2. Install dependencies:
-   ```bash
-   go mod tidy
-   ```
-
-3. Build:
-   ```bash
-   go build -o hint ./cmd/hint
-   ```
-
-4. Verify it works:
-   ```bash
-   ./hint --help
-   ```
-
-5. Install to your system:
-   ```bash
-   # Linux/MacOS
-   sudo cp hint /usr/local/bin/
-   # Windows
-   cp hint.exe %USERPROFILE%\AppData\Local\bin\
-   ```
+Then copy the binary somewhere on your `PATH` (`sudo cp hint /usr/local/bin/`
+on Linux and macOS). `go build ./...`, `go test ./...` and `go vet ./...`
+are the checks CI runs; [CONTRIBUTING.md](CONTRIBUTING.md) has the rest.
 
 ## Usage
 

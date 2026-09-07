@@ -1,0 +1,106 @@
+# goreleaser builds the release binaries and publishes them when a v* tag
+# is pushed (see .github/workflows/release.yml). `goreleaser check`
+# validates this file; `goreleaser release --snapshot --clean` builds
+# everything locally into dist/ without publishing.
+version: 2
+
+project_name: hint
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: hint
+    main: ./cmd/hint
+    binary: hint
+    # The core must stay cgo-free so that every target cross-compiles from
+    # one Linux runner (docs/plan/risks.md, R1).
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .CommitDate }}
+    # Reproducible: the binary's timestamp is the commit's, not the build's.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    # hint_0.1.0_linux_arm64.tar.gz; the Pi and Homebrew both key on this.
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge pull request"
+      - "^Merge branch"
+
+release:
+  github:
+    owner: mrYush
+    name: hint
+  # v0.1-alpha and friends are GitHub pre-releases; a plain vX.Y is final.
+  prerelease: auto
+  name_template: "{{ .Tag }}"
+
+# Homebrew tap: the cask is pushed to mrYush/homebrew-hint, so that
+# `brew install --cask mrYush/hint/hint` works. goreleaser is retiring the
+# formula-based `brews` block in favour of casks, which is what a prebuilt
+# binary is anyway. The push needs a token with write access to that
+# repository in the HOMEBREW_TAP_TOKEN secret; the workflow's own
+# GITHUB_TOKEN cannot write to another repository.
+homebrew_casks:
+  - name: hint
+    repository:
+      owner: mrYush
+      name: homebrew-hint
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/mrYush/hint
+    description: Context-aware CLI assistant that reads, edits and runs your project
+    license: MIT
+    binary: hint
+    # grep and glob prefer ripgrep and fall back to a pure-Go walk without
+    # it; the cask pulls it in so the fast path is the one users get.
+    dependencies:
+      - formula: ripgrep
+    # The binaries are not signed or notarized: macOS quarantines them on
+    # download and would refuse to run them. The hook lifts the flag the
+    # way goreleaser documents for unsigned casks.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/hint"]
+          end
+    # Pre-releases are not offered to brew users; the cask follows final
+    # versions only.
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"

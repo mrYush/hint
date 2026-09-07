@@ -38,6 +38,9 @@ func (c *llmCompactor) Compact(ctx context.Context, messages []agentapi.Message)
 			text.WriteString(ev.Text)
 		case agentapi.ChatError:
 			return "", ev.Err
+		case agentapi.ChatThinkingDelta, agentapi.ChatToolCall, agentapi.ChatUsage, agentapi.ChatDone:
+			// A summary is plain text: reasoning, tool calls and
+			// accounting from the summarizing model are ignored.
 		}
 	}
 	return text.String(), nil
