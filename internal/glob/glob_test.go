@@ -1,4 +1,4 @@
-package builtin
+package glob
 
 import "testing"
 
@@ -35,7 +35,7 @@ func TestGlobMatcher(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.pattern+" "+tt.path, func(t *testing.T) {
-			m, err := compileGlob(tt.pattern)
+			m, err := Compile(tt.pattern)
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
@@ -48,8 +48,8 @@ func TestGlobMatcher(t *testing.T) {
 
 func TestGlobMatcher_Invalid(t *testing.T) {
 	for _, p := range []string{"", "[unclosed", "a/[b"} {
-		if _, err := compileGlob(p); err == nil {
-			t.Errorf("compileGlob(%q) accepted", p)
+		if _, err := Compile(p); err == nil {
+			t.Errorf("Compile(%q) accepted", p)
 		}
 	}
 }

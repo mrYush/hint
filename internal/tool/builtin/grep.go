@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mrYush/hint/internal/glob"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -83,9 +84,9 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	if err != nil {
 		return tool.InvalidArgs(callID, grepName, fmt.Errorf("invalid regular expression: %w", err)), nil
 	}
-	var include *globMatcher
+	var include *glob.Matcher
 	if in.Include != "" {
-		include, err = compileGlob(in.Include)
+		include, err = glob.Compile(in.Include)
 		if err != nil {
 			return tool.InvalidArgs(callID, grepName, fmt.Errorf("include: %w", err)), nil
 		}
@@ -216,7 +217,7 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 // matched against the path relative to the root, so a slash-free pattern
 // selects by file name anywhere and a path pattern is anchored to the
 // working directory — the same reading ripgrep gives it.
-func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *globMatcher, ig project.Ignorer) ([]grepMatch, error) {
+func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *glob.Matcher, ig project.Ignorer) ([]grepMatch, error) {
 	var matches []grepMatch
 	visit := func(path string) error {
 		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {

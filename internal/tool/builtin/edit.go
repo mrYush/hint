@@ -462,3 +462,16 @@ func snippet(content string, at, n int) string {
 	}
 	return b.String()
 }
+
+// Touches implements tool.Toucher: the one file the call names.
+func (t *editFile) Touches(args json.RawMessage) []string {
+	var in editFileArgs
+	if err := tool.DecodeArgs(args, &in); err != nil || in.Path == "" {
+		return nil
+	}
+	abs, err := t.root.Resolve(in.Path)
+	if err != nil {
+		return nil
+	}
+	return []string{abs}
+}
