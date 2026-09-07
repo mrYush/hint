@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -30,7 +31,7 @@ const (
 
 const grepDescription = `Search file contents under the working directory for a regular expression. Returns "path:line: text" for each matching line.
 
-Use it to find where something is defined or used before reading the file. The pattern is a regular expression (RE2 syntax: no backreferences or lookaround); set literal to true to search for the text as-is. Restrict the search with path (a file or directory) and include (a file-name glob such as "*.go"). Hidden files, dependency directories and binary files are skipped. Results are cut at 200 matches.`
+Use it to find where something is defined or used before reading the file. The pattern is a regular expression (RE2 syntax: no backreferences or lookaround); set literal to true to search for the text as-is. Restrict the search with path (a file or directory) and include (a file-name glob such as "*.go"). Hidden files, dependency directories, binary files and, inside a git repository, anything .gitignore excludes are skipped. Results are cut at 200 matches.`
 
 type grepArgs struct {
 	Pattern string `json:"pattern" jsonschema_description:"Regular expression to search for"`
@@ -49,12 +50,13 @@ type grepMatch struct {
 }
 
 type grepTool struct {
-	root tool.Root
-	rg   string
+	root  tool.Root
+	rg    string
+	rules project.Rules
 }
 
 func newGrep(root tool.Root, o options) agentapi.Tool {
-	return tool.WithLimits(&grepTool{root: root, rg: o.rg}, o.limits)
+	return tool.WithLimits(&grepTool{root: root, rg: o.rg, rules: o.rules()}, o.limits)
 }
 
 func (*grepTool) Name() string                 { return grepName }
@@ -102,7 +104,9 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		matches, err = t.grepRipgrep(ctx, target, in)
 	}
 	if t.rg == "" || err != nil {
-		matches, err = grepWalk(ctx, t.root, target, re, include)
+		// See listDir.Run for why a git failure is not reported here.
+		ig, _ := t.rules.Ignorer(ctx, target)
+		matches, err = grepWalk(ctx, t.root, target, re, include, ig)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -212,7 +216,7 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 // matched against the path relative to the root, so a slash-free pattern
 // selects by file name anywhere and a path pattern is anchored to the
 // working directory — the same reading ripgrep gives it.
-func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *globMatcher) ([]grepMatch, error) {
+func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *globMatcher, ig project.Ignorer) ([]grepMatch, error) {
 	var matches []grepMatch
 	visit := func(path string) error {
 		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {
@@ -246,13 +250,14 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		rel := relSlash(target, path)
 		if d.IsDir() {
-			if path != target && skipDir(d.Name()) {
+			if ig.Ignored(rel, true) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if isHidden(d.Name()) || !d.Type().IsRegular() {
+		if ig.Ignored(rel, false) || !d.Type().IsRegular() {
 			return nil
 		}
 		return visit(path)

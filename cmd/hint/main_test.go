@@ -14,6 +14,7 @@ import (
 
 	"github.com/mrYush/hint/internal/console"
 	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/session"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -187,4 +188,42 @@ func TestOpenSession(t *testing.T) {
 		t.Fatalf("resume with nothing to resume = %v, %v", fresh, err)
 	}
 	_ = fresh.Close()
+}
+
+func TestSystemPrompt(t *testing.T) {
+	pc := &project.Context{
+		Dir:      "/w/app/sub",
+		GitRoot:  "/w/app",
+		Overview: "main.go\n(showing 2 levels; use list_dir or glob to see deeper)",
+		Instructions: []project.Instruction{
+			{Path: "/w/app/HINT.md", Content: "Answer in English.\n"},
+			{Path: "/w/app/sub/AGENTS.md", Content: "Run go test.", Truncated: true},
+		},
+	}
+	got := systemPrompt(pc)
+	for _, want := range []string{
+		"Working directory: /w/app/sub\n",
+		"Git repository root: /w/app\n",
+		"Contents of the working directory:\nmain.go\n",
+		"<file path=\"/w/app/HINT.md\">\nAnswer in English.\n</file>",
+		"Run go test.\n[... truncated at the instruction budget; the full file is /w/app/sub/AGENTS.md]",
+		"nearest the working directory wins",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt lacks %q:\n%s", want, got)
+		}
+	}
+	if i, j := strings.Index(got, "Contents of"), strings.Index(got, "<project_instructions>"); i > j {
+		t.Error("instructions must come after the overview")
+	}
+
+	// Outside a repository, with nothing to show, the prompt says so and
+	// carries no empty sections.
+	got = systemPrompt(&project.Context{Dir: "/tmp/x"})
+	if !strings.Contains(got, "Not inside a git repository") || strings.Contains(got, "Contents of") || strings.Contains(got, "<project_instructions>") {
+		t.Errorf("bare prompt:\n%s", got)
+	}
+	if got = systemPrompt(&project.Context{Dir: "/w/app", GitRoot: "/w/app"}); !strings.Contains(got, "It is the root of a git repository") {
+		t.Errorf("root prompt:\n%s", got)
+	}
 }

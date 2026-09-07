@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 )
 
@@ -22,46 +22,18 @@ const maxEditSize = 10 << 20
 // classify a file as binary — the heuristic git and grep use.
 const binaryProbe = 8192
 
-// skippedDirs are directory names list_dir, glob and grep never descend
-// into: dependency and build output trees that dwarf the source they
-// belong to. Hidden entries (a leading dot) are skipped separately.
-// .gitignore-aware filtering is WP0.8's job.
-var skippedDirs = map[string]bool{
-	"node_modules": true,
-	"__pycache__":  true,
-	"vendor":       true,
-	"target":       true,
-	"dist":         true,
-}
-
 // rgExcludeArgs are the ripgrep flags that make its file selection match
-// the Go walk: ignore any user config, skip hidden entries, and prune the
-// same directory names. They must come after the caller's own --glob:
-// ripgrep gives later globs precedence, and an explicit positive glob
-// otherwise re-admits hidden files. .gitignore is honoured by ripgrep and
-// not by the walk, a difference the plan accepts.
+// the Go walk under project.Basic: ignore any user config, skip hidden
+// entries, and prune the same directory names. They must come after the
+// caller's own --glob: ripgrep gives later globs precedence, and an
+// explicit positive glob otherwise re-admits hidden files. .gitignore is
+// honoured by ripgrep itself, and by the Go walk through project.Rules.
 func rgExcludeArgs() []string {
 	args := []string{"--no-config", "--glob", "!.*"}
-	names := make([]string, 0, len(skippedDirs))
-	for name := range skippedDirs {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range project.SkippedDirs() {
 		args = append(args, "--glob", "!"+name)
 	}
 	return args
-}
-
-// skipDir reports whether a directory entry named name should be pruned
-// from a walk. The root itself is never pruned.
-func skipDir(name string) bool {
-	return skippedDirs[name] || isHidden(name)
-}
-
-// isHidden reports whether name is a dot-file; "." and ".." are not.
-func isHidden(name string) bool {
-	return len(name) > 1 && name[0] == '.' && name != ".."
 }
 
 // isBinaryData is [isBinary] over bytes already in memory.

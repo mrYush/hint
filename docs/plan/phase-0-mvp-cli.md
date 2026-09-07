@@ -710,10 +710,104 @@ depend on them:
   `RunE`, so flag errors keep cobra's usage text and everything else is
   printed once.
 
-### WP0.8 — Project context
+### WP0.8 — Project context — **done**
 
-- [ ] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
-- [ ] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+References — codex (`agents_md.rs`: root-bounded walk, shared byte
+budget), openhuman (bounded read), gemini-cli (`getFolderStructure`: item
+cap), Crush (prompt placement; pattern reference only, FSL).
+
+- [x] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
+- [x] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **`internal/project` replaces `internal/context`** (the layout in
+  `architecture.md` already named it). The old package was fifty lines
+  of `os.ReadDir`; nothing of it survives, and the `dirctx` import alias
+  that dodged `context.Context` goes with it.
+- **`.gitignore` is git's job: `git ls-files --cached --others
+  --exclude-standard`** (chat decision, the same shape as WP0.5's
+  ripgrep: an external tool as the fast, exact path and pure Go as the
+  fallback). Alternatives priced and rejected: `go-git`'s gitignore
+  package plus a hand-built hierarchical matcher (Crush's route — ~200
+  lines and a large module for one subpackage), `sabhiram/go-gitignore`
+  (unmaintained, known negation bugs, used by nobody in the research
+  tree), a home-grown parser (gitignore semantics — anchoring, `**`,
+  negation, dir-only — are deceptively deep). Cost accepted: outside a
+  repository, or without git installed, only the hidden-and-dependency
+  rule applies; a process is spawned per listing, which the cold-start
+  budget absorbs. `project.Rules` is the one seam: `cmd/hint` builds
+  the overview through it and `internal/tool/builtin` gives it to the
+  pure-Go walks of `list_dir`, `glob` and `grep` (`WithGit`), which
+  closes the difference WP0.5 recorded between the walks and ripgrep.
+  A `git ls-files` listing is turned into an `Ignorer` — kept if git
+  listed the path or something beneath it, everything under a listed
+  path kept wholesale so a submodule's contents are not hidden — and
+  `project.Basic` (hidden entries, `node_modules`/`vendor`/`target`/
+  `dist`/`__pycache__`) still applies on top, so a committed `vendor/`
+  is pruned as before.
+- **Instruction files are searched from the git root down to the
+  working directory, outermost first** (chat decision; codex, gemini-cli
+  and goose do the same, opencode-TS and pi-mono too). In each
+  directory the first of `HINT.md` > `AGENTS.md` > `CLAUDE.md` wins and
+  the others are not read, so a project keeping both is not told the
+  same thing twice (opencode-TS's argument). The root is the nearest
+  ancestor with a `.git` entry (directory or worktree file); without
+  one only the working directory is searched. A global
+  `~/.config/hint/HINT.md` was deferred to WP0.9 with the other flags.
+- **One 32 KiB budget for all instruction files, shared, truncating**
+  (chat decision; codex's number and policy). The budget is shared
+  rather than per file because it is the total that competes with the
+  conversation for the context window, and the preamble is the one
+  part of a request that compaction never touches. A file that
+  overflows is cut at the remaining budget and marked; later files are
+  skipped; each cut or skip is a stderr warning. The read itself is
+  bounded (`io.LimitReader`, openhuman's detail), so a symlinked log
+  is never loaded to be discarded. claurst's per-file skip was
+  rejected because one large file would silently leave a project with
+  no instructions at all. Whitespace-only files cost nothing.
+- **The overview is a `project.Overview` strategy; `Tree{Depth: 2,
+  MaxEntries: 100}` is the default** and `None` exists. gemini-cli's
+  200-item cap and qwen-code's 20 bracket the number; two levels is
+  what a developer glances at. Truncation says so in the listing so
+  the model reaches for `list_dir`. The interface, rather than a
+  constant, is deliberate: the user's intent is to let the *agent*
+  choose the overview shape later from the conversation history
+  (which files it has been reading, what the user keeps asking
+  about). That is a Phase 1–2 item once there is a per-turn hook to
+  hang it on; it is not scheduled here.
+- **Placement stays one `SystemMessage`.** codex sends instructions as
+  a user-role message so they can be swapped mid-session without
+  invalidating a cached system prefix; `hint` rebuilds the preamble
+  every run and never stores it (WP0.7), so the swap has nothing to
+  buy. `session.NewRecorder(sess, len(preamble))` is unchanged.
+  Instruction files render as `<project_instructions><file path=…>`
+  blocks after the overview, with a line saying the nearest file wins.
+  They are the one file content placed in the system prompt rather
+  than quoted as untrusted tool output, because they are the user's
+  own words to the agent.
+- **Limits are functional options on `project.Load`** (`WithGit`,
+  `WithInstructionBudget`, `WithInstructionNames`, `WithOverview`)
+  with package constants as defaults, so WP0.9's flags and config keys
+  attach without changing a signature. The overview walks an `fs.FS`
+  (`os.DirFS` in production, `fstest.MapFS` in tests); instruction
+  files are read through `os` directly, since walking up past a
+  working directory does not fit a rooted `fs.FS` cleanly.
+- **Failures degrade to warnings, printed once by `cmd/hint`.** Only a
+  working directory that cannot be read is an error. A git failure
+  that is not "not a repository" (a corrupt index, a killed process)
+  is reported by `Load`; the tools that meet the same failure fall back
+  to `Basic` silently rather than report it on every call.
+- Known limits, deliberately not addressed: `.hintignore` (Crush has
+  `.crushignore`); `@import` expansion inside instruction files
+  (gemini-cli, goose, claurst); case-insensitive filesystems where
+  `HINT.md` and `hint.md` are one file are not special-cased. What
+  happens when the instruction files do not fit the budget — today a
+  blind cut, with the nearest files the first to be dropped — and how
+  the model reaches the text that was cut, is worked out in
+  [WP0.12](#wp012--instructions-beyond-the-budget); just-in-time loading
+  of a subdirectory's instructions lives there too.
 
 ### WP0.9 — Run modes and CLI surface
 
@@ -806,6 +900,120 @@ and the `ToolCall` wire type:
   few milliseconds of hold-back after the last sibling finishes; the
   win is a replayable history.
 
+### WP0.12 — Instructions beyond the budget
+
+WP0.8 reads `HINT.md` / `AGENTS.md` / `CLAUDE.md` under one 32 KiB budget
+and cuts blindly when it runs out. That is the right floor — the preamble
+is the one part of a request compaction never touches, so it must be
+bounded — but the cut has three defects worth a package of their own:
+
+1. **It is blind to structure.** A file is cut mid-sentence, and whatever
+   sat below the cut (often the "never do this" section at the end) is
+   gone without the model knowing what it missed.
+2. **It drops the wrong files first.** The budget fills root→leaf, so
+   when it is spent the *nearest* files — the ones "nearest wins" says
+   matter most — are the ones skipped.
+3. **The model cannot fetch the rest.** A parent directory's `HINT.md`
+   sits outside `tool.Root`, so `read_file` refuses it; even the marker
+   naming the file leads nowhere.
+
+The package is an escalation ladder. Each rung is cheaper and more
+faithful than the next, and a rung is taken only when the previous one
+cannot make the instructions fit. Nothing here is required for `v0.1`;
+the first three rungs are Phase 0 material once WP0.9 gives `Load` its
+config knobs, the fourth needs a per-turn hook in the agent loop.
+
+**Rung 0 — a budget the model can afford.** `32 KiB` is ~8k tokens: a
+few percent of a 128k window, but the whole of an 8k local model's. The
+budget becomes `min(DefaultInstructionBudget, fraction × context window)`
+with the window taken from the provider profile (WP0.9 wires it), so a
+small model is not handed a preamble it cannot read.
+
+**Rung 1 — reserve before filling.** Every discovered file gets a
+guaranteed minimum share (enough for its outline, rung 2); the remainder
+is filled root→leaf as now. A nearer file is therefore never dropped
+outright; at worst it appears as an outline.
+
+**Rung 2 — outline instead of cut, and a tool to expand it
+(progressive disclosure).** A Markdown file over its share is rendered as
+its heading tree, each heading followed by its first sentence and an
+anchor, closed by a line saying how to read the rest. Cutting still
+happens, but at section boundaries and with the table of contents kept,
+so the model knows what exists. Alongside it, a new read-only built-in,
+`instructions` (name to settle), does two things: `{path, section}`
+returns the full text of one section or file, and `{quote}` finds which
+instruction file and line a rule came from (path:line). It reads only
+the files WP0.8 discovered — never an arbitrary path — so it is not a
+hole in the working-directory confinement, and it is `ClassRead`, so no
+permission prompt. This is also the honest answer to "where does this
+instruction come from?": the prompt already labels every block with its
+absolute path, and the tool turns that label into text the model can
+read even when the file is above the working directory.
+
+**Rung 3 — summarize, opt-in, cached.** When even the outlines do not
+fit, the user may allow `instructions.summarize: true`: each oversized
+file is summarized once by the configured model, the summary cached
+under `$XDG_CACHE_HOME/hint/instructions/<sha256 of content>.md` and
+reused until the file changes, and rendered as
+`<file path=… summary="true">` so the model knows it is reading a
+paraphrase and can fetch the original through the rung-2 tool. Last on
+the ladder because it rewrites the user's own words — a rule the
+summarizer drops is invisible — and because it costs a model call per
+changed file. Never on by default.
+
+**Rung 4 — split at the source (the author's fix).** A project that
+outgrows one file splits it: `HINT.md` stays a short index, and
+`.hint/rules/*.md` (location is [Q8](../../PLAN.md#open-questions))
+hold the detail. A rule file may carry front matter with `paths:` globs
+(the Cursor / Cline `globs` convention); a file with globs is loaded only
+once the agent touches a matching path in the turn — goose's
+`SubdirectoryHintTracker` and opencode's `Instruction.resolve` are the
+prior art — and until then is listed in the index by title. A rule file
+without globs is loaded always, as part of the index's budget. Nested
+`AGENTS.md` files are the directory-scoped special case of the same idea
+and keep working unchanged. This rung is what keeps a large project's
+instructions under budget for good; the first three make the failure
+graceful while the project has not split yet.
+
+Interplay with the rest of the plan: rung 3 is the only "compaction"
+the preamble ever gets — WP2.5's compaction v2 keeps ignoring it; the
+rung-4 hook (react to the paths a turn touched) is the same hook the
+agent-chosen overview from WP0.8 needs, so they land together; the
+repo map (WP2.2) competes for the same preamble budget and will need
+the rung-0 arithmetic to include it.
+
+- [ ] Rung 0: budget scaled to the profile's context window
+      (`WithInstructionBudget` stays the override)
+- [ ] Rung 1: per-file minimum share, then root→leaf fill; test that a
+      nearest file survives a spent budget as an outline
+- [ ] Rung 2: Markdown outline renderer (heading tree + first sentence +
+      anchors, cuts at section boundaries); `instructions` built-in
+      (`ClassRead`, reads only discovered files, `{path, section}` and
+      `{quote}` forms); `RenderInstructions` marks outlined files
+- [ ] Rung 3: `instructions.summarize` config key (default off), content-
+      hash cache under XDG cache, `summary="true"` attribute, a warning
+      naming each summarized file
+- [ ] Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
+      on first touch via a turn observer in `internal/agent`, index lists
+      the unloaded ones by title; golden test of the rendered preamble
+      for a split project
+
+Decisions recorded now:
+
+- **Cut, outline, summarize — in that order, and summarize never by
+  default.** Each rung trades a little more fidelity for a little more
+  room; the user's own words are the most valuable thing in the prompt,
+  and a paraphrase of them must be a choice, not a surprise.
+- **The `instructions` tool is scoped to discovered files, not to a
+  directory.** Reading a parent's `HINT.md` from a subdirectory is
+  legitimate; reading `../../.env` through the same tool is not. The
+  tool takes paths from `project.Context.Instructions`, so the
+  confinement is by construction, as `tool.Root` is for the file tools.
+- **Splitting is a convention, not a format.** Rule files are plain
+  Markdown with optional front matter; no schema, no `@import` language.
+  gemini-cli's and goose's import syntaxes buy little over a directory
+  of files and add a parser that can loop.
+
 ## Acceptance criteria
 
 1. `hint -p "what files are in this project and what do they do"` — the agent
@@ -821,8 +1029,9 @@ and the `ToolCall` wire type:
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
-ones wired) → WP0.6 (wires write/execute tools) → WP0.7 (done) → WP0.8 →
+ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 (done) →
 WP0.9 → WP0.10.
-WP0.11 sits after WP0.6 (it needs per-call gating to exist) and is not
+WP0.11 sits after WP0.6 (it needs per-call gating to exist) and WP0.12 after
+WP0.9 (it needs the config knobs); neither is
 required for `v0.1-alpha`.
 Tag `v0.1-alpha` once WP0.1–WP0.7 land; `v0.1` after acceptance criteria pass.

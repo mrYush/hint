@@ -3,6 +3,7 @@ package builtin
 import (
 	"os/exec"
 
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -13,8 +14,16 @@ type options struct {
 	// rg is the ripgrep executable, or "" to use the pure-Go search.
 	rg    string
 	rgSet bool
-	todos *TodoList
+	// git is the git executable the pure-Go walks ask for ignore rules,
+	// or "" to apply project.Basic alone.
+	git    string
+	gitSet bool
+	todos  *TodoList
 }
+
+// rules returns the ignore rules the pure-Go walks of list_dir, glob and
+// grep apply.
+func (o options) rules() project.Rules { return project.NewRules(o.git) }
 
 // Option configures a tool constructor.
 type Option func(*options)
@@ -31,6 +40,15 @@ func WithRipgrep(path string) Option {
 	return func(o *options) { o.rg, o.rgSet = path, true }
 }
 
+// WithGit sets the git executable the pure-Go walks of list_dir, glob and
+// grep use to honour .gitignore inside a repository (ripgrep reads
+// .gitignore itself). An empty path disables git and leaves only the
+// hidden-and-dependency rule; when the option is not given, git is looked
+// up in PATH once at construction.
+func WithGit(path string) Option {
+	return func(o *options) { o.git, o.gitSet = path, true }
+}
+
 // WithTodoList makes the todo tool write into list instead of a fresh one,
 // so a caller that renders the plan elsewhere can read it back.
 func WithTodoList(list *TodoList) Option {
@@ -45,6 +63,11 @@ func buildOptions(opts []Option) options {
 	if !o.rgSet {
 		if p, err := exec.LookPath("rg"); err == nil {
 			o.rg = p
+		}
+	}
+	if !o.gitSet {
+		if p, err := exec.LookPath("git"); err == nil {
+			o.git = p
 		}
 	}
 	if o.todos == nil {

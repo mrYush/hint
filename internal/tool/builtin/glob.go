@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -26,7 +27,7 @@ const (
 
 const globDescription = `Find files by name pattern under the working directory. Returns matching paths, most recently modified first.
 
-Pattern syntax: * matches within a path segment, ** matches across directories, ? matches one character, [abc] a character class, {a,b} alternatives. A pattern without a slash matches the file name at any depth: "*.go" finds every Go file; "cmd/**/*.go" only those under cmd. Hidden files and dependency directories are skipped. Results are cut at 200; narrow the pattern or the path if that happens.`
+Pattern syntax: * matches within a path segment, ** matches across directories, ? matches one character, [abc] a character class, {a,b} alternatives. A pattern without a slash matches the file name at any depth: "*.go" finds every Go file; "cmd/**/*.go" only those under cmd. Hidden files, dependency directories and, inside a git repository, anything .gitignore excludes are skipped. Results are cut at 200; narrow the pattern or the path if that happens.`
 
 type globArgs struct {
 	Pattern string `json:"pattern" jsonschema_description:"Glob pattern to match file paths against"`
@@ -36,12 +37,13 @@ type globArgs struct {
 var globSchema = tool.MustSchema(globArgs{})
 
 type globTool struct {
-	root tool.Root
-	rg   string
+	root  tool.Root
+	rg    string
+	rules project.Rules
 }
 
 func newGlob(root tool.Root, o options) agentapi.Tool {
-	return tool.WithLimits(&globTool{root: root, rg: o.rg}, o.limits)
+	return tool.WithLimits(&globTool{root: root, rg: o.rg, rules: o.rules()}, o.limits)
 }
 
 func (*globTool) Name() string                 { return globName }
@@ -83,7 +85,9 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	if t.rg == "" || err != nil {
 		// Ripgrep unavailable or unhappy: the pure-Go walk is the
 		// reference behaviour anyway.
-		paths, err = globWalk(ctx, dir, matcher)
+		// See listDir.Run for why a git failure is not reported here.
+		ig, _ := t.rules.Ignorer(ctx, dir)
+		paths, err = globWalk(ctx, dir, matcher, ig)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -125,8 +129,8 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 }
 
 // globRipgrep lists files under dir matching pattern with `rg --files`.
-// Ripgrep honours .gitignore on top of the hidden-file rule, which the Go
-// walk does not (WP0.8); the plan accepts that difference for the speed.
+// Ripgrep reads .gitignore itself; the Go walk gets the same answer from
+// project.Rules, so the two agree inside a repository.
 func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]string, error) {
 	args := append([]string{"--files", "--null", "--glob", pattern}, rgExcludeArgs()...)
 	cmd := exec.CommandContext(ctx, t.rg, args...)
@@ -150,9 +154,9 @@ func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]stri
 	return out, nil
 }
 
-// globWalk is the pure-Go listing: every regular file under dir, outside
-// hidden and dependency directories, whose path relative to dir matches.
-func globWalk(ctx context.Context, dir string, m *globMatcher) ([]string, error) {
+// globWalk is the pure-Go listing: every regular file under dir that ig
+// keeps, whose path relative to dir matches.
+func globWalk(ctx context.Context, dir string, m *globMatcher, ig project.Ignorer) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -167,20 +171,17 @@ func globWalk(ctx context.Context, dir string, m *globMatcher) ([]string, error)
 		if path == dir {
 			return nil
 		}
+		rel := relSlash(dir, path)
 		if d.IsDir() {
-			if skipDir(d.Name()) {
+			if ig.Ignored(rel, true) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if isHidden(d.Name()) || !d.Type().IsRegular() {
+		if ig.Ignored(rel, false) || !d.Type().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return nil
-		}
-		if m.Match(filepath.ToSlash(rel)) {
+		if m.Match(rel) {
 			out = append(out, path)
 		}
 		return nil
