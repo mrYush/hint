@@ -727,3 +727,130 @@ func TestSecrets(t *testing.T) {
 		t.Fatalf("Secrets() = %v, want two distinct keys", got)
 	}
 }
+
+func TestLimits(t *testing.T) {
+	base := `
+providers:
+  - name: p
+    kind: openai
+    api_key: k
+`
+	t.Run("defaults", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), base)
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		if cfg.Instructions.Budget != DefaultInstructionBudget || cfg.Overview.Depth != DefaultOverviewDepth || cfg.Overview.MaxEntries != DefaultOverviewEntries {
+			t.Errorf("limits = %+v / %+v, want defaults", cfg.Instructions, cfg.Overview)
+		}
+		if mustDefault(t, cfg).ContextWindow != 0 {
+			t.Errorf("ContextWindow = %d, want 0 (unknown)", mustDefault(t, cfg).ContextWindow)
+		}
+	})
+
+	t.Run("files merge and an explicit zero survives", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), base+`
+instructions:
+  budget: 1000
+overview:
+  depth: 3
+  max_entries: 7
+`)
+		// The project file switches the overview off and leaves the rest
+		// to the global file; the profile states its window.
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: p
+    context_window: 8000
+overview:
+  depth: 0
+`)
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		if cfg.Instructions.Budget != 1000 || cfg.Overview.Depth != 0 || cfg.Overview.MaxEntries != 7 {
+			t.Errorf("limits = %+v / %+v, want budget 1000, depth 0, entries 7", cfg.Instructions, cfg.Overview)
+		}
+		if got := mustDefault(t, cfg).ContextWindow; got != 8000 {
+			t.Errorf("ContextWindow = %d, want 8000", got)
+		}
+	})
+
+	t.Run("flag beats env beats file", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), base+`
+instructions:
+  budget: 1000
+overview:
+  depth: 3
+`)
+		opts.LookupEnv = lookup(map[string]string{
+			"HINT_INSTRUCTION_BUDGET": "2000",
+			"HINT_OVERVIEW_DEPTH":     "4",
+			"HINT_OVERVIEW_ENTRIES":   "50",
+			"HINT_CONTEXT_WINDOW":     "16000",
+		})
+		opts.Flags = Flags{InstructionBudget: "3000", ContextWindow: "32000"}
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		if cfg.Instructions.Budget != 3000 || cfg.Overview.Depth != 4 || cfg.Overview.MaxEntries != 50 {
+			t.Errorf("limits = %+v / %+v, want budget 3000 (flag), depth 4 (env), entries 50 (env)", cfg.Instructions, cfg.Overview)
+		}
+		if got := mustDefault(t, cfg).ContextWindow; got != 32000 {
+			t.Errorf("ContextWindow = %d, want 32000 (flag)", got)
+		}
+	})
+
+	t.Run("bad env is a warning, bad flag an error", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), base)
+		opts.LookupEnv = lookup(map[string]string{"HINT_OVERVIEW_DEPTH": "deep", "HINT_INSTRUCTION_BUDGET": "-5"})
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		hasWarning(t, cfg, "HINT_OVERVIEW_DEPTH")
+		hasWarning(t, cfg, "HINT_INSTRUCTION_BUDGET")
+		if cfg.Overview.Depth != DefaultOverviewDepth || cfg.Instructions.Budget != DefaultInstructionBudget {
+			t.Errorf("bad env changed the limits: %+v / %+v", cfg.Instructions, cfg.Overview)
+		}
+
+		for _, flags := range []Flags{{OverviewDepth: "deep"}, {OverviewDepth: "-1"}, {InstructionBudget: "0"}, {ContextWindow: "-1"}} {
+			opts.LookupEnv = lookup(nil)
+			opts.Flags = flags
+			if _, err := LoadFrom(opts); err == nil {
+				t.Errorf("flags %+v: want an error", flags)
+			}
+		}
+	})
+
+	t.Run("negative file value is an error naming the key", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), base+`
+overview:
+  max_entries: -3
+`)
+		_, err := LoadFrom(opts)
+		if err == nil || !strings.Contains(err.Error(), "overview.max_entries") {
+			t.Errorf("want an error naming overview.max_entries, got %v", err)
+		}
+	})
+}
+
+func TestGlobalDir(t *testing.T) {
+	if got := GlobalDir("/home/u", lookup(nil)); got != filepath.Join("/home/u", ".config", "hint") {
+		t.Errorf("GlobalDir = %q", got)
+	}
+	if got := GlobalDir("/home/u", lookup(map[string]string{"XDG_CONFIG_HOME": "/xdg"})); got != filepath.Join("/xdg", "hint") {
+		t.Errorf("GlobalDir with XDG = %q", got)
+	}
+	if got := GlobalDir("", lookup(map[string]string{"XDG_CONFIG_HOME": ""})); got != "" {
+		t.Errorf("GlobalDir without home = %q, want empty", got)
+	}
+}

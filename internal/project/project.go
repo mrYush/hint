@@ -32,11 +32,21 @@ type loader struct {
 	git      string
 	budget   int
 	names    []string
+	global   string
 	overview Overview
 }
 
 // Option configures [Load].
 type Option func(*loader)
+
+// WithGlobalInstructions names the user's own instruction file — the CLI
+// passes ~/.config/hint/HINT.md — read before any of the repository's
+// files under the same budget, so it is the outermost layer that every
+// project file refines. A path that is not a regular file is skipped
+// silently; empty disables the global file.
+func WithGlobalInstructions(path string) Option {
+	return func(l *loader) { l.global = path }
+}
 
 // WithGit sets the git executable used for ignore rules. Empty disables
 // git and uses [Basic] everywhere; when the option is not given, git is
@@ -85,7 +95,7 @@ func Load(ctx context.Context, dir string, opts ...Option) (*Context, error) {
 	pc.GitRoot, _ = FindGitRoot(abs)
 
 	var warnings []string
-	pc.Instructions, warnings = ReadInstructions(InstructionDirs(pc.GitRoot, abs), l.names, l.budget)
+	pc.Instructions, warnings = ReadInstructionFiles(InstructionPaths(l.global, InstructionDirs(pc.GitRoot, abs), l.names), l.budget)
 	pc.Warnings = append(pc.Warnings, warnings...)
 
 	ig, err := NewRules(l.git).Ignorer(ctx, abs)

@@ -41,7 +41,8 @@ hint/
 │   ├── session/                # JSONL store, resume, list (WP0.7)
 │   ├── console/                # the one stdin line reader: prompts, session picker, REPL
 │   ├── project/                # HINT.md, auto-context, gitignore
-│   └── config/                 # profiles, sources (extends the current package)
+│   ├── debuglog/               # the --debug trace: one file per run, secrets redacted on write
+│   └── config/                 # profiles, sources, limits (extends the current package)
 └── pkg/agentapi/               # PUBLIC contract — future SDK base:
                                 #   wire types (Message, ContentPart, ToolCall,
                                 #   ToolResult, ToolSchema, Usage, Error),

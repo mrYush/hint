@@ -16,8 +16,8 @@ import (
 // or a request to quit.
 var ErrNoChoice = errors.New("session: no session chosen")
 
-// maxListed bounds how many sessions the picker shows; older ones are
-// still reachable by id once WP0.9 adds `--session <id>`.
+// maxListed bounds how many sessions the picker shows; older ones stay
+// reachable with `--session <id>`, and `hint sessions` lists them all.
 const maxListed = 20
 
 // Choose prints infos on out, most recent first, and reads the user's
@@ -36,10 +36,7 @@ func Choose(ctx context.Context, out io.Writer, lines *console.LineReader, infos
 		shown = shown[:maxListed]
 	}
 	fmt.Fprintf(out, "hint: sessions in %s\n", infos[0].Cwd)
-	for i, info := range shown {
-		fmt.Fprintf(out, "%3d. %s  %-16s  %3d msgs  %s\n",
-			i+1, info.Modified.Local().Format("2006-01-02 15:04"), info.ID, info.Messages, firstLineOf(info.FirstPrompt, 60))
-	}
+	Print(out, shown)
 	if len(infos) > len(shown) {
 		fmt.Fprintf(out, "     (%d older sessions not listed)\n", len(infos)-len(shown))
 	}
@@ -116,5 +113,16 @@ func Age(t, now time.Time) string {
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// Print lists infos on out, one per line and numbered from 1: when the
+// conversation last grew, the id, how many messages it holds and the
+// first prompt. The picker prints its choices this way, and `hint
+// sessions` prints the whole directory.
+func Print(out io.Writer, infos []Info) {
+	for i, info := range infos {
+		fmt.Fprintf(out, "%3d. %s  %-16s  %3d msgs  %s\n",
+			i+1, info.Modified.Local().Format("2006-01-02 15:04"), info.ID, info.Messages, firstLineOf(info.FirstPrompt, 60))
 	}
 }

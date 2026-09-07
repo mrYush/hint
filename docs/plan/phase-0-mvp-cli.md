@@ -809,14 +809,127 @@ depend on them:
   [WP0.12](#wp012--instructions-beyond-the-budget); just-in-time loading
   of a subdirectory's instructions lives there too.
 
-### WP0.9 — Run modes and CLI surface
+### WP0.9 — Run modes and CLI surface — **done**
 
 Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.
 
-- [ ] Interactive REPL (plain readline loop, no TUI framework)
-- [ ] One-shot: `hint -p "question"` — exits after the answer; `--output json` for scripts
-- [ ] Compatibility alias: `hint "question"` (positional args) behaves as one-shot, prints a one-line migration hint
-- [ ] `--debug` logging with key masking
+- [x] Interactive REPL (plain readline loop, no TUI framework)
+- [x] One-shot: `hint -p "question"` — exits after the answer; `--output json` for scripts
+- [x] Compatibility alias: `hint "question"` (positional args) behaves as one-shot, prints a one-line migration hint
+- [x] `--debug` logging with key masking
+- [x] The session surface WP0.7 left here: `--session <id>` (a full id or
+      a unique prefix) and `hint sessions`
+- [x] `hint models` (left here by WP0.3): Ollama's native listing for an
+      ollama profile, `GET /models` of the dialect for every other kind
+- [x] WP0.8's limits as flags and config keys: `--instruction-budget` /
+      `instructions.budget`, `--overview-depth` / `overview.depth` (0 for
+      none), `--overview-entries` / `overview.max_entries`, each also as a
+      `HINT_*` variable
+- [x] Global `~/.config/hint/HINT.md`, read before the repository's files
+      under the same budget
+- [x] Profile `context_window` (also `HINT_CONTEXT_WINDOW`,
+      `--context-window`) sizes the agent's proactive compaction — the
+      input WP0.12's rung 0 needs
+
+Decisions taken while implementing, recorded here because later packages
+depend on them:
+
+- **The REPL is a line loop over `console.LineReader`, and it lives in
+  `cmd/hint`.** No readline library: the terminal's cooked mode gives
+  backspace and Ctrl-U, and a real line editor with history is what
+  Phase 1's TUI brings (`--plain` keeps this loop). Each line is one
+  question; `/help`, `/exit` and `/quit` are the only commands, and an
+  unknown `/word` is refused rather than sent, so a mistyped command does
+  not become a prompt. Answers go to stdout and everything else — the
+  `> ` prompt, notices, permission questions — to stderr, so
+  `hint > transcript` captures the answers alone, as it does for a
+  one-shot. The loop cannot live in `internal/console` as the layout
+  once suggested: it needs the agent, the session and the permission
+  gate, and `console` is the leaf those import. WP1.3 replaces it with
+  an RPC client anyway.
+- **Bare `hint` without a terminal is an error, not a pipe reader.**
+  `echo q | hint` could have read stdin as the question, but the same
+  stream is the permission prompter's, and a pipe cannot answer; the
+  error names `-p`. A one-shot with a non-terminal stdin still runs and
+  says up front what will be denied (WP0.6's notice).
+- **Ctrl-C.** A one-shot cancels the run as before. The REPL takes
+  SIGINT on its own channel: at the prompt it prints how to leave
+  (Ctrl-D or `/exit`), during a turn it cancels that turn's context
+  only. The session, the run's `always` grants and the line reader all
+  survive; the reader is left parked on the next line as its contract
+  promises, and the terminal has already discarded the half-typed line.
+  A SIGINT that arrives between turns is dropped before the next prompt
+  so it cannot cancel the question that follows. SIGTERM ends both modes.
+- **`session.Recorder` is the run's conversation.** It seeds itself
+  from the continued session, keeps the conversation in memory
+  (`Messages`, `Append`) and journals to disk. The REPL asks it for the
+  history before every turn — one code path with and without a session
+  file — and a disk failure mid-session degrades to a warning printed
+  once rather than a lost conversation. The alternative, re-reading
+  `Session.Messages()` each turn, diverges from the run the moment a
+  write fails. `Append` still fails the turn before the first request
+  when the user message cannot be written at all (WP0.7's rule).
+- **`--output json` is one object, printed after the turn**: `answer`
+  (every text fragment of the turn, joined — what the text output
+  streamed), `finish_reason`, `session_id`, `usage`, `error`. A failed
+  turn still prints the object, with `error` and `finish_reason:
+  "error"`, and exits non-zero, so a script can parse stdout regardless
+  of the outcome. A JSON Lines event stream was rejected: that is the
+  Phase 1 RPC surface, and the events on it are already `agentapi.Event`;
+  `--output` is refused without `-p`, since a session has no one answer.
+- **The debug trace is a file per run** under `$XDG_STATE_HOME/hint/log/`
+  (default `~/.local/state/hint/log/`), named by time and pid, its path
+  printed on stderr at start; `--debug` or `HINT_DEBUG` turns it on.
+  Contents: the arguments, the working directory, the profiles (masked by
+  `Profile.String`), the mode and window, the system prompt, every
+  request body as the client sends it (its own line, key masked by
+  `config.Mask`), the response status, every complete message as JSON,
+  tool starts with their arguments, tool ends with size and first line,
+  permission requests, compactions, errors and usage. Every line passes
+  through `config.Redact` with `Config.Secrets()` inside an `io.Writer`
+  decorator (`internal/debuglog`), so a secret quoted in a body is
+  scrubbed even where a client forgot to mask. Plain timestamped text,
+  not `slog`: the file is read by a person chasing a bad answer, and a
+  request body reads better unescaped; structured logs come with the
+  core-as-a-service, where a line has more than one consumer. Failing to
+  open the file is a warning, not a refusal. The file and its directory
+  are owner-only: the trace holds the user's prompts and code.
+- **Numeric flags are strings.** Flag defaults must stay empty (WP0.2's
+  rule) and 0 is a legal `--overview-depth`; a cobra int flag cannot tell
+  unset from 0. The loader parses them: a bad flag is an error naming the
+  flag, a bad variable a warning that leaves the value alone (the
+  `HINT_DEBUG` rule), and a negative value is refused wherever it came
+  from, a file included. The YAML side uses `*int` for the same reason,
+  so `overview: {depth: 0}` in a project file survives the merge with a
+  global file that says 3.
+- **Config owns the limit defaults; `project` keeps its constants.**
+  `config` is loaded before anything else and must not import `project`,
+  so the three numbers exist twice and `internal/project`'s test asserts
+  they are equal. The resolved `Config` always carries final values (the
+  loader applies defaults, per WP0.2), so `cmd/hint` never knows a
+  default and `project.Load` is always given explicit options.
+- **The global `HINT.md` is the outermost layer**, read first under the
+  shared budget and rendered with the same `<file path=…>` block, so the
+  model sees where a rule came from. It lives beside the config
+  (`config.GlobalDir`, honouring `XDG_CONFIG_HOME`); a missing file
+  costs nothing, and a run inside `~/.config/hint` itself lists it once.
+- **`context_window` sizes the default profile's compaction only.**
+  `agent.DefaultLimits()` is exported so the CLI overrides one field. The
+  fallback profile keeps the same limits; a smaller window there is
+  caught by its own `ErrContextOverflow` and WP0.4's reactive compaction.
+  WP0.12's rung 0 takes the same number for the instruction budget.
+- **`hint models` for the dialect is `GET /models`** with the profile's
+  key, failures classified as for a chat request (`ErrAuth`,
+  `ErrNetwork`), the URL derived from the base the way the completions
+  URL is; an ollama profile uses the native listing, which knows sizes
+  and pull dates. `provider.Models` is the composition root's adapter
+  over the two shapes. Output is one model per line, name first, so
+  `grep` and `cut -f1` work; the count and the endpoint go to stderr.
+- Known limits, deliberately not addressed: no line editing or history
+  beyond cooked mode, no multi-line questions, no `/new`, `/mode` or
+  `/compact` commands (Phase 1's TUI); piped stdin is not read as a
+  question; `hint sessions` and `--session` see the working directory's
+  sessions only; the trace directory is never pruned.
 
 ### WP0.10 — CI, release, distribution
 
@@ -1029,8 +1142,8 @@ Decisions recorded now:
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
-ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 (done) →
-WP0.9 → WP0.10.
+ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
+WP0.9 (done) → WP0.10.
 WP0.11 sits after WP0.6 (it needs per-call gating to exist) and WP0.12 after
 WP0.9 (it needs the config knobs); neither is
 required for `v0.1-alpha`.

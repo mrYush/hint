@@ -170,6 +170,43 @@ func (s *Store) Latest(cwd string) (*Session, error) {
 	return s.Open(infos[0].Path)
 }
 
+// ErrUnknownSession reports an id that names none of cwd's sessions, or
+// a prefix that names several. The message says which.
+var ErrUnknownSession = errors.New("session: no such session")
+
+// Find opens the session of cwd whose id is id, or the one id is an
+// unambiguous prefix of — the same rule the interactive picker applies to
+// a typed id. It is [ErrNoSessions] when the directory has none and
+// [ErrUnknownSession] otherwise when nothing (or more than one thing)
+// matches.
+func (s *Store) Find(cwd, id string) (*Session, error) {
+	infos, err := s.List(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if len(infos) == 0 {
+		return nil, ErrNoSessions
+	}
+	var matches []Info
+	for _, info := range infos {
+		if info.ID == id {
+			matches = []Info{info}
+			break
+		}
+		if strings.HasPrefix(info.ID, id) {
+			matches = append(matches, info)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return s.Open(matches[0].Path)
+	case 0:
+		return nil, fmt.Errorf("%w: no session of this directory has id %q", ErrUnknownSession, id)
+	default:
+		return nil, fmt.Errorf("%w: %d session ids start with %q; give more of it", ErrUnknownSession, len(matches), id)
+	}
+}
+
 // Info summarizes one session file for a listing.
 type Info struct {
 	// Path is the file.
