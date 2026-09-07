@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
@@ -127,12 +128,12 @@ func TestDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	tty, err := os.Open(os.DevNull)
 	if err != nil {
 		t.Skip("no /dev/null")
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 
 	inv, err := dispatch("what?", nil, outputText, f)
 	if err != nil || inv.interactive || inv.question != "what?" || inv.note != "" {
@@ -512,10 +513,7 @@ func TestREPLInterrupt(t *testing.T) {
 	go func() {
 		_, _ = io.WriteString(pw, "slow question\n")
 		// Wait until the turn is under way — the provider has been asked.
-		for {
-			if len(hanging.seen()) > 0 {
-				break
-			}
+		for len(hanging.seen()) == 0 {
 			time.Sleep(5 * time.Millisecond)
 		}
 		sigs <- os.Interrupt
@@ -621,5 +619,43 @@ func TestListSessions(t *testing.T) {
 	out.Reset()
 	if err := listSessions(store, cwd, &out, &stderr); err != nil || !strings.Contains(out.String(), s.ID()) || !strings.Contains(out.String(), "--session") {
 		t.Errorf("one session: %v, out %q", err, out.String())
+	}
+}
+
+func TestVersionFlag(t *testing.T) {
+	root := newRootCommand()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), "hint version ") {
+		t.Fatalf("--version printed %q", out.String())
+	}
+}
+
+func TestFormatVersion(t *testing.T) {
+	// ldflags win; build info fills in only what the build left blank.
+	info := &debug.BuildInfo{
+		Main: debug.Module{Version: "v0.2.0"},
+		Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "0123456789abcdef"},
+			{Key: "vcs.time", Value: "2026-09-07T10:00:00Z"},
+			{Key: "vcs.modified", Value: "true"},
+		},
+	}
+	if got, want := formatVersion("dev", "none", "unknown", info), "v0.2.0 (commit 0123456-dirty, built 2026-09-07T10:00:00Z)"; got != want {
+		t.Errorf("from build info: got %q, want %q", got, want)
+	}
+	if got, want := formatVersion("0.3.0", "abc1234", "2026-10-01", info), "0.3.0 (commit abc1234, built 2026-10-01)"; got != want {
+		t.Errorf("ldflags set: got %q, want %q", got, want)
+	}
+	if got, want := formatVersion("dev", "none", "unknown", nil), "dev (commit none, built unknown)"; got != want {
+		t.Errorf("no build info: got %q, want %q", got, want)
+	}
+	devel := &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}
+	if got, want := formatVersion("dev", "none", "unknown", devel), "dev (commit none, built unknown)"; got != want {
+		t.Errorf("(devel) is not a version: got %q, want %q", got, want)
 	}
 }

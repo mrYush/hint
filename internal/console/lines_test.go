@@ -31,7 +31,7 @@ func TestLineReader_ReadsLinesAndThenEOF(t *testing.T) {
 
 func TestLineReader_CancelLeavesReaderUsable(t *testing.T) {
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	r := console.NewLineReader(pr)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -52,7 +52,7 @@ func TestLineReader_CancelLeavesReaderUsable(t *testing.T) {
 
 func TestLineReader_DiscardPending(t *testing.T) {
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	r := console.NewLineReader(pr)
 
 	// A line typed while nobody was asking.

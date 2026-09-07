@@ -339,10 +339,10 @@ func systemPrompt(pc *project.Context) string {
 		"before it runs and may decline it. A declined action must not be retried unchanged.\n\n")
 
 	fmt.Fprintf(&b, "Working directory: %s\n", pc.Dir)
-	switch {
-	case pc.GitRoot == "":
+	switch pc.GitRoot {
+	case "":
 		b.WriteString("Not inside a git repository.\n")
-	case pc.GitRoot == pc.Dir:
+	case pc.Dir:
 		b.WriteString("It is the root of a git repository.\n")
 	default:
 		fmt.Fprintf(&b, "Git repository root: %s\n", pc.GitRoot)

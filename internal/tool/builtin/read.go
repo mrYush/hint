@@ -80,7 +80,7 @@ func (t *readFile) Run(ctx context.Context, callID string, args json.RawMessage)
 	if err != nil {
 		return agentapi.ErrorResult(callID, readFileName, pathError(t.root, abs, err)), nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {

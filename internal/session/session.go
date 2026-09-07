@@ -152,7 +152,7 @@ func load(path string) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("session: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sess := &Session{path: path}
 	r := bufio.NewReader(f)

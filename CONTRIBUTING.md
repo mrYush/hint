@@ -96,10 +96,22 @@ Flow:
   version's scope is complete. Only stabilization fixes and release chores
   land on it. It is then merged into `main` with a regular merge (`--no-ff`),
   the merge commit on `main` is tagged with an annotated `vX.Y[.Z]` tag
-  (pre-releases like `v0.1-alpha` included) which drives goreleaser (WP0.10),
-  and the release branch is **merged back into `develop`** so stabilization
-  fixes aren't lost, then deleted. The version plan per phase is in
-  [PLAN.md](PLAN.md).
+  (pre-releases like `v0.1-alpha` included), and the release branch is
+  **merged back into `develop`** so stabilization fixes aren't lost, then
+  deleted. The version plan per phase is in [PLAN.md](PLAN.md).
+- **Release pipeline**: pushing the tag runs
+  [`release.yml`](.github/workflows/release.yml). goreleaser
+  ([`.goreleaser.yaml`](.goreleaser.yaml)) builds `{linux,darwin,windows}`
+  × `{amd64,arm64}`, attaches the archives and `checksums.txt` to a GitHub
+  Release (marked pre-release when the tag has a suffix such as `-alpha`),
+  and for a final version pushes the Homebrew cask to
+  [`mrYush/homebrew-hint`](https://github.com/mrYush/homebrew-hint). That
+  push needs the `HOMEBREW_TAP_TOKEN` repository secret: a token with write
+  access to the tap repository. Without it a final release fails at the
+  cask step after the GitHub Release is already published; pre-releases
+  skip the step. `goreleaser check` validates the config and
+  `goreleaser release --snapshot --clean` builds everything into `dist/`
+  without publishing.
 - **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
   **both `main` (then patch-tagged) and `develop`**, and deleted.
 
@@ -131,8 +143,10 @@ Deliberately **not** enabled, and why:
   someone *other than the pusher* approves. While there is a single code
   owner that locks the owner out of their own pull requests. Turn it on once
   there are at least two code owners.
-- `Require status checks to pass` — there is no CI yet; add the build/test
-  jobs as required checks when WP0.10 lands.
+- `Require status checks to pass` — the CI jobs (`Lint`, `Test` and the six
+  `Build <os>/<arch>` jobs of [`ci.yml`](.github/workflows/ci.yml)) should be
+  added as required checks; that is a repository setting the admin flips
+  after their first run on `develop`.
 
 Because GitHub does not let anyone approve their own pull request, the
 repository admin is on the ruleset's **bypass list (for pull requests only)**.
@@ -168,8 +182,12 @@ after it is merged into `develop`/`main`.
 3. Write tests with the change, not after it. Phase 0 targets ≥ 70% coverage
    on the agent loop, tools, and permission logic, and golden tests guard the
    session wire format — a PR that lowers these gates needs a stated reason.
-4. Run `go build ./...`, `go test ./...`, and `go vet ./...` before pushing
-   (CI will run the same plus lint once WP0.10 lands).
+4. Run `go build ./...`, `go test ./...`, and `go vet ./...` before pushing.
+   CI ([`ci.yml`](.github/workflows/ci.yml)) runs the same with the race
+   detector, plus `gofmt -l`, `golangci-lint` with the repository's
+   [`.golangci.yml`](.golangci.yml), and a cross-compilation of every
+   release target. To see the lint gate locally install the version CI
+   pins (`golangci-lint` v2.4.0) and run `golangci-lint run ./...`.
 5. Open a pull request describing **what** changed and **why**; link the
    issue/work package it implements. Tick the corresponding checkboxes in the
    phase file in the same PR.

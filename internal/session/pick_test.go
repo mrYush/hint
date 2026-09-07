@@ -20,11 +20,11 @@ func pickInfos() []session.Info {
 	}
 }
 
-func choose(t *testing.T, input string) (session.Info, error, string) {
+func choose(t *testing.T, input string) (session.Info, string, error) {
 	t.Helper()
 	var out bytes.Buffer
 	info, err := session.Choose(context.Background(), &out, console.NewLineReader(strings.NewReader(input)), pickInfos())
-	return info, err, out.String()
+	return info, out.String(), err
 }
 
 func TestChoose(t *testing.T) {
@@ -46,7 +46,7 @@ func TestChoose(t *testing.T) {
 		"junk\njunk\n": {wantErr: session.ErrNoChoice},
 	}
 	for input, c := range cases {
-		info, err, out := choose(t, input)
+		info, out, err := choose(t, input)
 		if c.wantErr != nil {
 			if !errors.Is(err, c.wantErr) {
 				t.Errorf("input %q: err = %v, want %v\n%s", input, err, c.wantErr, out)
@@ -60,7 +60,7 @@ func TestChoose(t *testing.T) {
 }
 
 func TestChooseListing(t *testing.T) {
-	_, _, out := choose(t, "1\n")
+	_, out, _ := choose(t, "1\n")
 	for _, want := range []string{"sessions in /p", "  1. ", "beefbeefbeefbeef", "4 msgs", "second session...", "  2. ", "xxxxxxxxxx..."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("listing lacks %q:\n%s", want, out)
