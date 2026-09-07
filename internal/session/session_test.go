@@ -534,8 +534,9 @@ func TestAge(t *testing.T) {
 	}
 }
 
-// ExampleRecorder shows the wiring a CLI does: prepend the run's preamble,
-// record the user message, then feed the agent's events to the Recorder.
+// ExampleRecorder shows the wiring a CLI does for every turn: record the
+// user message through the Recorder, send the run's preamble followed by
+// the Recorder's conversation, then feed the agent's events back to it.
 func ExampleRecorder() {
 	store := session.NewStore(os.TempDir(), session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
 	sess, _ := store.Create("/p")
@@ -543,13 +544,12 @@ func ExampleRecorder() {
 	defer sess.Close()
 
 	preamble := []agentapi.Message{agentapi.SystemMessage("system prompt")}
-	user := agentapi.UserMessage("hello")
-	_ = sess.AppendMessage(user)
-	history := append(append(preamble, sess.Messages()...), user)
-
 	rec := session.NewRecorder(sess, len(preamble))
+	_ = rec.Append(agentapi.UserMessage("hello"))
+	history := append(append([]agentapi.Message(nil), preamble...), rec.Messages()...)
+
 	answer := agentapi.AssistantMessage("hi")
 	rec.Observe(agentapi.Event{Kind: agentapi.EventMessage, Message: &answer})
-	fmt.Println(len(history), sess.Len(), rec.Err())
-	// Output: 3 2 <nil>
+	fmt.Println(len(history), sess.Len(), len(rec.Messages()), rec.Err())
+	// Output: 2 2 2 <nil>
 }

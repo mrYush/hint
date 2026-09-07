@@ -1,53 +1,121 @@
+// Command hint is the CLI of the agent: an interactive session by default,
+// a one-shot answer with -p, and two small subcommands that look at the
+// configuration (models) and the recorded conversations (sessions).
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
-	"github.com/mrYush/hint/internal/console"
 	"github.com/mrYush/hint/internal/permission"
-	"github.com/mrYush/hint/internal/project"
-	"github.com/mrYush/hint/internal/provider"
-	"github.com/mrYush/hint/internal/session"
-	"github.com/mrYush/hint/internal/tool"
-	"github.com/mrYush/hint/internal/tool/builtin"
-	"github.com/mrYush/hint/pkg/agentapi"
 )
 
 func main() {
+	root := newRootCommand()
+	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "hint:", err)
+		os.Exit(1)
+	}
+}
+
+// outputFormat is how a one-shot answer is printed.
+type outputFormat string
+
+const (
+	// outputText streams the answer as it arrives. The default.
+	outputText outputFormat = "text"
+	// outputJSON prints one JSON object after the turn, for scripts.
+	outputJSON outputFormat = "json"
+)
+
+// options are the choices of one invocation, as read from the flags.
+type options struct {
+	flags     config.Flags
+	mode      permission.Mode
+	session   sessionMode
+	sessionID string
+	debug     bool
+	output    outputFormat
+}
+
+// newRootCommand builds the command tree. Flags are bound to locals and
+// folded into an options value inside RunE, so that the code doing the
+// work never sees cobra.
+func newRootCommand() *cobra.Command {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
+	var sessionID, prompt, output string
+	var debug bool
 
 	rootCmd := &cobra.Command{
-		Use:   "hint [question]",
-		Short: "A utility for getting contextual hints using LLM",
-		Args:  cobra.MinimumNArgs(1),
+		Use:   "hint [flags] [-p \"question\"]",
+		Short: "A developer assistant that reads, edits and runs your project",
+		Long: `hint is an agent for the directory you run it in. Without arguments it
+starts an interactive session: type a question, read the answer, ask the
+next one; the conversation is recorded and can be continued later with
+-c. With -p it answers one question and exits, which is what a script
+wants; --output json makes the answer machine-readable.
+
+A question given as plain arguments (hint "question") still works as a
+one-shot for compatibility and prints a note about -p.`,
+		Example: `  hint                                   # interactive session
+  hint -p "what does main.go do?"        # one answer, then exit
+  hint -p "list the tests" --output json # for scripts
+  hint -c                                # continue this directory's last session
+  hint --session 3f2a                    # continue the session whose id starts with 3f2a
+  hint sessions                          # list this directory's sessions
+  hint models                            # list the models the profile serves`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// A run-time failure is printed once, by main; cobra keeps
 			// reporting flag errors itself, since those never reach here.
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			// Ctrl-C cancels the context, which the provider layer reports
-			// as a cancel — never as a network failure that would trigger a
-			// fake failover.
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			opts := options{
+				flags:     flags,
+				mode:      runMode(ask, autoEdit, yolo),
+				session:   sessionModeOf(continueLast, resume, noSession, sessionID),
+				sessionID: sessionID,
+				debug:     debug,
+			}
+			switch outputFormat(output) {
+			case outputText, outputJSON:
+				opts.output = outputFormat(output)
+			default:
+				return fmt.Errorf("--output must be text or json, not %q", output)
+			}
+			inv, err := dispatch(prompt, args, opts.output, os.Stdin)
+			if err != nil {
+				return err
+			}
+			if inv.note != "" {
+				fmt.Fprintln(os.Stderr, "hint:", inv.note)
+			}
+			// SIGTERM always ends the run. Ctrl-C ends a one-shot too,
+			// which the provider layer reports as a cancel — never as a
+			// network failure that would trigger a fake failover; the
+			// REPL handles Ctrl-C itself, cancelling the turn and keeping
+			// the session.
+			signals := []os.Signal{syscall.SIGTERM}
+			if !inv.interactive {
+				signals = append(signals, os.Interrupt)
+			}
+			ctx, stop := signal.NotifyContext(cmd.Context(), signals...)
 			defer stop()
-			return run(ctx, flags, runMode(ask, autoEdit, yolo),
-				sessionModeOf(continueLast, resume, noSession), strings.Join(args, " "))
+			return run(ctx, opts, inv, stdio{in: os.Stdin, out: os.Stdout, err: os.Stderr, tty: isTerminal(os.Stdin)})
 		},
 	}
+
+	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
+	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
 
 	// Run modes are a policy of this run, not part of a provider profile,
 	// so they are plain flags rather than config.Flags. --ask exists so
@@ -58,25 +126,75 @@ func main() {
 	rootCmd.Flags().BoolVar(&yolo, "yolo", false, "Run every edit and command without asking (dangerous)")
 	rootCmd.MarkFlagsMutuallyExclusive("ask", "auto-edit", "yolo")
 
-	// Session selection. A run records its conversation by default; -c
-	// and -r pick an earlier one of this directory to continue instead.
+	// Session selection. A run records its conversation by default; -c,
+	// -r and --session pick an earlier one of this directory instead.
 	rootCmd.Flags().BoolVarP(&continueLast, "continue", "c", false, "Continue the most recent session of this directory")
 	rootCmd.Flags().BoolVarP(&resume, "resume", "r", false, "Pick a session of this directory to continue")
+	rootCmd.Flags().StringVar(&sessionID, "session", "", "Continue the session of this directory with this id (a unique prefix will do)")
 	rootCmd.Flags().BoolVar(&noSession, "no-session", false, "Do not record this conversation")
-	rootCmd.MarkFlagsMutuallyExclusive("continue", "resume", "no-session")
+	rootCmd.MarkFlagsMutuallyExclusive("continue", "resume", "session", "no-session")
 
 	// Configuration flags. Defaults stay empty on purpose: a non-empty flag
 	// default would override values from config files (the pre-WP0.2
 	// --model=gpt-4 bug). Built-in defaults live in internal/config.
-	rootCmd.PersistentFlags().StringVar(&flags.Provider, "provider", "", "Provider profile to use for this run")
-	rootCmd.PersistentFlags().StringVar(&flags.APIURL, "api-url", "", "Base URL of the provider API (overrides the selected profile)")
-	rootCmd.PersistentFlags().StringVar(&flags.APIKey, "api-key", "", "API key (overrides the selected profile)")
-	rootCmd.PersistentFlags().StringVar(&flags.Model, "model", "", "Model name (overrides the selected profile)")
+	pf := rootCmd.PersistentFlags()
+	pf.StringVar(&flags.Provider, "provider", "", "Provider profile to use for this run")
+	pf.StringVar(&flags.APIURL, "api-url", "", "Base URL of the provider API (overrides the selected profile)")
+	pf.StringVar(&flags.APIKey, "api-key", "", "API key (overrides the selected profile)")
+	pf.StringVar(&flags.Model, "model", "", "Model name (overrides the selected profile)")
+	pf.StringVar(&flags.ContextWindow, "context-window", "", "Context window of the model in tokens (overrides the selected profile)")
+	pf.StringVar(&flags.InstructionBudget, "instruction-budget", "", "Bytes all HINT.md-style instruction files may take together (default 32768)")
+	pf.StringVar(&flags.OverviewDepth, "overview-depth", "", "Directory levels listed in the system prompt; 0 for none (default 2)")
+	pf.StringVar(&flags.OverviewEntries, "overview-entries", "", "Cap on the entries listed in the system prompt (default 100)")
+	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags))
+	return rootCmd
+}
+
+// invocation is which of the run modes the flags and arguments asked for.
+type invocation struct {
+	// interactive is the REPL; otherwise question is answered once.
+	interactive bool
+	question    string
+	// note is printed on stderr before the run: today, the migration
+	// hint for a positional question.
+	note string
+}
+
+// dispatch picks the run mode: -p is a one-shot, plain arguments are the
+// compatibility one-shot with a note, and nothing at all is the
+// interactive session — which needs a terminal to read from.
+func dispatch(prompt string, args []string, output outputFormat, stdin *os.File) (invocation, error) {
+	positional := strings.TrimSpace(strings.Join(args, " "))
+	switch {
+	case prompt != "" && positional != "":
+		return invocation{}, errors.New("give the question either with -p or as arguments, not both")
+	case prompt != "":
+		return invocation{question: prompt}, nil
+	case positional != "":
+		return invocation{
+			question: positional,
+			note:     fmt.Sprintf("a question as arguments is deprecated; use: hint -p %q (bare hint starts an interactive session)", positional),
+		}, nil
 	}
+	if output != outputText {
+		return invocation{}, fmt.Errorf("--output %s needs a one-shot question: hint -p \"question\" --output %s", output, output)
+	}
+	if !isTerminal(stdin) {
+		return invocation{}, errors.New("stdin is not a terminal, so there is nobody to ask; use hint -p \"question\" for a non-interactive run")
+	}
+	return invocation{interactive: true}, nil
+}
+
+// isTerminal reports whether f is a character device — a tty, but also
+// /dev/null; a pipe or a regular file is not.
+func isTerminal(f *os.File) bool {
+	if f == nil {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // runMode maps the three exclusive flags onto a [permission.Mode]; none
@@ -104,15 +222,19 @@ const (
 	sessionContinue
 	// sessionResume lets the user pick one of the directory's sessions.
 	sessionResume
+	// sessionByID continues the session named by --session.
+	sessionByID
 	// sessionOff records nothing.
 	sessionOff
 )
 
 // sessionModeOf maps the exclusive session flags onto a sessionMode.
-func sessionModeOf(continueLast, resume, noSession bool) sessionMode {
+func sessionModeOf(continueLast, resume, noSession bool, id string) sessionMode {
 	switch {
 	case noSession:
 		return sessionOff
+	case id != "":
+		return sessionByID
 	case resume:
 		return sessionResume
 	case continueLast:
@@ -120,302 +242,4 @@ func sessionModeOf(continueLast, resume, noSession bool) sessionMode {
 	default:
 		return sessionNew
 	}
-}
-
-// run loads the configuration, builds the provider stack, and streams one
-// answer to stdout.
-func run(ctx context.Context, flags config.Flags, mode permission.Mode, smode sessionMode, question string) error {
-	cfg, err := config.Load(flags)
-	if err != nil {
-		return fmt.Errorf("loading configuration: %w", err)
-	}
-	for _, w := range cfg.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-
-	// The WP0.9 file logger does not exist yet; when HINT_DEBUG is set the
-	// clients' one-line notes go to stderr, redacted against every
-	// configured secret.
-	var debugLog func(string)
-	if cfg.Debug {
-		secrets := cfg.Secrets()
-		debugLog = func(line string) {
-			fmt.Fprintln(os.Stderr, "hint debug:", config.Redact(line, secrets))
-		}
-	}
-
-	chat, err := provider.Chat(cfg, os.Stderr, debugLog)
-	if err != nil {
-		return err
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("working directory: %w", err)
-	}
-	root, err := tool.NewRoot(cwd)
-	if err != nil {
-		return fmt.Errorf("working directory: %w", err)
-	}
-	// The project context is this run's view of the directory: the
-	// instruction files, the overview and git's ignore rules. Its
-	// warnings (a cut HINT.md, git refusing to answer) are printed once
-	// here; the tools that meet the same git failure stay quiet.
-	pc, err := project.Load(ctx, root.Dir())
-	if err != nil {
-		return err
-	}
-	for _, w := range pc.Warnings {
-		fmt.Fprintf(os.Stderr, "hint: warning: %s\n", w)
-	}
-	registry, err := toolRegistry(root)
-	if err != nil {
-		return fmt.Errorf("registering tools: %w", err)
-	}
-
-	// One reader owns stdin for the whole run: the session picker and the
-	// permission prompter both ask through it, so neither can swallow the
-	// other's answer.
-	lines := console.NewLineReader(os.Stdin)
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "" // sessions then land under the relative default; better than refusing to run
-	}
-	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
-	sess, err := openSession(ctx, store, root.Dir(), smode, lines, os.Stderr)
-	if err != nil {
-		return err
-	}
-	if sess != nil {
-		defer func() {
-			if err := sess.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "hint: warning: %v\n", err)
-			}
-		}()
-	}
-
-	// The preamble is this run's, not the conversation's: it is rebuilt
-	// every time from the project context and never stored, so the
-	// Recorder is told how long it is.
-	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(pc))}
-	user := agentapi.UserMessage(question)
-	history := append([]agentapi.Message(nil), preamble...)
-	if sess != nil {
-		history = append(history, sess.Messages()...)
-		// Fail before the first request if the session cannot be written
-		// at all; a read-only disk is better learned about now than after
-		// the answer.
-		if err := sess.AppendMessage(user); err != nil {
-			return err
-		}
-	}
-	history = append(history, user)
-	rec := session.NewRecorder(sess, len(preamble))
-
-	warnMode(os.Stderr, mode, os.Stdin)
-	gate := permission.New(mode, permission.NewLinePrompter(lines, os.Stderr))
-	a := agent.New(chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate))
-
-	printedText := false
-	// lastErr remembers the most recent EventError. Per the contract,
-	// EventError does not necessarily end the turn — a non-terminal
-	// compaction failure is reported this way too, and the turn carries on
-	// — so it only becomes the command's result if EventTurnEnd actually
-	// closes with FinishError.
-	var lastErr *agentapi.Error
-	var runErr error
-	for ev := range a.RunTurn(ctx, history) {
-		rec.Observe(ev)
-		switch ev.Kind {
-		case agentapi.EventTextDelta:
-			fmt.Print(ev.Text)
-			printedText = true
-		case agentapi.EventPermission:
-			// The prompt itself is drawn by the gate's ReaderPrompter,
-			// which also reads the answer; rendering it here too would
-			// print it twice. The event still travels the stream for a
-			// Phase 1 client that answers over RPC.
-		case agentapi.EventToolStart:
-			// Tool activity goes to stderr so the answer on stdout stays
-			// clean for pipes and scripts.
-			fmt.Fprintf(os.Stderr, "hint: %s %s\n", ev.Call.Name, summarizeArgs(ev.Call.Arguments))
-		case agentapi.EventToolEnd:
-			switch {
-			case ev.Result.IsError:
-				fmt.Fprintf(os.Stderr, "hint: %s failed: %s\n", ev.Result.Name, firstLine(ev.Result.Text()))
-			case ev.Result.Name == "todo":
-				// The plan is for the user as much as for the model.
-				fmt.Fprintln(os.Stderr, ev.Result.Text())
-			}
-		case agentapi.EventCompaction:
-			fmt.Fprintf(os.Stderr, "hint: compacted %d messages into a summary\n", ev.Compaction.MessagesReplaced)
-		case agentapi.EventError:
-			lastErr = ev.Err
-		case agentapi.EventTurnEnd:
-			if printedText {
-				fmt.Println()
-			}
-			switch ev.FinishReason {
-			case agentapi.FinishStop, agentapi.FinishToolCalls, agentapi.FinishContentFilter:
-				// Nothing beyond the newline above: a normal stop, and
-				// FinishToolCalls never actually reaches EventTurnEnd (a
-				// tool round always loops back into the agent, never ends
-				// the turn directly).
-			case agentapi.FinishCanceled:
-				runErr = fmt.Errorf("interrupted")
-			case agentapi.FinishLength:
-				fmt.Fprintln(os.Stderr, "hint: response was truncated by the provider's token limit")
-			case agentapi.FinishError:
-				runErr = lastErr
-			}
-		}
-	}
-	if err := rec.Err(); err != nil {
-		// Recording is best effort once the answer is streaming: say so,
-		// but the exit status stays the turn's.
-		fmt.Fprintf(os.Stderr, "hint: warning: the session was not fully saved: %v\n", err)
-	}
-	return runErr
-}
-
-// openSession returns the session this run records into per smode, or nil
-// for sessionOff. Continuing or resuming an existing session prints a
-// one-line notice on stderr, and any load warnings after it; a directory
-// with nothing to continue falls back to a new session rather than
-// refusing to run.
-func openSession(ctx context.Context, store *session.Store, cwd string, smode sessionMode, lines *console.LineReader, stderr io.Writer) (*session.Session, error) {
-	switch smode {
-	case sessionOff:
-		return nil, nil
-	case sessionNew:
-		return store.Create(cwd)
-	case sessionContinue:
-		sess, err := store.Latest(cwd)
-		if errors.Is(err, session.ErrNoSessions) {
-			fmt.Fprintln(stderr, "hint: no previous session in this directory; starting a new one")
-			return store.Create(cwd)
-		}
-		if err != nil {
-			return nil, err
-		}
-		announce(stderr, sess)
-		return sess, nil
-	case sessionResume:
-		infos, err := store.List(cwd)
-		if err != nil {
-			return nil, err
-		}
-		if len(infos) == 0 {
-			fmt.Fprintln(stderr, "hint: no previous session in this directory; starting a new one")
-			return store.Create(cwd)
-		}
-		info, err := session.Choose(ctx, stderr, lines, infos)
-		if err != nil {
-			return nil, err
-		}
-		sess, err := store.Open(info.Path)
-		if err != nil {
-			return nil, err
-		}
-		announce(stderr, sess)
-		return sess, nil
-	default:
-		return nil, fmt.Errorf("unknown session mode %d", smode)
-	}
-}
-
-// announce says which session a run continues.
-func announce(stderr io.Writer, sess *session.Session) {
-	fmt.Fprintf(stderr, "hint: continuing session %s (%d messages, started %s)\n",
-		sess.ID(), sess.Len(), session.Age(sess.Created(), time.Now()))
-	for _, w := range sess.Warnings() {
-		fmt.Fprintf(stderr, "hint: warning: %s: %s\n", sess.Path(), w)
-	}
-}
-
-// toolRegistry builds the tool set the CLI offers the model: every
-// built-in, write_file, edit_file and bash included. They are only safe
-// to register because run() puts the agent behind a permission.Gate;
-// main_test.go pins both halves of that.
-func toolRegistry(root tool.Root) (*tool.Registry, error) {
-	return tool.NewRegistry(builtin.All(root)...)
-}
-
-// warnMode prints the one-time notices a run mode deserves: --yolo is
-// loud because nothing will ask again, and a run that cannot ask at all —
-// stdin is not a terminal — says so up front instead of surprising the
-// user with a string of denials.
-func warnMode(w io.Writer, mode permission.Mode, stdin *os.File) {
-	if mode == permission.ModeYolo {
-		fmt.Fprintln(w, "hint: WARNING: --yolo: file edits and shell commands will run WITHOUT confirmation")
-		return
-	}
-	if info, err := stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice == 0 {
-		fmt.Fprintf(w, "hint: stdin is not a terminal; %s will be denied (use --auto-edit or --yolo for unattended runs)\n",
-			needsAnswer(mode))
-	}
-}
-
-// needsAnswer names what mode would have to ask about.
-func needsAnswer(mode permission.Mode) string {
-	if mode == permission.ModeAutoEdit {
-		return "shell commands"
-	}
-	return "file edits and shell commands"
-}
-
-// systemPrompt assembles the run's system message: the assistant's
-// standing orders, then the project context — where it is, what it looks
-// like, and what the project's own instruction files say. The instruction
-// files come last so they read as the most specific guidance; they are
-// the user's words to the agent, not tool output, which is why they
-// belong in the system message at all.
-func systemPrompt(pc *project.Context) string {
-	var b strings.Builder
-	b.WriteString("You are a helpful assistant aiding a developer with their project.\n\n" +
-		"You have tools to explore the project: list_dir, read_file, glob and grep. " +
-		"Use them to look at the actual code before answering instead of guessing, " +
-		"and refer to files by their paths. Use todo to show a plan for multi-step work. " +
-		"You can change the project with edit_file (preferred for targeted changes) and write_file, " +
-		"and run commands with bash; the user is shown each edit as a diff and each command " +
-		"before it runs and may decline it. A declined action must not be retried unchanged.\n\n")
-
-	fmt.Fprintf(&b, "Working directory: %s\n", pc.Dir)
-	switch {
-	case pc.GitRoot == "":
-		b.WriteString("Not inside a git repository.\n")
-	case pc.GitRoot == pc.Dir:
-		b.WriteString("It is the root of a git repository.\n")
-	default:
-		fmt.Fprintf(&b, "Git repository root: %s\n", pc.GitRoot)
-	}
-	if pc.Overview != "" {
-		fmt.Fprintf(&b, "\nContents of the working directory:\n%s\n", pc.Overview)
-	}
-	if instr := project.RenderInstructions(pc.Instructions); instr != "" {
-		b.WriteString("\nThe project keeps instructions for assistants; follow them. " +
-			"When files at several levels disagree, the one nearest the working directory wins.\n")
-		b.WriteString(instr)
-		b.WriteString("\n")
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-// summarizeArgs renders a tool call's arguments on one short line.
-func summarizeArgs(raw []byte) string {
-	const max = 120
-	s := strings.Join(strings.Fields(string(raw)), " ")
-	if len(s) > max {
-		s = s[:max] + "..."
-	}
-	return s
-}
-
-// firstLine returns the first line of s, for a one-line stderr notice.
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
 }

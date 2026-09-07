@@ -56,22 +56,46 @@ func InstructionDirs(root, dir string) []string {
 	return dirs
 }
 
+// InstructionPaths resolves which files a run reads: the global file when
+// it is a regular file, then the first of names that exists in each of
+// dirs, in order. A repository file that is the global file itself (hint
+// run inside ~/.config/hint) is listed once.
+func InstructionPaths(global string, dirs []string, names []string) []string {
+	var paths []string
+	if global != "" {
+		if info, err := os.Stat(global); err == nil && info.Mode().IsRegular() {
+			paths = append(paths, global)
+		}
+	}
+	for _, dir := range dirs {
+		p, ok := firstInstruction(dir, names)
+		if !ok || (len(paths) > 0 && paths[0] == p) {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	return paths
+}
+
 // ReadInstructions reads the first file named in names that exists in
-// each of dirs, in order, under one shared byte budget. A file that would
-// overflow the budget is cut at it and marked Truncated; once the budget
-// is spent, later files are skipped. Files that are empty or whitespace
-// cost nothing and are left out. Every skip, cut or read failure is
-// returned as a warning rather than an error: instructions are a
-// convenience, and a project with a broken one still deserves an answer.
+// each of dirs, in order, under one shared byte budget. It is
+// [ReadInstructionFiles] over [InstructionPaths] with no global file.
 func ReadInstructions(dirs []string, names []string, budget int) ([]Instruction, []string) {
+	return ReadInstructionFiles(InstructionPaths("", dirs, names), budget)
+}
+
+// ReadInstructionFiles reads paths, in order, under one shared byte
+// budget. A file that would overflow the budget is cut at it and marked
+// Truncated; once the budget is spent, later files are skipped. Files that
+// are empty or whitespace cost nothing and are left out. Every skip, cut
+// or read failure is returned as a warning rather than an error:
+// instructions are a convenience, and a project with a broken one still
+// deserves an answer.
+func ReadInstructionFiles(paths []string, budget int) ([]Instruction, []string) {
 	var out []Instruction
 	var warnings []string
 	remaining := budget
-	for _, dir := range dirs {
-		p, ok := firstInstruction(dir, names)
-		if !ok {
-			continue
-		}
+	for _, p := range paths {
 		if remaining <= 0 {
 			warnings = append(warnings, fmt.Sprintf("%s: skipped, the %d-byte instruction budget is spent", p, budget))
 			continue

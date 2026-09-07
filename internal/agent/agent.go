@@ -26,9 +26,10 @@ type Limits struct {
 	CompactThreshold float64
 }
 
-// defaultLimits matches the WP0.4 checklist: 25 iterations, a 128k window
+// DefaultLimits returns the limits an Agent starts with, matching the
+// WP0.4 checklist: 25 iterations, a 128k window
 // (GPT-4o class), compact at 80% occupancy.
-func defaultLimits() Limits {
+func DefaultLimits() Limits {
 	return Limits{MaxIterations: 25, MaxContextTokens: 128_000, CompactThreshold: 0.8}
 }
 
@@ -127,7 +128,7 @@ func New(p agentapi.ChatProvider, opts ...Option) *Agent {
 	a := &Agent{
 		provider:  p,
 		tools:     make(map[string]agentapi.Tool),
-		limits:    defaultLimits(),
+		limits:    DefaultLimits(),
 		compactor: &llmCompactor{provider: p},
 		estimator: charEstimator{},
 	}
