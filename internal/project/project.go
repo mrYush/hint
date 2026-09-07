@@ -22,14 +22,49 @@ type Context struct {
 	// else.
 	InstructionPaths []string
 	// Instructions are the instruction files as the prompt shows them,
-	// outermost first, laid out under the budget.
+	// outermost first, laid out under the budget: the HINT.md-style files
+	// and the rule files that apply always. [Context.Layout] re-lays them
+	// out with the rules a conversation has activated.
 	Instructions []Instruction
+	// Rules are the rule files found under the instruction directories
+	// (see [RuleDirs]), conditional and unconditional alike, outer first.
+	Rules []Rule
 	// Overview is the rendered shape of Dir, or "" when the Overview
 	// chosen renders nothing.
 	Overview string
 	// Warnings are non-fatal findings (a cut instruction file, git
 	// refusing to answer) for the CLI to print once.
 	Warnings []string
+
+	// What Layout needs to lay the files out again.
+	files      []string // the HINT.md-style files, outer first
+	budget     int
+	summarizer Summarizer
+}
+
+// Layout lays the run's instruction files out under the budget together
+// with the rules a conversation has activated, in the order they were
+// discovered: outer files first, a directory's own rules after its
+// HINT.md. It is what the CLI calls before every request once a rule has
+// been touched; Load calls it with no rules for Context.Instructions.
+func (pc *Context) Layout(ctx context.Context, active []Rule) ([]Instruction, []string) {
+	byPath := map[string]Rule{}
+	for _, r := range active {
+		byPath[r.Path] = r
+	}
+	// Discovery order, not activation order: an active rule sits with
+	// the always-loaded rules of its own directory.
+	paths := orderRules(pc.files, pc.Rules, func(r Rule) bool {
+		_, ok := byPath[r.Path]
+		return !r.Conditional() || ok
+	})
+	instructions, warnings := ReadInstructionFiles(ctx, paths, pc.budget, pc.summarizer)
+	for i := range instructions {
+		if r, ok := byPath[instructions[i].Path]; ok {
+			instructions[i].Paths = r.Paths
+		}
+	}
+	return instructions, warnings
 }
 
 // loader holds the knobs of [Load].
@@ -122,9 +157,17 @@ func Load(ctx context.Context, dir string, opts ...Option) (*Context, error) {
 	pc := &Context{Dir: abs}
 	pc.GitRoot, _ = FindGitRoot(abs)
 
+	dirs := InstructionDirs(pc.GitRoot, abs)
+	files := InstructionPaths(l.global, dirs, l.names)
 	var warnings []string
-	pc.InstructionPaths = InstructionPaths(l.global, InstructionDirs(pc.GitRoot, abs), l.names)
-	pc.Instructions, warnings = ReadInstructionFiles(ctx, pc.InstructionPaths, budget, l.summarizer)
+	pc.Rules, warnings = DiscoverRules(dirs)
+	pc.Warnings = append(pc.Warnings, warnings...)
+	// The files that load regardless of what the conversation touches:
+	// the HINT.md-style files, each directory's unconditional rules right
+	// after its own file so "nearest wins" keeps holding.
+	pc.files, pc.budget, pc.summarizer = files, budget, l.summarizer
+	pc.InstructionPaths = append(orderRules(files, pc.Rules, func(r Rule) bool { return !r.Conditional() }), conditionalPaths(pc.Rules)...)
+	pc.Instructions, warnings = pc.Layout(ctx, nil)
 	pc.Warnings = append(pc.Warnings, warnings...)
 
 	ig, err := NewRules(l.git).Ignorer(ctx, abs)
@@ -135,6 +178,66 @@ func Load(ctx context.Context, dir string, opts ...Option) (*Context, error) {
 		return nil, fmt.Errorf("project: overview of %s: %w", abs, err)
 	}
 	return pc, nil
+}
+
+// orderRules interleaves the instruction files with the rules include
+// selects: a rule directory's rules follow the instruction file of the
+// same directory, or the nearest outer one when that directory has none,
+// so "nearest wins" holds for rules as it does for files.
+func orderRules(files []string, rules []Rule, include func(Rule) bool) []string {
+	var out []string
+	pending := map[string][]string{} // rule root -> rule paths, discovery order
+	var roots []string
+	for _, r := range rules {
+		if !include(r) {
+			continue
+		}
+		if _, ok := pending[r.Root]; !ok {
+			roots = append(roots, r.Root)
+		}
+		pending[r.Root] = append(pending[r.Root], r.Path)
+	}
+	for _, f := range files {
+		out = append(out, f)
+		dir := filepath.Dir(f)
+		for _, root := range roots {
+			if root == dir || (isUnder(root, dir) && !hasFileUnder(files, root)) {
+				out = append(out, pending[root]...)
+				delete(pending, root)
+			}
+		}
+	}
+	for _, root := range roots {
+		out = append(out, pending[root]...)
+	}
+	return out
+}
+
+// isUnder reports whether dir is root or below it.
+func isUnder(dir, root string) bool {
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// hasFileUnder reports whether one of files sits in root itself.
+func hasFileUnder(files []string, root string) bool {
+	for _, f := range files {
+		if filepath.Dir(f) == root {
+			return true
+		}
+	}
+	return false
+}
+
+// conditionalPaths lists the files of the rules that wait for a touch.
+func conditionalPaths(rules []Rule) []string {
+	var out []string
+	for _, r := range rules {
+		if r.Conditional() {
+			out = append(out, r.Path)
+		}
+	}
+	return out
 }
 
 // lookupGit is [exec.LookPath] for git, or "" when it is not installed;
@@ -162,6 +265,9 @@ func RenderInstructions(instructions []Instruction) string {
 	b.WriteString("<project_instructions>\n")
 	for _, in := range instructions {
 		fmt.Fprintf(&b, "<file path=%q", in.Path)
+		if len(in.Paths) > 0 {
+			fmt.Fprintf(&b, " paths=%q", strings.Join(in.Paths, ", "))
+		}
 		if in.Outlined {
 			b.WriteString(` outline="true"`)
 		}

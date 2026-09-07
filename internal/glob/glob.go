@@ -1,4 +1,13 @@
-package builtin
+// Package glob matches slash-separated relative paths against patterns
+// with the usual extensions over path.Match: "**" spans any number of
+// directory levels, "{a,b}" alternates, and a pattern without a slash
+// matches the base name at any depth (as .gitignore and ripgrep treat it).
+//
+// It is the pure-Go matcher the glob and grep tools fall back to when
+// ripgrep is not installed — ripgrep's own glob syntax covers the same
+// forms — and the one that decides which split rule (WP0.12) a touched
+// path activates.
+package glob
 
 import (
 	"fmt"
@@ -6,25 +15,19 @@ import (
 	"strings"
 )
 
-// globMatcher matches slash-separated relative paths against a pattern with
-// the usual extensions over path.Match: "**" spans any number of directory
-// levels, "{a,b}" alternates, and a pattern without a slash matches the
-// base name at any depth (as .gitignore and ripgrep treat it).
-//
-// It is the pure-Go implementation glob and grep fall back to when ripgrep
-// is not installed; ripgrep's own glob syntax covers the same forms.
-type globMatcher struct {
+// Matcher is a compiled pattern.
+type Matcher struct {
 	alternatives [][]string // one segment list per brace expansion
 }
 
-// compileGlob validates pattern and prepares it for matching.
-func compileGlob(pattern string) (*globMatcher, error) {
+// Compile validates pattern and prepares it for matching.
+func Compile(pattern string) (*Matcher, error) {
 	pattern = strings.TrimPrefix(strings.ReplaceAll(pattern, "\\", "/"), "./")
 	pattern = strings.TrimPrefix(pattern, "/")
 	if pattern == "" {
 		return nil, fmt.Errorf("empty pattern")
 	}
-	m := &globMatcher{}
+	m := &Matcher{}
 	for _, alt := range expandBraces(pattern) {
 		segs := strings.Split(alt, "/")
 		for _, s := range segs {
@@ -42,7 +45,7 @@ func compileGlob(pattern string) (*globMatcher, error) {
 
 // Match reports whether rel (slash-separated, relative to the search root)
 // matches.
-func (m *globMatcher) Match(rel string) bool {
+func (m *Matcher) Match(rel string) bool {
 	rel = strings.ReplaceAll(rel, "\\", "/")
 	parts := strings.Split(rel, "/")
 	for _, segs := range m.alternatives {
@@ -61,7 +64,7 @@ func (m *globMatcher) Match(rel string) bool {
 }
 
 // matchSegments matches pattern segments against path segments, letting
-// "**" absorb zero or more of them. Patterns were validated by compileGlob,
+// "**" absorb zero or more of them. Patterns were validated by Compile,
 // so path.Match errors cannot happen here.
 func matchSegments(pat, name []string) bool {
 	for len(pat) > 0 {

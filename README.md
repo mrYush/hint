@@ -210,9 +210,34 @@ than it can read. When the files do not fit, nothing is dropped blindly:
   prompt, and the summary is cached under `~/.cache/hint/instructions/`
   (`$XDG_CACHE_HOME` is respected) until the file changes.
 
-A warning on stderr names every file shown as less than itself. The
-limit, and the directory overview that goes into the same prompt, can be
-changed:
+A warning on stderr names every file shown as less than itself.
+
+A project that outgrows one file can split it. `HINT.md` stays a short
+index and rule files under `.hint/rules/*.md` hold the detail:
+
+```markdown
+---
+title: Go style
+paths:
+  - "**/*.go"
+---
+Keep errors last in a signature; run gofmt before every commit.
+```
+
+A rule with `paths:` is loaded only once a tool of the conversation reads
+or writes a matching file; until then the prompt lists it by title, and
+the model can read it early with the `instructions` tool. A rule without
+`paths:` is loaded always, right after its directory's `HINT.md`. Patterns
+use the syntax of the `glob` tool (`**`, `{a,b}`; a pattern without a
+slash matches a file name at any depth), relative to the directory that
+holds `.hint`. `.cursor/rules/*.mdc` files are read the same way
+(`globs:`, `description:` and `alwaysApply:` are understood), so a team
+that already keeps Cursor rules need not maintain a second tree. Rules
+loaded this way stay loaded for the run, and a continued session (`-c`)
+loads on its first request whatever the earlier run had loaded.
+
+The limit, and the directory overview that goes into the same prompt, can
+be changed:
 
 ```bash
 hint --instruction-budget 65536 ...   # bytes for all instruction files (not scaled to the window)

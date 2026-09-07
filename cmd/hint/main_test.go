@@ -266,7 +266,7 @@ func TestSystemPrompt(t *testing.T) {
 			{Path: "/w/app/sub/AGENTS.md", Content: "Run go test.", Truncated: true},
 		},
 	}
-	got := systemPrompt(pc)
+	got := systemPrompt(pc, pc.Instructions, nil)
 	for _, want := range []string{
 		"Working directory: /w/app/sub\n",
 		"Git repository root: /w/app\n",
@@ -287,11 +287,11 @@ func TestSystemPrompt(t *testing.T) {
 
 	// Outside a repository, with nothing to show, the prompt says so and
 	// carries no empty sections.
-	got = systemPrompt(&project.Context{Dir: "/tmp/x"})
+	got = systemPrompt(&project.Context{Dir: "/tmp/x"}, nil, nil)
 	if !strings.Contains(got, "Not inside a git repository") || strings.Contains(got, "Contents of") || strings.Contains(got, "<project_instructions>") {
 		t.Errorf("bare prompt:\n%s", got)
 	}
-	if got = systemPrompt(&project.Context{Dir: "/w/app", GitRoot: "/w/app"}); !strings.Contains(got, "It is the root of a git repository") {
+	if got = systemPrompt(&project.Context{Dir: "/w/app", GitRoot: "/w/app"}, nil, nil); !strings.Contains(got, "It is the root of a git repository") {
 		t.Errorf("root prompt:\n%s", got)
 	}
 }

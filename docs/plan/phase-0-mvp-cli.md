@@ -1079,7 +1079,7 @@ and the `ToolCall` wire type:
   few milliseconds of hold-back after the last sibling finishes; the
   win is a replayable history.
 
-### WP0.12 — Instructions beyond the budget — **rungs 0–3 done, rung 4 open**
+### WP0.12 — Instructions beyond the budget — **done**
 
 WP0.8 reads `HINT.md` / `AGENTS.md` / `CLAUDE.md` under one 32 KiB budget
 and cuts blindly when it runs out. That is the right floor — the preamble
@@ -1176,13 +1176,14 @@ the rung-0 arithmetic to include it.
 - [x] Rung 3: `instructions.summarize` config key (default off), content-
       hash cache under XDG cache, `summary="true"` attribute, a warning
       naming each summarized file
-- [ ] Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
+- [x] Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
       on first touch via a turn observer in `internal/agent`, index lists
       the unloaded ones by title; golden test of the rendered preamble
-      for a split project. Split into its own branch (decided
-      2026-09-07): it needs a per-turn hook in the agent loop and a
-      decision on how a rule's text enters a running turn, which
-      deserves its own fork — see Q8 below for where the files live
+      for a split project (`project.DiscoverRules`, `Rule`, `Activation`,
+      `Context.Layout`, `RenderRuleIndex`; `agent.Preamble` +
+      `WithPreamble`; `tool.Toucher` on read_file / write_file /
+      edit_file; `cmd/hint.preamble`; `testdata/split_rules.golden`).
+      Own branch, as decided 2026-09-07
 
 Decisions (2026-09-07, rungs 0–3):
 
@@ -1226,6 +1227,51 @@ Decisions (2026-09-07, rungs 0–3):
   name resolves when unique, a parent-relative one otherwise, and
   anything else is refused with the list of files it does know.
 
+Decisions (2026-09-07, rung 4):
+
+- **The system prompt is rebuilt before every request; nothing is
+  injected into the conversation.** The loop gained one seam,
+  `agent.Preamble`, asked before each request for the leading run of
+  system messages. The loaded rule set is *derived* from the conversation
+  — every tool call in the history is asked which files it named — so a
+  continued session loads on its first request whatever the earlier run
+  had loaded, compaction keeps the prefix verbatim as it always did, and
+  the session format carries nothing new. goose does the same with
+  `system_prompt_extras`. The alternatives were a user-role message
+  after the tool results (Claude Code's system-reminder shape: text the
+  user never typed under their role, plus bookkeeping against repeats)
+  and an addendum to the touching tool's result (the user's own rules
+  demoted to untrusted tool output, against the WP0.8 decision).
+- **Tools say what they touch; nothing sniffs their arguments.**
+  `tool.Toucher` is the `Describer`-shaped optional interface: read_file,
+  write_file and edit_file implement it, resolved through their root;
+  list_dir, glob and grep do not (they look, they do not read a file a
+  rule could be about), and neither does bash — its command is not
+  parsed for paths. goose sniffs `path` and shell-splits `command`, with
+  the false positives that implies; Claude Code matches its own tools'
+  path arguments, which is what the interface gives us as a contract an
+  MCP adapter (Phase 2) can honour rather than a key name it must guess.
+- **A rule once loaded stays loaded for the run.** Deriving the set from
+  the history would unload a rule when compaction summarized away the
+  calls that loaded it; the `Activation` remembers. After a compaction
+  and a resume in a new run, a rule must be touched again — recorded,
+  not fixed: the summary is what the model has, and a rule it cannot see
+  the trigger for is a fair price for a prefix that never grows stale.
+- **Rules sit with their directory.** An unconditional rule is laid out
+  right after its directory's HINT.md, and an activated one takes the
+  same place, so "nearest wins" holds for rules as for files. A rule
+  directory without an instruction file of its own follows the nearest
+  outer one.
+- **Front matter is for the loader; the prompt gets attributes.** The
+  YAML header is stripped from what the model sees; a loaded rule's
+  block carries `paths="..."`. Cursor's `globs: *.ts, *.tsx` — an alias
+  to a YAML parser — is quoted before parsing; a header that still does
+  not parse, or a pattern the glob package rejects, is a warning and the
+  rule loads always (fail-open, as cline treats an invalid conditional).
+- **The glob matcher moved to `internal/glob`.** It was private to the
+  builtin tools; rules need it in `internal/project`, which the tools
+  already import, so it became a package of its own rather than a copy.
+
 Decisions recorded when the package was planned:
 
 - **Cut, outline, summarize — in that order, and summarize never by
@@ -1259,7 +1305,7 @@ Decisions recorded when the package was planned:
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending) →
-WP0.11 (done) → WP0.12 (rungs 0–3 done; rung 4 is its own branch).
+WP0.11 (done) → WP0.12 (done).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs); neither was required for
 `v0.1-alpha`, but the decision of 2026-09-07 is to land both first: the

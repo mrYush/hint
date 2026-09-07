@@ -69,6 +69,9 @@ type Instruction struct {
 	Summarized bool
 	// Truncated reports that Content was cut at the budget.
 	Truncated bool
+	// Paths are the globs a rule file applies to (see [Rule]); empty for
+	// an instruction file or an unconditional rule.
+	Paths []string
 }
 
 // InstructionDirs returns the directories to search for instruction

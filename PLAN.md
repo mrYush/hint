@@ -135,12 +135,17 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   quoted rule comes from, over the run's discovered files only; opt-in
   `instructions.summarize` has a model summarize what not even outlines
   can fit, cached by content hash under `~/.cache/hint/instructions`).
-- **Next:** WP0.12 rung 4 — split rules (`.hint/rules/*.md` with
-  `paths:` front matter, `.cursor/rules` read as a compatible source,
-  loaded when a turn first touches a matching path) on its own branch,
-  with the mid-turn injection mechanism as its opening fork. Then the
-  Raspberry Pi smoke run on a `linux_arm64` release archive and the
-  `v0.1-alpha` tag (deferred behind WP0.11 and WP0.12 on 2026-09-07).
+  WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front
+  matter and `.cursor/rules/*.mdc` as a compatible source; a rule with
+  paths loads once a tool reads or writes a matching file, one without
+  loads always after its directory's `HINT.md`; `agent.Preamble`
+  rebuilds the system prompt before every request from the tool calls in
+  the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
+  file tools name what they touch; the glob matcher is now
+  `internal/glob`).
+- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release
+  archive and the `v0.1-alpha` tag (deferred behind WP0.11 and WP0.12 on
+  2026-09-07; both have landed).
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
   interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
@@ -149,9 +154,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   record every conversation as a session that `-c`, `-r` or `--session`
   continues; independent reads in one tool batch run in parallel, and
   instruction files that outgrow the budget arrive as outlines the
-  `instructions` tool expands. CI and the release pipeline are in place;
-  what is left for `v0.1` is WP0.12's last rung and the acceptance run
-  on a Raspberry Pi.
+  `instructions` tool expands, or split into rules that load when the
+  conversation reaches their paths. CI and the release pipeline are in
+  place; what is left for `v0.1` is the acceptance run on a Raspberry Pi.
 
 ## Compatibility decision
 
@@ -183,10 +188,10 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done).
 8. ~~WP0.12 rungs 0–3 (window-scaled budget, outlines, the
    `instructions` tool, opt-in summaries).~~ Done — see
-   [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--rungs-03-done-rung-4-open).
-9. WP0.12 rung 4 (split rules loaded on first touch). Then the Raspberry
-   Pi smoke run and tag `v0.1-alpha` (deferred behind WP0.11 and WP0.12
-   on 2026-09-07).
+   [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
+9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
+   [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
+   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
 
 ## Open questions
 
@@ -199,7 +204,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
-| Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--rungs-03-done-rung-4-open) |
+| Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
 
 ## Prior art
 

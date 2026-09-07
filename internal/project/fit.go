@@ -32,6 +32,11 @@ type rawFile struct {
 }
 
 func newRawFile(path, content string) rawFile {
+	// Front matter is for the loader (a rule's paths and title), not for
+	// the model: the prompt carries what the header says in attributes.
+	if _, body, ok := splitFrontMatter(content); ok {
+		content = strings.TrimLeft(body, "\n")
+	}
 	f := rawFile{path: path, content: content, size: len(content)}
 	f.sections = Sections(content)
 	f.outline = outlineOf(f.sections)

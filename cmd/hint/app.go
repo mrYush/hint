@@ -175,9 +175,15 @@ func assemble(ctx context.Context, as assembly) (*app, error) {
 	}
 
 	// The preamble is this run's, not the conversation's: it is rebuilt
-	// every time from the project context and never stored, so the
-	// Recorder is told how long it is.
-	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(pc))}
+	// every time from the project context — and again before every
+	// request once a split rule has been touched — and never stored, so
+	// the Recorder is told how long it is.
+	var trace func(string, ...any)
+	if as.trace != nil {
+		trace = as.trace.Printf
+	}
+	pre := newPreamble(pc, registry, as.io.err, trace)
+	preamble := pre.initial()
 	rec := session.NewRecorder(sess, len(preamble))
 
 	warnMode(as.io.err, as.opts.mode, as.io.tty)
@@ -190,7 +196,7 @@ func assemble(ctx context.Context, as assembly) (*app, error) {
 	if p, err := as.cfg.Default(); err == nil && p.ContextWindow > 0 {
 		limits.MaxContextTokens = p.ContextWindow
 	}
-	ag := agent.New(as.chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate), agent.WithLimits(limits))
+	ag := agent.New(as.chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate), agent.WithLimits(limits), agent.WithPreamble(pre))
 
 	a := &app{io: as.io, opts: as.opts, trace: as.trace, lines: lines, sess: sess, rec: rec, preamble: preamble, agent: ag}
 	if as.trace != nil {
@@ -349,8 +355,10 @@ func needsAnswer(mode permission.Mode) string {
 // like, and what the project's own instruction files say. The instruction
 // files come last so they read as the most specific guidance; they are
 // the user's words to the agent, not tool output, which is why they
-// belong in the system message at all.
-func systemPrompt(pc *project.Context) string {
+// belong in the system message at all. instructions is the layout to
+// show (pc.Instructions, or one with the rules a conversation has
+// touched) and pending the rules not loaded yet.
+func systemPrompt(pc *project.Context, instructions []project.Instruction, pending []project.Rule) string {
 	var b strings.Builder
 	b.WriteString("You are a helpful assistant aiding a developer with their project.\n\n" +
 		"You have tools to explore the project: list_dir, read_file, glob and grep. " +
@@ -374,12 +382,18 @@ func systemPrompt(pc *project.Context) string {
 	if pc.Overview != "" {
 		fmt.Fprintf(&b, "\nContents of the working directory:\n%s\n", pc.Overview)
 	}
-	if instr := project.RenderInstructions(pc.Instructions); instr != "" {
+	if instr := project.RenderInstructions(instructions); instr != "" {
 		b.WriteString("\nThe project keeps instructions for assistants; follow them. " +
 			"When files at several levels disagree, the one nearest the working directory wins. " +
+			"A file with a paths attribute applies to files matching those patterns. " +
 			"A section that ends in [...] is shown as its heading and first sentence only; " +
 			"call instructions with the file's path and that heading before acting on what it covers.\n")
 		b.WriteString(instr)
+		b.WriteString("\n")
+	}
+	if index := project.RenderRuleIndex(pending); index != "" {
+		b.WriteString("\n")
+		b.WriteString(index)
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")

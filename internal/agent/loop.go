@@ -53,6 +53,12 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 			return
 		}
 
+		if changed := a.refreshPrefix(ctx, &messages, out); changed {
+			// The prefix the last usage figure was measured with is gone:
+			// estimate the whole request afresh rather than trust it.
+			lastUsage = agentapi.Usage{}
+		}
+
 		if a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, lastUsage, usageBaseline)) {
 			compacted, err := a.compact(ctx, messages, out)
 			if err != nil {
@@ -132,6 +138,46 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 			return
 		}
 	}
+}
+
+// refreshPrefix asks the Preamble, when there is one, for the system
+// prefix of the next request and swaps it in for the leading run of
+// system messages. It reports whether the prefix changed. A Preamble that
+// fails is reported as a non-terminal EventError and the request keeps
+// the prefix it has: a rule that did not load is a worse prompt, not a
+// failed turn.
+func (a *Agent) refreshPrefix(ctx context.Context, messages *[]agentapi.Message, out chan<- agentapi.Event) bool {
+	if a.preamble == nil {
+		return false
+	}
+	prefix, err := a.preamble.Prefix(ctx, *messages)
+	if err != nil {
+		out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.WrapError(
+			agentapi.ErrUnknown, err, "rebuilding the system prompt")}
+		return false
+	}
+	n := 0
+	for n < len(*messages) && (*messages)[n].Role == agentapi.RoleSystem {
+		n++
+	}
+	if samePrefix((*messages)[:n], prefix) {
+		return false
+	}
+	*messages = append(append([]agentapi.Message(nil), prefix...), (*messages)[n:]...)
+	return true
+}
+
+// samePrefix reports whether two system prefixes carry the same text.
+func samePrefix(a, b []agentapi.Message) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Role != b[i].Role || a[i].Text() != b[i].Text() {
+			return false
+		}
+	}
+	return true
 }
 
 // occupancy estimates how many tokens the next request would cost.

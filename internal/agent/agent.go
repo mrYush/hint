@@ -69,6 +69,20 @@ type Authorizer interface {
 	Authorize(ctx context.Context, req agentapi.PermissionRequest) (allowed bool, err error)
 }
 
+// Preamble rebuilds the system prefix of a request from the conversation
+// so far. It is the loop's view of WP0.12's split rules — a rule loads
+// once a tool has touched a path it applies to — declared here, on the
+// consumer's side, so that internal/agent knows nothing of rule files:
+// the loop only promises to ask before every request, so a rule a tool
+// batch just triggered is in the very next prompt, and to swap the
+// leading run of system messages for whatever comes back.
+type Preamble interface {
+	// Prefix returns the system messages to put in front of messages,
+	// which is the whole conversation including any earlier prefix. An
+	// error keeps the prefix the request already has.
+	Prefix(ctx context.Context, messages []agentapi.Message) ([]agentapi.Message, error)
+}
+
 // Agent runs the tool-calling loop over one [agentapi.ChatProvider].
 //
 // An Agent is stateless between turns: [Agent.RunTurn] takes the full
@@ -84,6 +98,9 @@ type Agent struct {
 	// call unasked, which is what a test without permissions wants and
 	// what cmd/hint must never do.
 	authorizer Authorizer
+	// preamble rebuilds the system prefix before each request; nil keeps
+	// the prefix the caller passed in for the whole turn.
+	preamble Preamble
 }
 
 // Option configures an [Agent] built by [New].
@@ -124,6 +141,12 @@ func WithCompactor(c Compactor) Option {
 // means no gate: every call runs as soon as the model asks for it.
 func WithAuthorizer(a Authorizer) Option {
 	return func(ag *Agent) { ag.authorizer = a }
+}
+
+// WithPreamble lets p rebuild the system prefix before every request of a
+// turn. Unset, the prefix the caller passed in stays as it is.
+func WithPreamble(p Preamble) Option {
+	return func(a *Agent) { a.preamble = p }
 }
 
 // WithEstimator overrides the default character-based token [Estimator].
