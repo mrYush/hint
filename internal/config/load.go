@@ -13,11 +13,21 @@ import (
 // Flags carries the values of the CLI configuration flags. An empty string
 // means "flag not passed" — flag defaults must stay empty so a value from a
 // config file is not silently overridden (the old --model=gpt-4 bug).
+//
+// The numeric knobs are strings for the same reason: a cobra int flag
+// cannot tell "not passed" from an explicit 0, and 0 is a legal value for
+// --overview-depth. The loader parses them and reports a bad number as an
+// error naming the flag.
 type Flags struct {
 	Provider string // --provider: profile to use as default for this run
 	APIURL   string // --api-url: overrides base_url of the selected profile
 	APIKey   string // --api-key: overrides api_key of the selected profile
 	Model    string // --model: overrides model of the selected profile
+
+	ContextWindow     string // --context-window: overrides context_window of the selected profile
+	InstructionBudget string // --instruction-budget: bytes for all instruction files
+	OverviewDepth     string // --overview-depth: directory levels in the overview, 0 for none
+	OverviewEntries   string // --overview-entries: cap on overview entries
 }
 
 // Options are the external inputs of LoadFrom. Everything the loader touches
@@ -81,13 +91,17 @@ func LoadFrom(opts Options) (*Config, error) {
 		FallbackProvider: merged.FallbackProvider,
 	}
 	for _, p := range merged.Providers {
-		cfg.Providers = append(cfg.Providers, Profile{
+		prof := Profile{
 			Name:    p.Name,
 			Kind:    Kind(p.Kind),
 			BaseURL: p.BaseURL,
 			APIKey:  p.APIKey,
 			Model:   p.Model,
-		})
+		}
+		if p.ContextWindow != nil {
+			prof.ContextWindow = *p.ContextWindow
+		}
+		cfg.Providers = append(cfg.Providers, prof)
 	}
 
 	l.applyEnvScalars(cfg)
@@ -100,8 +114,13 @@ func LoadFrom(opts Options) (*Config, error) {
 		cfg.DefaultProvider = cfg.Providers[0].Name
 	}
 
-	l.overlaySelected(cfg)
+	if err := l.overlaySelected(cfg); err != nil {
+		return nil, err
+	}
 	applyKindDefaults(cfg)
+	if err := l.resolveLimits(cfg, merged); err != nil {
+		return nil, err
+	}
 
 	if err := l.validate(cfg); err != nil {
 		return nil, err
@@ -137,6 +156,12 @@ type fileConfig struct {
 	DefaultProvider  string        `yaml:"default_provider"`
 	FallbackProvider string        `yaml:"fallback_provider"`
 
+	// Project-context limits. Pointers so that a file can set an explicit
+	// 0 (overview: {depth: 0} switches the overview off) and still be told
+	// apart from a file that says nothing.
+	Instructions fileInstructions `yaml:"instructions"`
+	Overview     fileOverview     `yaml:"overview"`
+
 	// Legacy flat schema (pre-WP0.2).
 	APIURL string `yaml:"api_url"`
 	APIKey string `yaml:"api_key"`
@@ -144,27 +169,49 @@ type fileConfig struct {
 }
 
 type fileProfile struct {
-	Name    string `yaml:"name"`
-	Kind    string `yaml:"kind"`
-	BaseURL string `yaml:"base_url"`
-	APIKey  string `yaml:"api_key"`
-	Model   string `yaml:"model"`
+	Name          string `yaml:"name"`
+	Kind          string `yaml:"kind"`
+	BaseURL       string `yaml:"base_url"`
+	APIKey        string `yaml:"api_key"`
+	Model         string `yaml:"model"`
+	ContextWindow *int   `yaml:"context_window"`
 }
 
-// readGlobal loads the global config: $XDG_CONFIG_HOME/hint/config.yaml
-// (or ~/.config/hint/config.yaml), falling back to the pre-WP0.2 path
-// ~/.config/hint.yaml with a deprecation warning.
-func (l *loader) readGlobal() (fileConfig, error) {
-	if l.opts.HomeDir == "" {
-		if _, ok := l.env("XDG_CONFIG_HOME"); !ok {
-			return fileConfig{}, nil
+type fileInstructions struct {
+	Budget *int `yaml:"budget"`
+}
+
+type fileOverview struct {
+	Depth      *int `yaml:"depth"`
+	MaxEntries *int `yaml:"max_entries"`
+}
+
+// GlobalDir returns the directory of the global configuration —
+// $XDG_CONFIG_HOME/hint when the variable is set, otherwise
+// ~/.config/hint — or "" when neither the home directory nor the variable
+// is known. The config file lives there, and so does the global HINT.md
+// that internal/project reads before a repository's own files.
+func GlobalDir(home string, lookupEnv func(string) (string, bool)) string {
+	if lookupEnv != nil {
+		if xdg, ok := lookupEnv("XDG_CONFIG_HOME"); ok && xdg != "" {
+			return filepath.Join(xdg, "hint")
 		}
 	}
-	base := filepath.Join(l.opts.HomeDir, ".config")
-	if xdg, ok := l.env("XDG_CONFIG_HOME"); ok {
-		base = xdg
+	if home == "" {
+		return ""
 	}
-	canonical := filepath.Join(base, "hint", "config.yaml")
+	return filepath.Join(home, ".config", "hint")
+}
+
+// readGlobal loads the global config: <GlobalDir>/config.yaml, falling
+// back to the pre-WP0.2 path ~/.config/hint.yaml with a deprecation
+// warning.
+func (l *loader) readGlobal() (fileConfig, error) {
+	dir := GlobalDir(l.opts.HomeDir, l.opts.LookupEnv)
+	if dir == "" {
+		return fileConfig{}, nil
+	}
+	canonical := filepath.Join(dir, "config.yaml")
 	legacy := ""
 	if l.opts.HomeDir != "" {
 		legacy = filepath.Join(l.opts.HomeDir, ".config", "hint.yaml")
@@ -283,6 +330,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 			if pp.Model != "" {
 				out.Providers[i].Model = pp.Model
 			}
+			if pp.ContextWindow != nil {
+				out.Providers[i].ContextWindow = pp.ContextWindow
+			}
 			merged = true
 			break
 		}
@@ -295,6 +345,15 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	}
 	if project.FallbackProvider != "" {
 		out.FallbackProvider = project.FallbackProvider
+	}
+	if project.Instructions.Budget != nil {
+		out.Instructions.Budget = project.Instructions.Budget
+	}
+	if project.Overview.Depth != nil {
+		out.Overview.Depth = project.Overview.Depth
+	}
+	if project.Overview.MaxEntries != nil {
+		out.Overview.MaxEntries = project.Overview.MaxEntries
 	}
 	return out
 }
@@ -386,7 +445,7 @@ func (l *loader) addSynthetic(cfg *Config, name, key string) {
 // HINT_API_KEY / HINT_MODEL, then the CLI flags — to the profile selected as
 // default. Other profiles, the fallback included, keep their own values:
 // otherwise HINT_API_KEY would hand a cloud key to the offline profile.
-func (l *loader) overlaySelected(cfg *Config) {
+func (l *loader) overlaySelected(cfg *Config) error {
 	var p *Profile
 	for i := range cfg.Providers {
 		if cfg.Providers[i].Name == cfg.DefaultProvider {
@@ -395,7 +454,7 @@ func (l *loader) overlaySelected(cfg *Config) {
 		}
 	}
 	if p == nil {
-		return // unknown default_provider: validate reports it
+		return nil // unknown default_provider: validate reports it
 	}
 	if v, ok := l.env("HINT_API_URL"); ok {
 		p.BaseURL = v
@@ -415,6 +474,75 @@ func (l *loader) overlaySelected(cfg *Config) {
 	if l.opts.Flags.Model != "" {
 		p.Model = l.opts.Flags.Model
 	}
+	return l.overlayInt(&p.ContextWindow, "context_window", "HINT_CONTEXT_WINDOW", "--context-window", l.opts.Flags.ContextWindow, 0)
+}
+
+// resolveLimits settles the project-context limits: the merged files'
+// values, then the HINT_* variables, then the flags, then the built-in
+// defaults for whatever is still unset. A negative value is rejected
+// wherever it came from; a non-numeric one is an error from a flag and a
+// warning from the environment, the way HINT_DEBUG is treated.
+func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
+	if files.Instructions.Budget != nil {
+		cfg.Instructions.Budget = *files.Instructions.Budget
+	}
+	if files.Overview.Depth != nil {
+		cfg.Overview.Depth = *files.Overview.Depth
+	} else {
+		cfg.Overview.Depth = DefaultOverviewDepth
+	}
+	if files.Overview.MaxEntries != nil {
+		cfg.Overview.MaxEntries = *files.Overview.MaxEntries
+	}
+	if err := l.overlayInt(&cfg.Instructions.Budget, "instructions.budget", "HINT_INSTRUCTION_BUDGET", "--instruction-budget", l.opts.Flags.InstructionBudget, 1); err != nil {
+		return err
+	}
+	if err := l.overlayInt(&cfg.Overview.Depth, "overview.depth", "HINT_OVERVIEW_DEPTH", "--overview-depth", l.opts.Flags.OverviewDepth, 0); err != nil {
+		return err
+	}
+	if err := l.overlayInt(&cfg.Overview.MaxEntries, "overview.max_entries", "HINT_OVERVIEW_ENTRIES", "--overview-entries", l.opts.Flags.OverviewEntries, 1); err != nil {
+		return err
+	}
+	if cfg.Instructions.Budget <= 0 {
+		cfg.Instructions.Budget = DefaultInstructionBudget
+	}
+	if cfg.Overview.MaxEntries <= 0 {
+		cfg.Overview.MaxEntries = DefaultOverviewEntries
+	}
+	return nil
+}
+
+// overlayInt applies the environment variable and then the flag to *dst,
+// each when set. A value below min is refused: the flag as an error, the
+// variable as a warning that leaves *dst alone. The file value already in
+// *dst (named key in messages) is checked against min too, since a file
+// can say -1 as easily; a file's 0 is left for the defaults to fill.
+func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, min int) error {
+	if *dst < min && *dst != 0 {
+		return fmt.Errorf("config: %s must be at least %d, got %d", key, min, *dst)
+	}
+	if v, ok := l.env(envName); ok {
+		n, err := strconv.Atoi(v)
+		switch {
+		case err != nil:
+			l.warnf("%s=%q is not a number and was ignored", envName, v)
+		case n < min:
+			l.warnf("%s=%d is below the minimum of %d and was ignored", envName, n, min)
+		default:
+			*dst = n
+		}
+	}
+	if flagValue != "" {
+		n, err := strconv.Atoi(flagValue)
+		if err != nil {
+			return fmt.Errorf("config: %s: %q is not a number", flagName, flagValue)
+		}
+		if n < min {
+			return fmt.Errorf("config: %s must be at least %d, got %d", flagName, min, n)
+		}
+		*dst = n
+	}
+	return nil
 }
 
 // applyKindDefaults fills fields that are still empty after every overlay.
