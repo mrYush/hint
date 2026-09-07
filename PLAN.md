@@ -111,7 +111,15 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `instructions:` / `overview:` config keys; a global
   `~/.config/hint/HINT.md`; a profile's `context_window` sizing
   compaction).
-- **Next:** WP0.10 — CI, release, distribution.
+  WP0.10 — CI, release, distribution (`ci.yml`: gofmt + golangci-lint,
+  `go test -race` on Linux with ripgrep, a cross-compilation matrix of
+  `{linux,darwin,windows}` × `{amd64,arm64}`; `release.yml` + goreleaser on
+  a `v*` tag: archives, checksums, GitHub Release, Homebrew cask in
+  `mrYush/homebrew-hint` for final versions; `hint --version` from ldflags
+  with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
+  tree). The Raspberry Pi smoke run is the one box still open.
+- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release archive,
+  then `v0.1-alpha`; WP0.11 and WP0.12 after that.
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
@@ -130,8 +138,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   gate (it explores the project itself and can edit it and run commands
   with confirmation), read the global and the project's `HINT.md`, and
   record every conversation as a session that `-c`, `-r` or `--session`
-  continues. What is left for `v0.1` is WP0.10's CI and release pipeline
-  and the acceptance run on a Raspberry Pi.
+  continues. CI and the release pipeline are in place; what is left for
+  `v0.1` is the acceptance run on a Raspberry Pi.
 
 ## Compatibility decision
 
@@ -156,8 +164,10 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    and [WP0.6](docs/plan/phase-0-mvp-cli.md#wp06--permission-system--done)
    for the permission layer and `bash` with confirmation.
 5. ~~JSONL sessions + `-c`.~~ Done — see
-   [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done). Then tag
-   `v0.1-alpha` and build for Raspberry Pi.
+   [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done).
+6. ~~CI, goreleaser, Homebrew.~~ Done — see
+   [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution).
+   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
 
 ## Open questions
 

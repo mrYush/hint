@@ -138,7 +138,7 @@ func TestGoldenFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open golden: %v", err)
 	}
-	defer loaded.Close()
+	defer func() { _ = loaded.Close() }()
 	_, checkpoint, after := goldenConversation()
 	wantMessages := append(append([]agentapi.Message(nil), checkpoint...), after...)
 	if !reflect.DeepEqual(loaded.Messages(), wantMessages) {
@@ -197,7 +197,7 @@ func TestLoadSkipsNewerRecordsAndFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	if got := sess.Messages(); len(got) != 2 || got[0].Text() != "hi" || got[1].Text() != "hello" {
 		t.Fatalf("messages = %+v, want the two known ones", got)
 	}
@@ -243,7 +243,7 @@ func TestLoadIgnoresUnterminatedLastLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer loaded.Close()
+	defer func() { _ = loaded.Close() }()
 	if loaded.Len() != 3 {
 		t.Fatalf("Len = %d, want 3 (checkpoint of 2 + 1)", loaded.Len())
 	}
@@ -260,7 +260,7 @@ func TestLoadIgnoresUnterminatedLastLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open after append: %v", err)
 	}
-	defer again.Close()
+	defer func() { _ = again.Close() }()
 	if msgs := again.Messages(); len(msgs) != 4 || msgs[3].Text() != "after the crash" {
 		t.Fatalf("messages after append = %+v", msgs)
 	}
@@ -292,7 +292,7 @@ func TestMessagesRepairsDanglingToolCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer loaded.Close()
+	defer func() { _ = loaded.Close() }()
 	msgs := loaded.Messages()
 	if len(msgs) != 4 {
 		t.Fatalf("got %d messages, want 4 (a result synthesized for c2): %+v", len(msgs), msgs)
@@ -358,7 +358,7 @@ func TestListAndLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer latest.Close()
+	defer func() { _ = latest.Close() }()
 	if latest.ID() != "first" {
 		t.Errorf("Latest = %s, want first", latest.ID())
 	}
@@ -437,7 +437,7 @@ func TestRecorder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer loaded.Close()
+	defer func() { _ = loaded.Close() }()
 	// The checkpoint is stored without the preamble: the next run prepends
 	// its own.
 	want := []agentapi.Message{agentapi.SystemMessage("summary"), agentapi.UserMessage("latest")}
@@ -477,7 +477,7 @@ func TestAppendRejectsInvalidMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	if err := sess.AppendMessage(agentapi.Message{Role: agentapi.RoleUser}); err == nil {
 		t.Error("an empty user message must be rejected before it reaches the file")
 	}
@@ -540,8 +540,8 @@ func TestAge(t *testing.T) {
 func ExampleRecorder() {
 	store := session.NewStore(os.TempDir(), session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
 	sess, _ := store.Create("/p")
-	defer os.Remove(sess.Path())
-	defer sess.Close()
+	defer func() { _ = os.Remove(sess.Path()) }()
+	defer func() { _ = sess.Close() }()
 
 	preamble := []agentapi.Message{agentapi.SystemMessage("system prompt")}
 	rec := session.NewRecorder(sess, len(preamble))

@@ -38,7 +38,7 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 	fmt.Fprintln(a.io.err, "hint: interactive session; /help for commands, Ctrl-D or /exit to quit")
 	for {
 		if ctx.Err() != nil {
-			return nil
+			return nil //nolint:nilerr // a finished context ends the session normally, not as a failure
 		}
 		drain(sigs)
 		fmt.Fprint(a.io.err, "\n> ")
@@ -49,7 +49,7 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			continue
 		case errors.Is(err, io.EOF), ctx.Err() != nil:
 			fmt.Fprintln(a.io.err)
-			return nil
+			return nil //nolint:nilerr // Ctrl-D and a finished context are the normal ways out
 		case err != nil:
 			return fmt.Errorf("reading input: %w", err)
 		}

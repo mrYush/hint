@@ -224,7 +224,7 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		}
 		found, err := grepFile(path, re, maxGrepMatches+1-len(matches))
 		if err != nil {
-			return nil // unreadable or binary: skip
+			return nil //nolint:nilerr // unreadable or binary: skip the file, keep searching
 		}
 		matches = append(matches, found...)
 		if len(matches) > maxGrepMatches {
@@ -272,7 +272,7 @@ func grepFile(path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if bin, err := isBinary(f); err != nil || bin {
 		return nil, errors.New("binary")
 	}

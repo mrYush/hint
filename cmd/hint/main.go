@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -16,6 +17,58 @@ import (
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/permission"
 )
+
+// Build metadata. A release build sets these through -ldflags "-X main.version=..."
+// (see .goreleaser.yaml); a plain go build reports a development binary.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+// buildVersion is what hint --version prints after the command name.
+func buildVersion() string {
+	info, _ := debug.ReadBuildInfo()
+	return formatVersion(version, commit, date, info)
+}
+
+// formatVersion combines the -ldflags values with what the Go toolchain
+// stamps into the binary on its own: the module version of a
+// `go install ...@v0.1.0`, and the commit and its time of a `go build`
+// inside a checkout. The flags win when set, so a release build is
+// described the same way whichever path produced it.
+func formatVersion(version, commit, date string, info *debug.BuildInfo) string {
+	if info == nil {
+		return fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
+	}
+	if version == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+	stamped, modified := false, false
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if commit == "none" && s.Value != "" {
+				commit, stamped = s.Value, true
+				if len(commit) > 7 {
+					commit = commit[:7]
+				}
+			}
+		case "vcs.time":
+			if date == "unknown" && s.Value != "" {
+				date = s.Value
+			}
+		case "vcs.modified":
+			modified = s.Value == "true"
+		}
+	}
+	// A dirty tree only means something for a commit the toolchain found
+	// itself; a release build names its commit and is built clean.
+	if stamped && modified {
+		commit += "-dirty"
+	}
+	return fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
+}
 
 func main() {
 	root := newRootCommand()
@@ -56,8 +109,9 @@ func newRootCommand() *cobra.Command {
 	var debug bool
 
 	rootCmd := &cobra.Command{
-		Use:   "hint [flags] [-p \"question\"]",
-		Short: "A developer assistant that reads, edits and runs your project",
+		Use:     "hint [flags] [-p \"question\"]",
+		Version: buildVersion(),
+		Short:   "A developer assistant that reads, edits and runs your project",
 		Long: `hint is an agent for the directory you run it in. Without arguments it
 starts an interactive session: type a question, read the answer, ask the
 next one; the conversation is recorded and can be continued later with

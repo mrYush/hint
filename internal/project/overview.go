@@ -57,7 +57,7 @@ func (t Tree) Render(ctx context.Context, fsys fs.FS, ig Ignorer) (string, error
 			// An unreadable subtree is noted, not fatal: the rest of the
 			// tree is still worth showing.
 			fmt.Fprintf(&b, "%s%s (unreadable)\n", indent(p), d.Name())
-			return nil
+			return nil //nolint:nilerr // noted inline above; the walk goes on
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
