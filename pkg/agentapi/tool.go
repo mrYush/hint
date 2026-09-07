@@ -78,6 +78,14 @@ type ToolCall struct {
 	Name string `json:"name"`
 	// Arguments is the call's argument object, as JSON.
 	Arguments json.RawMessage `json:"arguments,omitempty"`
+	// After lists IDs of calls in the same batch that must finish before
+	// this one starts. It is an optional hint for the agent's tool schedule
+	// (WP0.11), which already runs every write and command after whatever
+	// the model asked for before it and only overlaps reads; After lets a
+	// producer that knows more tighten that — "read this file only after
+	// that other call has listed it". IDs the batch does not contain are
+	// ignored. Providers leave it empty; a client or a wrapper may set it.
+	After []string `json:"after,omitempty"`
 }
 
 // Validate reports whether the call is complete and its arguments parse.
@@ -198,6 +206,11 @@ func (r ToolResult) Validate() error {
 // cancellation, and must return a ToolResult with IsError set for a failure
 // the model should see; it returns a non-nil error only for a failure of the
 // tool machinery itself, which aborts the turn.
+//
+// Run of a read-class tool may be called concurrently: the agent overlaps
+// the independent reads of one batch (WP0.11), so such a tool must be safe
+// for use from several goroutines at once. A write- or execute-class tool
+// never runs at the same time as any other call.
 type Tool interface {
 	// Name is the identifier the model calls, matching ToolSchema.Name.
 	Name() string
