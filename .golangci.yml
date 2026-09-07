@@ -33,6 +33,15 @@ linters:
       rules:
         - name: exported
           arguments: ["disableStutteringCheck"]
+    errcheck:
+      # Writes to the terminal. When stdout or stderr is gone there is
+      # nothing left to tell anyone, so the call sites do not check; a
+      # write that must succeed (a session file, a tool result) goes
+      # through an io.Writer whose error the caller does handle.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
 
   exclusions:
     rules:
@@ -41,3 +50,8 @@ linters:
       # argument as a result, not as a turn-aborting error).
       - path: _test\.go
         linters: [nilerr]
+      # A test that switches over an enum is filtering events it cares
+      # about, not routing them; the exhaustiveness guarantee is for the
+      # dispatch switches in production code.
+      - path: _test\.go
+        linters: [exhaustive]

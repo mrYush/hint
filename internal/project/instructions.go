@@ -139,7 +139,7 @@ func readBounded(p string, limit int) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
 	if err != nil {
 		return "", false, err

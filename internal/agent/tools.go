@@ -36,7 +36,7 @@ import (
 func (a *Agent) runTools(ctx context.Context, calls []agentapi.ToolCall, out chan<- agentapi.Event) (results []agentapi.ToolResult, abortErr error, canceled bool) {
 	for i, call := range calls {
 		if ctx.Err() != nil {
-			return cancelFrom(results, calls, i), nil, true
+			return cancelFrom(results, calls, i), nil, true //nolint:nilerr // the canceled flag carries it; the loop reports the context, not an error
 		}
 
 		tool, ok := a.tools[call.Name]
@@ -85,7 +85,7 @@ func (a *Agent) runTools(ctx context.Context, calls []agentapi.ToolCall, out cha
 // results; otherwise it is a machinery failure that aborts the turn.
 func (a *Agent) abort(ctx context.Context, results []agentapi.ToolResult, calls []agentapi.ToolCall, i int, err error) ([]agentapi.ToolResult, error, bool) {
 	if ctx.Err() != nil {
-		return cancelFrom(results, calls, i), nil, true
+		return cancelFrom(results, calls, i), nil, true //nolint:nilerr // same: canceled is a state of the batch, not a failure of the turn
 	}
 	return results, err, false
 }

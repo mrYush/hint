@@ -86,7 +86,7 @@ func TestReaderPrompter_LongDetailIsTruncatedOnScreen(t *testing.T) {
 
 func TestReaderPrompter_StaleLineIsNotAnAnswer(t *testing.T) {
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	var out bytes.Buffer
 	p := permission.NewReaderPrompter(pr, &out)
 
@@ -138,7 +138,7 @@ func TestReaderPrompter_EOFDeniesAndSaysSo(t *testing.T) {
 func TestReaderPrompter_CancelWhileWaiting(t *testing.T) {
 	// A pipe that never delivers a line: the only way out is ctx.
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	var out bytes.Buffer
 	p := permission.NewReaderPrompter(pr, &out)
 

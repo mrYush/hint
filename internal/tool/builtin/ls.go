@@ -86,7 +86,7 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 			// failing the whole listing.
 			fmt.Fprintf(&b, "%s%s (unreadable)\n", indentFor(abs, path), filepath.Base(path))
 			entries++
-			return nil
+			return nil //nolint:nilerr // reported inline above; the walk goes on
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()

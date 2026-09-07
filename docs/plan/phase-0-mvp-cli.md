@@ -933,11 +933,37 @@ depend on them:
 
 ### WP0.10 — CI, release, distribution
 
-- [ ] GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
-- [ ] goreleaser config; binaries attached to GitHub Releases
-- [ ] Homebrew tap
+- [x] GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
+- [x] goreleaser config; binaries attached to GitHub Releases
+- [x] Homebrew tap
 - [ ] Raspberry Pi smoke run of the acceptance scenarios on linux/arm64
-- [ ] Update README for the new CLI surface
+- [x] Update README for the new CLI surface
+
+Decisions (2026-09-07):
+
+- **Tests run on Linux only; the other targets are compiled, not tested.**
+  One `ubuntu` job runs `gofmt`, `golangci-lint`, `go vet` and
+  `go test -race` with ripgrep installed; a six-way matrix cross-compiles
+  every release target with `CGO_ENABLED=0`. Native macOS and Windows
+  runners would test the `shell_windows.go` and tty paths for real, at
+  three to ten times the runner minutes and a ripgrep install per OS;
+  the Pi acceptance run covers the one non-Linux-amd64 platform the
+  phase promises. Revisit when a platform-specific bug slips through.
+- **Homebrew cask, not formula.** goreleaser is retiring its `brews`
+  block in favour of `homebrew_casks`, and a prebuilt binary is what a
+  cask is for. The cask depends on the `ripgrep` formula and carries the
+  quarantine-lifting post-install hook goreleaser documents for unsigned
+  binaries. Signing and notarization stay out of scope for `v0.1`.
+- **The tap push is a separate secret.** `HOMEBREW_TAP_TOKEN` must be a
+  token with write access to `mrYush/homebrew-hint`; the workflow's own
+  `GITHUB_TOKEN` is scoped to this repository. Pre-releases skip the tap
+  (`skip_upload: auto`), so `v0.1-alpha` needs no token; the first final
+  tag does.
+- **Version from two sources.** goreleaser sets `main.version`, `commit`
+  and `date` through `-ldflags -X`; a `go install ...@vX.Y.Z` or a plain
+  `go build` in a checkout gets the same shape from
+  `debug.ReadBuildInfo` (module version, `vcs.revision`, `vcs.time`,
+  `-dirty`). The flags win when set.
 
 ### WP0.11 — Tool schedule: groups and chains
 
@@ -1143,7 +1169,7 @@ Decisions recorded now:
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
-WP0.9 (done) → WP0.10.
+WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending).
 WP0.11 sits after WP0.6 (it needs per-call gating to exist) and WP0.12 after
 WP0.9 (it needs the config knobs); neither is
 required for `v0.1-alpha`.
