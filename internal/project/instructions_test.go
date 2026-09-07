@@ -48,10 +48,10 @@ func TestReadInstructions_PrecedenceAndOrder(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warnings)
 	}
 	want := []project.Instruction{
-		{Path: filepath.Join(dir, "HINT.md"), Content: "root hint\n"},
-		{Path: filepath.Join(dir, "a", "AGENTS.md"), Content: "a agents\n"},
-		{Path: filepath.Join(dir, "a", "b", "CLAUDE.md"), Content: "b claude\n"},
-		{Path: filepath.Join(dir, "a", "b", "c", "d", "AGENTS.md"), Content: "d agents\n"},
+		{Path: filepath.Join(dir, "HINT.md"), Content: "root hint\n", Size: 10},
+		{Path: filepath.Join(dir, "a", "AGENTS.md"), Content: "a agents\n", Size: 9},
+		{Path: filepath.Join(dir, "a", "b", "CLAUDE.md"), Content: "b claude\n", Size: 9},
+		{Path: filepath.Join(dir, "a", "b", "c", "d", "AGENTS.md"), Content: "d agents\n", Size: 9},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)

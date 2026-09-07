@@ -189,14 +189,36 @@ run it in, so a nearer file can refine the outer one.
 Your own standing instructions go in `~/.config/hint/HINT.md`
 (`$XDG_CONFIG_HOME` is respected); it is read before any project file.
 
-All instruction files together are limited to 32 KiB by default; a longer
-file is cut and a warning says so. The limit, and the directory overview
-that goes into the same prompt, can be changed:
+All instruction files together are limited to 32 KiB by default, or a
+sixteenth of the model's context window when the profile states one
+(`context_window`), so a small local model is never handed more preamble
+than it can read. When the files do not fit, nothing is dropped blindly:
+
+- every file is guaranteed room for its outline, so a `HINT.md` next to
+  you is never skipped because a larger one above spent the budget;
+- a Markdown file over its share shows whole sections while they fit and
+  the rest as heading and first sentence, marked `[...]`; a file without
+  headings is cut at a line;
+- the model has an `instructions` tool that returns any of these files
+  in full or one section by heading, and answers "where does this rule
+  come from" with a `path:line` — it reads the run's instruction files
+  and nothing else, so a parent directory's `HINT.md` is reachable and
+  `../.env` is not;
+- as a last resort, and only if you say so (`instructions.summarize:
+  true` or `--summarize-instructions`), a file that does not fit even as
+  an outline is summarized by the model, marked `summary="true"` in the
+  prompt, and the summary is cached under `~/.cache/hint/instructions/`
+  (`$XDG_CACHE_HOME` is respected) until the file changes.
+
+A warning on stderr names every file shown as less than itself. The
+limit, and the directory overview that goes into the same prompt, can be
+changed:
 
 ```bash
-hint --instruction-budget 65536 ...   # bytes for all instruction files
+hint --instruction-budget 65536 ...   # bytes for all instruction files (not scaled to the window)
 hint --overview-depth 3 ...           # directory levels listed; 0 lists nothing
 hint --overview-entries 200 ...       # cap on listed entries
+hint --summarize-instructions ...     # allow model-written summaries of oversized files
 ```
 
 or, in a config file:
@@ -204,6 +226,7 @@ or, in a config file:
 ```yaml
 instructions:
   budget: 65536
+  summarize: true
 overview:
   depth: 3
   max_entries: 200

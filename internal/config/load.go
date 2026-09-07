@@ -28,6 +28,10 @@ type Flags struct {
 	InstructionBudget string // --instruction-budget: bytes for all instruction files
 	OverviewDepth     string // --overview-depth: directory levels in the overview, 0 for none
 	OverviewEntries   string // --overview-entries: cap on overview entries
+
+	// SummarizeInstructions is --summarize-instructions: "true" or "false",
+	// a string so that an unset flag stays distinct from an explicit false.
+	SummarizeInstructions string
 }
 
 // Options are the external inputs of LoadFrom. Everything the loader touches
@@ -178,7 +182,8 @@ type fileProfile struct {
 }
 
 type fileInstructions struct {
-	Budget *int `yaml:"budget"`
+	Budget    *int  `yaml:"budget"`
+	Summarize *bool `yaml:"summarize"`
 }
 
 type fileOverview struct {
@@ -349,6 +354,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	if project.Instructions.Budget != nil {
 		out.Instructions.Budget = project.Instructions.Budget
 	}
+	if project.Instructions.Summarize != nil {
+		out.Instructions.Summarize = project.Instructions.Summarize
+	}
 	if project.Overview.Depth != nil {
 		out.Overview.Depth = project.Overview.Depth
 	}
@@ -474,7 +482,8 @@ func (l *loader) overlaySelected(cfg *Config) error {
 	if l.opts.Flags.Model != "" {
 		p.Model = l.opts.Flags.Model
 	}
-	return l.overlayInt(&p.ContextWindow, "context_window", "HINT_CONTEXT_WINDOW", "--context-window", l.opts.Flags.ContextWindow, 0)
+	_, err := l.overlayInt(&p.ContextWindow, "context_window", "HINT_CONTEXT_WINDOW", "--context-window", l.opts.Flags.ContextWindow, 0)
+	return err
 }
 
 // resolveLimits settles the project-context limits: the merged files'
@@ -485,6 +494,10 @@ func (l *loader) overlaySelected(cfg *Config) error {
 func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if files.Instructions.Budget != nil {
 		cfg.Instructions.Budget = *files.Instructions.Budget
+		cfg.Instructions.BudgetExplicit = true
+	}
+	if files.Instructions.Summarize != nil {
+		cfg.Instructions.Summarize = *files.Instructions.Summarize
 	}
 	if files.Overview.Depth != nil {
 		cfg.Overview.Depth = *files.Overview.Depth
@@ -494,13 +507,18 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if files.Overview.MaxEntries != nil {
 		cfg.Overview.MaxEntries = *files.Overview.MaxEntries
 	}
-	if err := l.overlayInt(&cfg.Instructions.Budget, "instructions.budget", "HINT_INSTRUCTION_BUDGET", "--instruction-budget", l.opts.Flags.InstructionBudget, 1); err != nil {
+	set, err := l.overlayInt(&cfg.Instructions.Budget, "instructions.budget", "HINT_INSTRUCTION_BUDGET", "--instruction-budget", l.opts.Flags.InstructionBudget, 1)
+	if err != nil {
 		return err
 	}
-	if err := l.overlayInt(&cfg.Overview.Depth, "overview.depth", "HINT_OVERVIEW_DEPTH", "--overview-depth", l.opts.Flags.OverviewDepth, 0); err != nil {
+	cfg.Instructions.BudgetExplicit = cfg.Instructions.BudgetExplicit || set
+	if _, err := l.overlayInt(&cfg.Overview.Depth, "overview.depth", "HINT_OVERVIEW_DEPTH", "--overview-depth", l.opts.Flags.OverviewDepth, 0); err != nil {
 		return err
 	}
-	if err := l.overlayInt(&cfg.Overview.MaxEntries, "overview.max_entries", "HINT_OVERVIEW_ENTRIES", "--overview-entries", l.opts.Flags.OverviewEntries, 1); err != nil {
+	if _, err := l.overlayInt(&cfg.Overview.MaxEntries, "overview.max_entries", "HINT_OVERVIEW_ENTRIES", "--overview-entries", l.opts.Flags.OverviewEntries, 1); err != nil {
+		return err
+	}
+	if err := l.overlayBool(&cfg.Instructions.Summarize, "HINT_INSTRUCTIONS_SUMMARIZE", "--summarize-instructions", l.opts.Flags.SummarizeInstructions); err != nil {
 		return err
 	}
 	if cfg.Instructions.Budget <= 0 {
@@ -512,14 +530,38 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	return nil
 }
 
+// overlayBool applies the environment variable and then the flag to *dst,
+// each when set, with the same tolerance as HINT_DEBUG: a variable that
+// is not a boolean is a warning that leaves *dst alone, a flag that is
+// not one is an error.
+func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) error {
+	if v, ok := l.env(envName); ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			l.warnf("%s=%q is not a boolean and was ignored", envName, v)
+		} else {
+			*dst = b
+		}
+	}
+	if flagValue != "" {
+		b, err := strconv.ParseBool(flagValue)
+		if err != nil {
+			return fmt.Errorf("config: %s: %q is not a boolean", flagName, flagValue)
+		}
+		*dst = b
+	}
+	return nil
+}
+
 // overlayInt applies the environment variable and then the flag to *dst,
-// each when set. A value below min is refused: the flag as an error, the
-// variable as a warning that leaves *dst alone. The file value already in
-// *dst (named key in messages) is checked against min too, since a file
-// can say -1 as easily; a file's 0 is left for the defaults to fill.
-func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, min int) error {
+// each when set, and reports whether either did. A value below min is
+// refused: the flag as an error, the variable as a warning that leaves
+// *dst alone. The file value already in *dst (named key in messages) is
+// checked against min too, since a file can say -1 as easily; a file's 0
+// is left for the defaults to fill.
+func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
-		return fmt.Errorf("config: %s must be at least %d, got %d", key, min, *dst)
+		return false, fmt.Errorf("config: %s must be at least %d, got %d", key, min, *dst)
 	}
 	if v, ok := l.env(envName); ok {
 		n, err := strconv.Atoi(v)
@@ -529,20 +571,20 @@ func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, 
 		case n < min:
 			l.warnf("%s=%d is below the minimum of %d and was ignored", envName, n, min)
 		default:
-			*dst = n
+			*dst, set = n, true
 		}
 	}
 	if flagValue != "" {
 		n, err := strconv.Atoi(flagValue)
 		if err != nil {
-			return fmt.Errorf("config: %s: %q is not a number", flagName, flagValue)
+			return set, fmt.Errorf("config: %s: %q is not a number", flagName, flagValue)
 		}
 		if n < min {
-			return fmt.Errorf("config: %s must be at least %d, got %d", flagName, min, n)
+			return set, fmt.Errorf("config: %s must be at least %d, got %d", flagName, min, n)
 		}
-		*dst = n
+		*dst, set = n, true
 	}
-	return nil
+	return set, nil
 }
 
 // applyKindDefaults fills fields that are still empty after every overlay.

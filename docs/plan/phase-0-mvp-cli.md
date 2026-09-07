@@ -1079,7 +1079,7 @@ and the `ToolCall` wire type:
   few milliseconds of hold-back after the last sibling finishes; the
   win is a replayable history.
 
-### WP0.12 — Instructions beyond the budget
+### WP0.12 — Instructions beyond the budget — **rungs 0–3 done, rung 4 open**
 
 WP0.8 reads `HINT.md` / `AGENTS.md` / `CLAUDE.md` under one 32 KiB budget
 and cuts blindly when it runs out. That is the right floor — the preamble
@@ -1161,23 +1161,72 @@ agent-chosen overview from WP0.8 needs, so they land together; the
 repo map (WP2.2) competes for the same preamble budget and will need
 the rung-0 arithmetic to include it.
 
-- [ ] Rung 0: budget scaled to the profile's context window
-      (`WithInstructionBudget` stays the override)
-- [ ] Rung 1: per-file minimum share, then root→leaf fill; test that a
+- [x] Rung 0: budget scaled to the profile's context window
+      (`WithInstructionBudget` stays the override) —
+      `project.InstructionBudgetFor`, `WithContextWindow`;
+      `config.InstructionSettings.BudgetExplicit` says when not to scale
+- [x] Rung 1: per-file minimum share, then root→leaf fill; test that a
       nearest file survives a spent budget as an outline
-- [ ] Rung 2: Markdown outline renderer (heading tree + first sentence +
-      anchors, cuts at section boundaries); `instructions` built-in
-      (`ClassRead`, reads only discovered files, `{path, section}` and
-      `{quote}` forms); `RenderInstructions` marks outlined files
-- [ ] Rung 3: `instructions.summarize` config key (default off), content-
+      (`TestFit_NearestFileSurvivesAsOutline`)
+- [x] Rung 2: Markdown outline renderer (heading tree + first sentence,
+      cuts at section boundaries; the heading is the anchor);
+      `instructions` built-in (`ClassRead`, reads only discovered files,
+      `{}`, `{path}`, `{path, section}` and `{quote}` forms);
+      `RenderInstructions` marks outlined files
+- [x] Rung 3: `instructions.summarize` config key (default off), content-
       hash cache under XDG cache, `summary="true"` attribute, a warning
       naming each summarized file
 - [ ] Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
       on first touch via a turn observer in `internal/agent`, index lists
       the unloaded ones by title; golden test of the rendered preamble
-      for a split project
+      for a split project. Split into its own branch (decided
+      2026-09-07): it needs a per-turn hook in the agent loop and a
+      decision on how a rule's text enters a running turn, which
+      deserves its own fork — see Q8 below for where the files live
 
-Decisions recorded now:
+Decisions (2026-09-07, rungs 0–3):
+
+- **Rungs 0–3 in one package, rung 4 in the next.** The first four
+  rungs are pure layout: they change what `project.Load` puts in the
+  preamble and add one read-only tool. Rung 4 changes the agent loop
+  (rules loaded when a turn touches a matching path) and has to decide
+  how mid-turn text reaches the model; that fork is asked when the
+  branch starts, not answered in passing here.
+- **Q8 answered: `.hint/rules/*.md`, with `.cursor/rules` as a
+  compatible source.** Our own files are plain Markdown with optional
+  `paths:` front matter; a project that already keeps `.cursor/rules/`
+  (`globs:` front matter, `.mdc` files) is read the same way, `globs:`
+  mapped onto `paths:`, so a team does not maintain two trees. `.claude/`
+  trees are not read: they carry no globs convention worth mapping.
+- **The budget scales as a sixteenth of the window, four bytes a
+  token.** 128k → the 32 KiB default; 8k → 2 KiB; never below 1 KiB so
+  a heading list always fits. An explicit budget — file, variable or
+  flag — is taken as given: the user who wrote `65536` meant it.
+- **Reserve is the outline; the outline is heading plus first
+  sentence.** A file's guaranteed share is the size of its outline (its
+  first kilobyte when it has no headings). Under a shortfall the layout
+  is greedy in document order: a section is shown in full while the
+  upgrade still leaves every later section its entry, so the table of
+  contents is never lost. The heading itself is the anchor the tool
+  takes; a separate id would be one more thing for the model to copy
+  wrong.
+- **A file that cannot show one whole line is skipped.** The cut path
+  (outlines overflow, no summarizer) used to leave four-byte fragments;
+  it now warns and moves on.
+- **Summaries: equal split, small files keep their words.** When even
+  outlines overflow and summaries are allowed, a file that fits an equal
+  share of the budget is left alone and only the rest are summarized
+  into what remains — a short `HINT.md` next to a huge one is never
+  paraphrased to make room. Cached by content hash under
+  `$XDG_CACHE_HOME/hint/instructions/` (`~/.cache` otherwise), as a
+  decorator over the `Summarizer` interface so the cache is tested
+  without a model.
+- **The tool's scope is the run's discovered list, not a directory.**
+  `instructions` takes `project.Context.InstructionPaths`; a bare file
+  name resolves when unique, a parent-relative one otherwise, and
+  anything else is refused with the list of files it does know.
+
+Decisions recorded when the package was planned:
 
 - **Cut, outline, summarize — in that order, and summarize never by
   default.** Each rung trades a little more fidelity for a little more
@@ -1210,7 +1259,7 @@ Decisions recorded now:
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending) →
-WP0.11 (done) → WP0.12.
+WP0.11 (done) → WP0.12 (rungs 0–3 done; rung 4 is its own branch).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs); neither was required for
 `v0.1-alpha`, but the decision of 2026-09-07 is to land both first: the

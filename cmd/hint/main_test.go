@@ -37,12 +37,12 @@ func TestToolRegistry_AllBehindPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg, err := toolRegistry(root)
+	reg, err := toolRegistry(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	want := []string{"bash", "edit_file", "glob", "grep", "list_dir", "read_file", "todo", "write_file"}
+	want := []string{"bash", "edit_file", "glob", "grep", "instructions", "list_dir", "read_file", "todo", "write_file"}
 	if got := reg.Names(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registered tools = %v, want %v", got, want)
 	}
@@ -274,6 +274,8 @@ func TestSystemPrompt(t *testing.T) {
 		"<file path=\"/w/app/HINT.md\">\nAnswer in English.\n</file>",
 		"Run go test.\n[... truncated at the instruction budget; the full file is /w/app/sub/AGENTS.md]",
 		"nearest the working directory wins",
+		"The instructions tool reads the project's instruction files",
+		"A section that ends in [...] is shown as its heading and first sentence only",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, got)
