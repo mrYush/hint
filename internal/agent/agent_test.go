@@ -135,6 +135,14 @@ func (t cancelingTool) Run(_ context.Context, callID string, _ json.RawMessage) 
 	return agentapi.TextResult(callID, "cancel", "ok"), nil
 }
 
+// sequential is DefaultLimits with tool fan-out off: the WP0.4 chain, for
+// tests whose point is what happens between one call and the next.
+func sequential() agent.Limits {
+	l := agent.DefaultLimits()
+	l.MaxParallelTools = 1
+	return l
+}
+
 func delta(text string) agentapi.ChatEvent {
 	return agentapi.ChatEvent{Kind: agentapi.ChatTextDelta, Text: text}
 }
@@ -396,7 +404,8 @@ func TestRunTurn_CancelBetweenToolCalls(t *testing.T) {
 		toolCallEvent("c2", "echo", `{"text":"never"}`),
 		done(agentapi.FinishToolCalls),
 	}}}}
-	a := agent.New(p, agent.WithTools(cancelingTool{cancel: cancel}, echoTool{}))
+	// Both calls are reads; a chain is what makes "between" mean anything.
+	a := agent.New(p, agent.WithTools(cancelingTool{cancel: cancel}, echoTool{}), agent.WithLimits(sequential()))
 
 	events := collect(t, a.RunTurn(ctx, question("q")))
 

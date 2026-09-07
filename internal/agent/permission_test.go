@@ -258,7 +258,9 @@ func TestRunTurn_ToolPassingThroughCancelEndsCanceled(t *testing.T) {
 	p := &fakeProvider{scripts: []script{
 		toolRound(toolCallEvent("c1", "passthrough", `{}`), toolCallEvent("c2", "echo", `{"text":"never"}`)),
 	}}
-	a := agent.New(p, agent.WithTools(passThroughTool{cancel: cancel}, echoTool{}))
+	// A chain, so the echo is the call after the interrupted one rather
+	// than its sibling in a group.
+	a := agent.New(p, agent.WithTools(passThroughTool{cancel: cancel}, echoTool{}), agent.WithLimits(sequential()))
 
 	events := collect(t, a.RunTurn(ctx, question("q")))
 
