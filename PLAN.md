@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-06
+> Status: living document · Last updated: 2026-09-07
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -101,9 +101,17 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   overview behind a pluggable `Overview`, `.gitignore` honoured through
   `git ls-files` with the hidden-and-dependency rule as the fallback —
   shared with the pure-Go walks of `list_dir`, `glob` and `grep`).
-- **Next:** WP0.9 — run modes and CLI surface (REPL, `hint -p`,
-  `--debug` file log, flags for the WP0.8 limits and a global
-  `~/.config/hint/HINT.md`).
+  WP0.9 — run modes and CLI surface (bare `hint` is a line-loop REPL
+  over the shared stdin reader; `hint -p` is the one-shot, with
+  `--output json` printing one object; positional questions still work
+  with a migration note; `--debug` writes a redacted trace to
+  `~/.local/state/hint/log/<run>.log` through `internal/debuglog`;
+  `--session <id>`, `hint sessions`, `hint models`; WP0.8's limits as
+  `--instruction-budget` / `--overview-depth` / `--overview-entries` and
+  `instructions:` / `overview:` config keys; a global
+  `~/.config/hint/HINT.md`; a profile's `context_window` sizing
+  compaction).
+- **Next:** WP0.10 — CI, release, distribution.
 - **Planned after permissions:** WP0.11 — Agent-built tool schedule
   (parallel groups + sequential chains; see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
@@ -116,18 +124,22 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   loaded on first touch (see
   [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget)).
   Until then WP0.8's cut-and-warn applies.
-- Today's `hint` is still a one-shot CLI (cobra), now running through the
+- Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
+  interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
   gate (it explores the project itself and can edit it and run commands
-  with confirmation), reads the project's `HINT.md`, and every run is
-  recorded as a session that `-c` continues. The REPL is WP0.9's.
+  with confirmation), read the global and the project's `HINT.md`, and
+  record every conversation as a session that `-c`, `-r` or `--session`
+  continues. What is left for `v0.1` is WP0.10's CI and release pipeline
+  and the acceptance run on a Raspberry Pi.
 
 ## Compatibility decision
 
 Breaking changes to the current CLI contract are accepted (decided
 2026-08-28). In the MVP, bare `hint` starts an interactive REPL and one-shot
 moves to `hint -p "question"`. `hint "question"` (positional args) is kept as
-a one-shot alias for a soft migration and may be removed later.
+a one-shot alias for a soft migration and may be removed later. Implemented
+by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 
 ## Next 5 steps (can start today)
 

@@ -94,9 +94,9 @@ type Model struct {
 	ModifiedAt time.Time `json:"modified_at"`
 }
 
-// List returns the locally installed models. No CLI command calls it yet
-// (that surface is WP0.9's `hint models`); it ships with the client so the
-// native API is covered in one place.
+// List returns the locally installed models — what `hint models` prints
+// for an ollama profile, with the sizes the Chat Completions dialect does
+// not report.
 func (c *Client) List(ctx context.Context) ([]Model, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/tags", nil)
 	if err != nil {

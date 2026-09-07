@@ -44,13 +44,51 @@ type Profile struct {
 	// unmasked; String() and the Mask/Redact helpers exist for that.
 	APIKey string
 	Model  string
+	// ContextWindow is the model's context size in tokens, when the
+	// profile states it (`context_window`, HINT_CONTEXT_WINDOW,
+	// --context-window). Zero means unknown: the agent loop then keeps
+	// its built-in window for proactive compaction.
+	ContextWindow int
 }
 
 // String implements fmt.Stringer with the API key masked, so a Profile
 // printed via %v/%+v/%s can never leak the secret.
 func (p Profile) String() string {
-	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s}",
-		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model)
+	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s ContextWindow:%d}",
+		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model, p.ContextWindow)
+}
+
+// Built-in defaults of the project-context limits, applied by the loader
+// when no source sets them. They mirror internal/project's constants —
+// asserted equal by a test there — because config is loaded before the
+// project package is touched and must not depend on it.
+const (
+	// DefaultInstructionBudget is the byte budget shared by every
+	// instruction file of a run.
+	DefaultInstructionBudget = 32 << 10
+	// DefaultOverviewDepth is how many directory levels the overview lists.
+	DefaultOverviewDepth = 2
+	// DefaultOverviewEntries caps the overview's entries.
+	DefaultOverviewEntries = 100
+)
+
+// InstructionSettings bounds the project instruction files (HINT.md and
+// its compatible names) read into the system prompt.
+type InstructionSettings struct {
+	// Budget is the byte budget shared by every instruction file, the
+	// global one included. Always positive after loading.
+	Budget int
+}
+
+// OverviewSettings shapes the directory listing placed in the system
+// prompt.
+type OverviewSettings struct {
+	// Depth is how many directory levels are listed; 0 disables the
+	// overview altogether.
+	Depth int
+	// MaxEntries caps the number of entries listed. Always positive after
+	// loading.
+	MaxEntries int
 }
 
 // Config is the fully resolved configuration.
@@ -58,8 +96,14 @@ type Config struct {
 	Providers        []Profile
 	DefaultProvider  string
 	FallbackProvider string
-	// Debug mirrors HINT_DEBUG (the --debug flag arrives in WP0.9).
+	// Debug is the --debug flag or HINT_DEBUG: write the run's redacted
+	// request/response trace to a log file.
 	Debug bool
+	// Instructions and Overview are the project-context limits as resolved
+	// from flags, HINT_* variables and the instructions:/overview: blocks
+	// of the config files, with the built-in defaults applied.
+	Instructions InstructionSettings
+	Overview     OverviewSettings
 	// Warnings collects non-fatal findings (legacy paths, migrated flat
 	// keys, ignored values). The CLI prints them to stderr once per run.
 	Warnings []string
