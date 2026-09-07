@@ -114,7 +114,7 @@ func TestRenderInstructions(t *testing.T) {
 	})
 	want := "<project_instructions>\n" +
 		"<file path=\"/p/HINT.md\">\nBe brief.\n</file>\n" +
-		"<file path=\"/p/sub/AGENTS.md\">\nUse tabs\n[... truncated at the instruction budget]\n</file>\n" +
+		"<file path=\"/p/sub/AGENTS.md\">\nUse tabs\n[... truncated at the instruction budget; the full file is /p/sub/AGENTS.md]\n</file>\n" +
 		"</project_instructions>"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
