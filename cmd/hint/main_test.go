@@ -206,7 +206,7 @@ func TestSystemPrompt(t *testing.T) {
 		"Git repository root: /w/app\n",
 		"Contents of the working directory:\nmain.go\n",
 		"<file path=\"/w/app/HINT.md\">\nAnswer in English.\n</file>",
-		"Run go test.\n[... truncated at the instruction budget]",
+		"Run go test.\n[... truncated at the instruction budget; the full file is /w/app/sub/AGENTS.md]",
 		"nearest the working directory wins",
 	} {
 		if !strings.Contains(got, want) {

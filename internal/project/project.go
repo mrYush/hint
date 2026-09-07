@@ -124,7 +124,7 @@ func RenderInstructions(instructions []Instruction) string {
 		fmt.Fprintf(&b, "<file path=%q>\n", in.Path)
 		b.WriteString(strings.TrimRight(in.Content, "\n"))
 		if in.Truncated {
-			b.WriteString("\n[... truncated at the instruction budget]")
+			fmt.Fprintf(&b, "\n[... truncated at the instruction budget; the full file is %s]", in.Path)
 		}
 		b.WriteString("\n</file>\n")
 	}
