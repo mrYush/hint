@@ -221,6 +221,10 @@ worth tracking, and worth reusing from where licenses allow.
 
 Also checked and ruled out as a closer match: [Open Interpreter's `01` project](https://01.openinterpreter.com/) ([repo](https://github.com/openinterpreter/01)) — the closest in *spirit* to "personal multimodal agent" (voice-first, iOS/Android apps, ESP32 device support), but it is pre-1.0, explicitly [lacks basic safeguards](https://github.com/openinterpreter/01/issues) yet, is not coding-agent-first, and has no core-as-a-service/RPC design or Go/single-binary story.
 
+The case for building anyway — the claims this project rests on, what they
+cost, and the conditions that would end it — is argued separately in
+[`why-hint.md`](why-hint.md).
+
 ### What this means for the plan
 
 1. **The core architectural bet is de-risked, not novel.** "One core, thin clients on every platform" (Section 1.2 / this document's opening) is now a validated, shipping pattern (FutureOS, Goose), not a speculative design choice unique to us.

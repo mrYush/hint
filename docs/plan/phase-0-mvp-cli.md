@@ -806,7 +806,7 @@ depend on them:
   happens when the instruction files do not fit the budget — today a
   blind cut, with the nearest files the first to be dropped — and how
   the model reaches the text that was cut, is worked out in
-  [WP0.12](#wp012--instructions-beyond-the-budget); just-in-time loading
+  [WP0.12](#wp012--instructions-beyond-the-budget--done); just-in-time loading
   of a subdirectory's instructions lives there too.
 
 ### WP0.9 — Run modes and CLI surface — **done**
