@@ -129,3 +129,16 @@ func (t *writeFile) Describe(_ context.Context, args json.RawMessage) (tool.Desc
 		Path:    rel,
 	}, nil
 }
+
+// Touches implements tool.Toucher: the one file the call names.
+func (t *writeFile) Touches(args json.RawMessage) []string {
+	var in writeFileArgs
+	if err := tool.DecodeArgs(args, &in); err != nil || in.Path == "" {
+		return nil
+	}
+	abs, err := t.root.Resolve(in.Path)
+	if err != nil {
+		return nil
+	}
+	return []string{abs}
+}

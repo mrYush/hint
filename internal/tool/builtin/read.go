@@ -159,3 +159,16 @@ func numberLines(ctx context.Context, r io.Reader, offset, limit int) (text stri
 	}
 	return b.String(), total, shown, nil
 }
+
+// Touches implements tool.Toucher: the one file the call names.
+func (t *readFile) Touches(args json.RawMessage) []string {
+	var in readFileArgs
+	if err := tool.DecodeArgs(args, &in); err != nil || in.Path == "" {
+		return nil
+	}
+	abs, err := t.root.Resolve(in.Path)
+	if err != nil {
+		return nil
+	}
+	return []string{abs}
+}

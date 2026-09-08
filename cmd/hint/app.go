@@ -152,17 +152,14 @@ func assemble(ctx context.Context, as assembly) (*app, error) {
 	if as.cfg.Overview.Depth > 0 {
 		overview = project.Tree{Depth: as.cfg.Overview.Depth, MaxEntries: as.cfg.Overview.MaxEntries}
 	}
-	pc, err := project.Load(ctx, root.Dir(),
-		project.WithInstructionBudget(as.cfg.Instructions.Budget),
-		project.WithOverview(overview),
-		project.WithGlobalInstructions(as.global))
+	pc, err := project.Load(ctx, root.Dir(), projectOptions(as, overview)...)
 	if err != nil {
 		return nil, err
 	}
 	for _, w := range pc.Warnings {
 		fmt.Fprintf(as.io.err, "hint: warning: %s\n", w)
 	}
-	registry, err := toolRegistry(root)
+	registry, err := toolRegistry(root, pc.InstructionPaths)
 	if err != nil {
 		return nil, fmt.Errorf("registering tools: %w", err)
 	}
@@ -178,9 +175,15 @@ func assemble(ctx context.Context, as assembly) (*app, error) {
 	}
 
 	// The preamble is this run's, not the conversation's: it is rebuilt
-	// every time from the project context and never stored, so the
-	// Recorder is told how long it is.
-	preamble := []agentapi.Message{agentapi.SystemMessage(systemPrompt(pc))}
+	// every time from the project context — and again before every
+	// request once a split rule has been touched — and never stored, so
+	// the Recorder is told how long it is.
+	var trace func(string, ...any)
+	if as.trace != nil {
+		trace = as.trace.Printf
+	}
+	pre := newPreamble(pc, registry, as.io.err, trace)
+	preamble := pre.initial()
 	rec := session.NewRecorder(sess, len(preamble))
 
 	warnMode(as.io.err, as.opts.mode, as.io.tty)
@@ -193,7 +196,7 @@ func assemble(ctx context.Context, as assembly) (*app, error) {
 	if p, err := as.cfg.Default(); err == nil && p.ContextWindow > 0 {
 		limits.MaxContextTokens = p.ContextWindow
 	}
-	ag := agent.New(as.chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate), agent.WithLimits(limits))
+	ag := agent.New(as.chat, agent.WithTools(registry.Tools()...), agent.WithAuthorizer(gate), agent.WithLimits(limits), agent.WithPreamble(pre))
 
 	a := &app{io: as.io, opts: as.opts, trace: as.trace, lines: lines, sess: sess, rec: rec, preamble: preamble, agent: ag}
 	if as.trace != nil {
@@ -291,12 +294,37 @@ func announce(stderr io.Writer, sess *session.Session) {
 	}
 }
 
+// projectOptions turns the configuration into project.Load's knobs. The
+// instruction budget is passed only when the user set one: otherwise
+// project scales its default to the profile's context window (WP0.12),
+// which it learns here too. Summaries are opt-in and cached under the
+// user's cache directory; a cache that cannot be located just means a
+// model call per run.
+func projectOptions(as assembly, overview project.Overview) []project.Option {
+	opts := []project.Option{project.WithOverview(overview), project.WithGlobalInstructions(as.global)}
+	if as.cfg.Instructions.BudgetExplicit {
+		opts = append(opts, project.WithInstructionBudget(as.cfg.Instructions.Budget))
+	}
+	if p, err := as.cfg.Default(); err == nil {
+		opts = append(opts, project.WithContextWindow(p.ContextWindow))
+	}
+	if as.cfg.Instructions.Summarize {
+		var s project.Summarizer = project.ChatSummarizer{Provider: as.chat}
+		if dir, err := project.DefaultSummaryCacheDir(); err == nil {
+			s = project.CachedSummarizer{Dir: dir, Inner: s}
+		}
+		opts = append(opts, project.WithSummarizer(s))
+	}
+	return opts
+}
+
 // toolRegistry builds the tool set the CLI offers the model: every
-// built-in, write_file, edit_file and bash included. They are only safe
-// to register because assemble() puts the agent behind a permission.Gate;
-// main_test.go pins both halves of that.
-func toolRegistry(root tool.Root) (*tool.Registry, error) {
-	return tool.NewRegistry(builtin.All(root)...)
+// built-in, write_file, edit_file and bash included, plus the
+// instructions tool over the instruction files this run discovered. They
+// are only safe to register because assemble() puts the agent behind a
+// permission.Gate; main_test.go pins both halves of that.
+func toolRegistry(root tool.Root, instructionPaths []string) (*tool.Registry, error) {
+	return tool.NewRegistry(append(builtin.All(root), builtin.NewInstructions(instructionPaths))...)
 }
 
 // warnMode prints the one-time notices a run mode deserves: --yolo is
@@ -327,13 +355,17 @@ func needsAnswer(mode permission.Mode) string {
 // like, and what the project's own instruction files say. The instruction
 // files come last so they read as the most specific guidance; they are
 // the user's words to the agent, not tool output, which is why they
-// belong in the system message at all.
-func systemPrompt(pc *project.Context) string {
+// belong in the system message at all. instructions is the layout to
+// show (pc.Instructions, or one with the rules a conversation has
+// touched) and pending the rules not loaded yet.
+func systemPrompt(pc *project.Context, instructions []project.Instruction, pending []project.Rule) string {
 	var b strings.Builder
 	b.WriteString("You are a helpful assistant aiding a developer with their project.\n\n" +
 		"You have tools to explore the project: list_dir, read_file, glob and grep. " +
 		"Use them to look at the actual code before answering instead of guessing, " +
 		"and refer to files by their paths. Use todo to show a plan for multi-step work. " +
+		"The instructions tool reads the project's instruction files in full, one section at a time, " +
+		"and tells which file and line an instruction comes from. " +
 		"You can change the project with edit_file (preferred for targeted changes) and write_file, " +
 		"and run commands with bash; the user is shown each edit as a diff and each command " +
 		"before it runs and may decline it. A declined action must not be retried unchanged.\n\n")
@@ -350,10 +382,18 @@ func systemPrompt(pc *project.Context) string {
 	if pc.Overview != "" {
 		fmt.Fprintf(&b, "\nContents of the working directory:\n%s\n", pc.Overview)
 	}
-	if instr := project.RenderInstructions(pc.Instructions); instr != "" {
+	if instr := project.RenderInstructions(instructions); instr != "" {
 		b.WriteString("\nThe project keeps instructions for assistants; follow them. " +
-			"When files at several levels disagree, the one nearest the working directory wins.\n")
+			"When files at several levels disagree, the one nearest the working directory wins. " +
+			"A file with a paths attribute applies to files matching those patterns. " +
+			"A section that ends in [...] is shown as its heading and first sentence only; " +
+			"call instructions with the file's path and that heading before acting on what it covers.\n")
 		b.WriteString(instr)
+		b.WriteString("\n")
+	}
+	if index := project.RenderRuleIndex(pending); index != "" {
+		b.WriteString("\n")
+		b.WriteString(index)
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
