@@ -7,7 +7,9 @@ roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 
 | File | Contents |
 |---|---|
+| `why-hint.md` | Why the project is worth building next to the prior art: the claims it rests on, what they cost, and the conditions that would end it |
 | `architecture.md` | Core architecture, package layout, key interfaces, references, platform/provider matrices |
+| `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
 
