@@ -50,6 +50,24 @@ Reference — Pi trust.json.
 - [ ] `hint-tool-template` repositories (Go and TypeScript)
 - [ ] Developer docs: how to build, test, and publish an extension
 
+### WP7.6 — Subscription-gated model access (design spike first)
+
+Design and rejected alternatives: [`subscription-access.md`](subscription-access.md).
+Open question Q9 in [`../../PLAN.md`](../../PLAN.md); risk R9 in [`risks.md`](risks.md).
+
+- [ ] **Spike before code**: written decision on the gateway shape
+      (passthrough vs. task-shaped), a threat model, and a note on upstream
+      provider terms — see the spike's acceptance list
+- [ ] Explicit credential/token-source option on the provider clients, so a
+      rotating token stops depending on a `RoundTripper` overwriting
+      `Authorization`
+- [ ] `kind: hint-gateway` profile type (no config-schema break)
+- [ ] Device Authorization Grant (RFC 8628) issuance, keychain storage with a
+      documented file fallback, sender-constrained tokens (DPoP/mTLS)
+- [ ] `hint auth login | devices | revoke`
+- [ ] Quotas, per-device rate limits, server-side revocation
+- [ ] Every feature verified to work end-to-end with a user-supplied key only
+
 ## Acceptance criteria
 
 1. A third-party developer goes from template to installed, working tool in
@@ -58,3 +76,5 @@ Reference — Pi trust.json.
    an undeclared class.
 3. A tampered package (bad signature) refuses to install.
 4. The registry index is browsable and searchable (`hint search <term>`).
+5. No feature requires the subscription gateway: a user with only their own
+   provider key, or only a local model, reaches every capability.
