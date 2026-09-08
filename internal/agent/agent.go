@@ -1,6 +1,7 @@
 // Package agent implements the WP0.4 tool-calling loop: model responds,
-// tool calls run, results feed back, repeat until the model produces a
-// final answer or a limit is hit. See docs/plan/phase-0-mvp-cli.md.
+// tool calls run — independent reads together, everything else in order,
+// under the WP0.11 schedule — results feed back, repeat until the model
+// produces a final answer or a limit is hit. See docs/plan/phase-0-mvp-cli.md.
 package agent
 
 import (
@@ -24,13 +25,20 @@ type Limits struct {
 	// CompactThreshold is the occupancy fraction of MaxContextTokens that
 	// triggers proactive compaction, e.g. 0.8 for "at 80% of the window".
 	CompactThreshold float64
+	// MaxParallelTools caps how many read-class tool calls of one batch run
+	// at the same time. Zero or one keeps the WP0.4 chain: every call waits
+	// for the previous one. Writes and commands never overlap regardless.
+	MaxParallelTools int
 }
 
 // DefaultLimits returns the limits an Agent starts with, matching the
-// WP0.4 checklist: 25 iterations, a 128k window
-// (GPT-4o class), compact at 80% occupancy.
+// WP0.4 checklist: 25 iterations, a 128k window (GPT-4o class), compact at
+// 80% occupancy; and WP0.11's fan-out of eight reads at once — local file
+// reads are I/O-bound, and more goroutines than that buy nothing on the
+// smallest target (a Raspberry Pi) while making the tool_start/tool_end
+// interleaving harder to follow.
 func DefaultLimits() Limits {
-	return Limits{MaxIterations: 25, MaxContextTokens: 128_000, CompactThreshold: 0.8}
+	return Limits{MaxIterations: 25, MaxContextTokens: 128_000, CompactThreshold: 0.8, MaxParallelTools: 8}
 }
 
 // Compactor summarizes older turns into a single system message when the
