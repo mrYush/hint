@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -20,14 +21,57 @@ var InstructionNames = []string{"HINT.md", "AGENTS.md", "CLAUDE.md"}
 // the total that competes with the conversation for the window.
 const DefaultInstructionBudget = 32 << 10
 
+const (
+	// instructionWindowShare is the fraction of a model's context window
+	// the default budget may take: one sixteenth, which for a 128k window
+	// is DefaultInstructionBudget itself.
+	instructionWindowShare = 16
+	// bytesPerToken is the estimate the budget arithmetic shares with the
+	// agent's token estimator.
+	bytesPerToken = 4
+	// MinInstructionBudget is the floor of the scaled budget: room for a
+	// heading list even on the smallest local model.
+	MinInstructionBudget = 1 << 10
+	// MaxInstructionFileSize bounds how much of one file is read at all;
+	// beyond it the rest is not even outlined.
+	MaxInstructionFileSize = 1 << 20
+)
+
+// InstructionBudgetFor returns the default budget for a model whose
+// context window is window tokens: [DefaultInstructionBudget], scaled down
+// so the preamble takes at most a sixteenth of the window at four bytes a
+// token, never below [MinInstructionBudget]. An unknown window (0) keeps
+// the default.
+func InstructionBudgetFor(window int) int {
+	if window <= 0 {
+		return DefaultInstructionBudget
+	}
+	scaled := window * bytesPerToken / instructionWindowShare
+	return max(min(DefaultInstructionBudget, scaled), MinInstructionBudget)
+}
+
 // Instruction is one instruction file as it goes into the prompt.
 type Instruction struct {
 	// Path is the file's absolute path.
 	Path string
-	// Content is the file's text, cut at the budget when Truncated.
+	// Content is what the prompt shows: the file, the file with some
+	// sections reduced to their heading and first sentence (Outlined), a
+	// model-written summary (Summarized), or a prefix (Truncated).
 	Content string
-	// Truncated reports that Content is a prefix of the file.
+	// Size is the file's size in bytes, whatever Content shows of it.
+	Size int
+	// Outlined reports that at least one section of Content ends in the
+	// "[...]" marker: its text was left out and the instructions tool
+	// returns it.
+	Outlined bool
+	// Summarized reports that Content is a summary written by a model,
+	// not the user's own words.
+	Summarized bool
+	// Truncated reports that Content was cut at the budget.
 	Truncated bool
+	// Paths are the globs a rule file applies to (see [Rule]); empty for
+	// an instruction file or an unconditional rule.
+	Paths []string
 }
 
 // InstructionDirs returns the directories to search for instruction
@@ -79,28 +123,24 @@ func InstructionPaths(global string, dirs []string, names []string) []string {
 
 // ReadInstructions reads the first file named in names that exists in
 // each of dirs, in order, under one shared byte budget. It is
-// [ReadInstructionFiles] over [InstructionPaths] with no global file.
+// [ReadInstructionFiles] over [InstructionPaths] with no global file and
+// no summarizer.
 func ReadInstructions(dirs []string, names []string, budget int) ([]Instruction, []string) {
-	return ReadInstructionFiles(InstructionPaths("", dirs, names), budget)
+	return ReadInstructionFiles(context.Background(), InstructionPaths("", dirs, names), budget, nil)
 }
 
-// ReadInstructionFiles reads paths, in order, under one shared byte
-// budget. A file that would overflow the budget is cut at it and marked
-// Truncated; once the budget is spent, later files are skipped. Files that
-// are empty or whitespace cost nothing and are left out. Every skip, cut
-// or read failure is returned as a warning rather than an error:
-// instructions are a convenience, and a project with a broken one still
-// deserves an answer.
-func ReadInstructionFiles(paths []string, budget int) ([]Instruction, []string) {
-	var out []Instruction
+// ReadInstructionFiles reads paths, in order, and lays them out under one
+// shared byte budget (see fit.go for the ladder). s, when not nil, is
+// asked to summarize files that do not fit even as outlines. Files that
+// are empty or whitespace cost nothing and are left out. Every outline,
+// summary, cut, skip or read failure is returned as a warning rather than
+// an error: instructions are a convenience, and a project with a broken
+// one still deserves an answer.
+func ReadInstructionFiles(ctx context.Context, paths []string, budget int, s Summarizer) ([]Instruction, []string) {
+	var files []rawFile
 	var warnings []string
-	remaining := budget
 	for _, p := range paths {
-		if remaining <= 0 {
-			warnings = append(warnings, fmt.Sprintf("%s: skipped, the %d-byte instruction budget is spent", p, budget))
-			continue
-		}
-		content, truncated, err := readBounded(p, remaining)
+		content, more, err := readBounded(p, MaxInstructionFileSize)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s: %v", p, err))
 			continue
@@ -108,13 +148,13 @@ func ReadInstructionFiles(paths []string, budget int) ([]Instruction, []string) 
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		if truncated {
-			warnings = append(warnings, fmt.Sprintf("%s: cut at the %d-byte instruction budget", p, budget))
+		if more {
+			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", p, MaxInstructionFileSize))
 		}
-		remaining -= len(content)
-		out = append(out, Instruction{Path: p, Content: content, Truncated: truncated})
+		files = append(files, newRawFile(p, content))
 	}
-	return out, warnings
+	out, fitWarnings := fitInstructions(ctx, files, budget, s)
+	return out, append(warnings, fitWarnings...)
 }
 
 // firstInstruction returns the path of the first name that is a regular

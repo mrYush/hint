@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrYush/hint/internal/glob"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -63,7 +64,7 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	// Validate with the Go matcher even when ripgrep will run: it gives a
 	// clear message, and the two implementations must agree on what is a
 	// pattern at all.
-	matcher, err := compileGlob(in.Pattern)
+	matcher, err := glob.Compile(in.Pattern)
 	if err != nil {
 		return tool.InvalidArgs(callID, globName, err), nil
 	}
@@ -156,7 +157,7 @@ func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]stri
 
 // globWalk is the pure-Go listing: every regular file under dir that ig
 // keeps, whose path relative to dir matches.
-func globWalk(ctx context.Context, dir string, m *globMatcher, ig project.Ignorer) ([]string, error) {
+func globWalk(ctx context.Context, dir string, m *glob.Matcher, ig project.Ignorer) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

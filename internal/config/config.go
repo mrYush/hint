@@ -78,6 +78,16 @@ type InstructionSettings struct {
 	// Budget is the byte budget shared by every instruction file, the
 	// global one included. Always positive after loading.
 	Budget int
+	// BudgetExplicit reports that a file, HINT_INSTRUCTION_BUDGET or
+	// --instruction-budget set Budget. When false, Budget is the built-in
+	// default and the project package scales it down to the model's
+	// context window (WP0.12); an explicit budget is taken as given.
+	BudgetExplicit bool
+	// Summarize lets a model summarize instruction files that do not fit
+	// the budget even as outlines (instructions.summarize,
+	// HINT_INSTRUCTIONS_SUMMARIZE, --summarize-instructions). Off by
+	// default: a paraphrase of the user's own words must be their choice.
+	Summarize bool
 }
 
 // OverviewSettings shapes the directory listing placed in the system

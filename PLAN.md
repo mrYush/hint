@@ -126,26 +126,37 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   cancels the group, an error result or panic does not; optional
   `ToolCall.After` hint on the wire, no `WireVersion` bump; read-class
   tools are now contractually safe for concurrent `Run`).
-- **Next:** WP0.12. The Raspberry Pi smoke run on a `linux_arm64` release
-  archive and the `v0.1-alpha` tag are deferred until WP0.11 and WP0.12
-  have landed (decided 2026-09-07).
-- **Planned after project context:** WP0.12 — what the agent does when
-  the instruction files do not fit the budget: a budget scaled to the
-  model's window, outlines instead of blind cuts, an `instructions` tool
-  that fetches a section or answers "where does this rule come from",
-  opt-in cached summaries, and splitting `HINT.md` into `.hint/rules/`
-  loaded on first touch (see
-  [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget)).
-  Until then WP0.8's cut-and-warn applies.
+  WP0.12 rungs 0–3 — instructions beyond the budget (the default budget
+  scales to the profile's context window; every instruction file is
+  guaranteed its outline before any gets more, so a nearer file is never
+  dropped; an over-budget Markdown file shows whole sections while they
+  fit and the rest as heading + first sentence + `[...]`; the read-only
+  `instructions` tool returns a file, a section or the `path:line` a
+  quoted rule comes from, over the run's discovered files only; opt-in
+  `instructions.summarize` has a model summarize what not even outlines
+  can fit, cached by content hash under `~/.cache/hint/instructions`).
+  WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front
+  matter and `.cursor/rules/*.mdc` as a compatible source; a rule with
+  paths loads once a tool reads or writes a matching file, one without
+  loads always after its directory's `HINT.md`; `agent.Preamble`
+  rebuilds the system prompt before every request from the tool calls in
+  the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
+  file tools name what they touch; the glob matcher is now
+  `internal/glob`).
+- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release
+  archive and the `v0.1-alpha` tag (deferred behind WP0.11 and WP0.12 on
+  2026-09-07; both have landed).
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
   interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
   gate (it explores the project itself and can edit it and run commands
   with confirmation), read the global and the project's `HINT.md`, and
   record every conversation as a session that `-c`, `-r` or `--session`
-  continues; independent reads in one tool batch run in parallel. CI and
-  the release pipeline are in place; what is left for `v0.1` is WP0.12
-  and the acceptance run on a Raspberry Pi.
+  continues; independent reads in one tool batch run in parallel, and
+  instruction files that outgrow the budget arrive as outlines the
+  `instructions` tool expands, or split into rules that load when the
+  conversation reaches their paths. CI and the release pipeline are in
+  place; what is left for `v0.1` is the acceptance run on a Raspberry Pi.
 
 ## Compatibility decision
 
@@ -175,9 +186,12 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution).
 7. ~~Tool schedule: parallel reads, ordered writes.~~ Done — see
    [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done).
-8. WP0.12 (instructions beyond the budget). Then the Raspberry Pi smoke
-   run and tag `v0.1-alpha` (deferred behind WP0.11 and WP0.12 on
-   2026-09-07).
+8. ~~WP0.12 rungs 0–3 (window-scaled budget, outlines, the
+   `instructions` tool, opt-in summaries).~~ Done — see
+   [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
+9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
+   [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
+   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
 
 ## Open questions
 
@@ -190,7 +204,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
-| Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | Decide when WP0.12 starts; the first three rungs do not depend on it |
+| Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
 
 ## Prior art
 
