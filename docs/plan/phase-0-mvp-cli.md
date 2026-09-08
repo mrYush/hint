@@ -965,7 +965,7 @@ Decisions (2026-09-07):
   `debug.ReadBuildInfo` (module version, `vcs.revision`, `vcs.time`,
   `-dirty`). The flags win when set.
 
-### WP0.11 — Tool schedule: groups and chains
+### WP0.11 — Tool schedule: groups and chains — **done**
 
 The Agent — not the user, not a second planner round-trip — decides the
 order of a turn's tool-call batch. Two composable nodes cover arbitrary
@@ -985,25 +985,65 @@ Not on the `v0.1-alpha` critical path (WP0.1–WP0.7). Sequential execution
 remains the Phase 0 acceptance default. Depends on WP0.5 (something to
 schedule) and WP0.6 (gating must stay per-call and ordered).
 
-- [ ] `Schedule` as a closed node tree (`Seq` / `Par` / `Call`) inside
+- [x] `Schedule` as a closed node tree (`Seq` / `Par` / `Call`) inside
       `internal/agent` — the loop walks it; `runTools` becomes the `Call`
-      leaf
-- [ ] Agent-built schedule from the model's `ToolCall` list: `ClassRead`
-      calls with disjoint paths may share a `Par`; `ClassWrite` /
-      `ClassExecute` and any call that shares a path with a sibling become
-      `Seq` (never a gated call inside a `Par`)
-- [ ] Deterministic result order: within a `Par`, results append in the
+      leaf (`schedule.go`: `node` sealed by an unexported marker method,
+      `seq` / `par` / `call`; `tools.go`: a `batch` walks the tree)
+- [x] Agent-built schedule from the model's `ToolCall` list: consecutive
+      `ClassRead` calls share a `Par`; `ClassWrite` / `ClassExecute` and
+      unknown tools are steps of their own (never a gated call inside a
+      `Par`). The path rule was dropped — see the decisions below
+- [x] Deterministic result order: within a `Par`, results append in the
       model's request order, not finish order — session replay (WP0.7) and
       WP0.6 prompts stay stable
-- [ ] Existing three tool-failure shapes still apply: `IsError` / unknown /
+- [x] Existing three tool-failure shapes still apply: `IsError` / unknown /
       panic of one `Par` leaf does not cancel siblings already started;
       a machinery `error` cancels the group's `ctx` and aborts the turn
-- [ ] Optional additive `ToolCall.After []string` (call IDs) so the model
+- [x] Optional additive `ToolCall.After []string` (call IDs) so the model
       can tighten a dependency the heuristic cannot see; unknown IDs are
       ignored and the conservative schedule wins. No `WireVersion` bump
-- [ ] Loop unit tests: a `Par` of two reads; a `Seq` of write-then-read;
+- [x] Loop unit tests: a `Par` of two reads; a `Seq` of write-then-read;
       a nested `Seq(Par(...), Call)`; fallback to a plain chain; a gated
-      call never enters a `Par`
+      call never enters a `Par` — plus a panic beside a sibling, a
+      machinery error canceling the group, Ctrl-C with a group in flight,
+      an `After` hint; `buildSchedule` has its own table test
+
+Decisions (2026-09-07):
+
+- **Grouping by action class, not by path.** The checklist asked for
+  "reads with disjoint paths"; the implementation looks at `Class()`
+  only. Two reads cannot conflict whatever they touch, and a read/write
+  conflict is already ordered because a write is never in a `Par`: the
+  batch `read a, read b, edit a, read a` becomes
+  `Seq(Par(read a, read b), edit a, read a)` with no path knowledge at
+  all. A path rule would have needed either argument sniffing by JSON key
+  or a new interface no read tool implements, to forbid overlaps that
+  are harmless. Revisit if a tool ever appears whose reads are unsafe to
+  overlap with each other.
+- **Read-class tools must be safe for concurrent use.** That is now part
+  of the `agentapi.Tool` contract (doc comment; no wire change). Every
+  built-in read tool is stateless or, for `todo`, already behind a
+  mutex; an MCP-backed tool (Phase 2) will have to serialize inside its
+  adapter if its transport cannot.
+- **Fan-out is bounded and configurable in code, not yet in config.**
+  `Limits.MaxParallelTools` (default 8) caps how many leaves of one
+  `Par` run at once; `<= 1` is the WP0.4 chain, which the tests about
+  "the call after the interrupted one" opt into. A flag or config key is
+  a WP0.9-style addition for when someone needs it.
+- **Events interleave; messages do not.** `tool_start` / `tool_end` for
+  the leaves of a group arrive as they happen, so a client can show what
+  is running; the tool result messages are appended — and the session
+  recorded — in request order once the group joins. The Recorder never
+  looked at tool events, so the session format is untouched.
+- **Prompts inside a group are serialized anyway.** The Authorizer
+  contract says it never asks about read-class calls and the schedule
+  never groups gated classes, but a mutex around the prompt costs one
+  line and turns a violated contract into a slow batch instead of two
+  questions racing for one terminal.
+- **Nobody sets `After` yet.** No provider dialect carries such a field;
+  it exists on the wire for a Phase 1 client or a tool wrapper that
+  knows a dependency, and the schedule honours it only in the direction
+  that cannot reorder the model's request.
 
 Decisions recorded now, because they constrain WP0.6's confirmation UI
 and the `ToolCall` wire type:
@@ -1169,8 +1209,10 @@ Decisions recorded now:
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
-WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending).
-WP0.11 sits after WP0.6 (it needs per-call gating to exist) and WP0.12 after
-WP0.9 (it needs the config knobs); neither is
-required for `v0.1-alpha`.
-Tag `v0.1-alpha` once WP0.1–WP0.7 land; `v0.1` after acceptance criteria pass.
+WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending) →
+WP0.11 (done) → WP0.12.
+WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
+after WP0.9 (it needs the config knobs); neither was required for
+`v0.1-alpha`, but the decision of 2026-09-07 is to land both first: the
+Raspberry Pi smoke run and the `v0.1-alpha` tag follow WP0.12.
+`v0.1` after acceptance criteria pass.

@@ -118,12 +118,17 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `mrYush/homebrew-hint` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
   tree). The Raspberry Pi smoke run is the one box still open.
-- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release archive,
-  then `v0.1-alpha`; WP0.11 and WP0.12 after that.
-- **Planned after permissions:** WP0.11 — Agent-built tool schedule
-  (parallel groups + sequential chains; see
-  [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains)).
-  Sequential request order stays the WP0.4 default until then.
+  WP0.11 — tool schedule (`internal/agent/schedule.go`: a sealed
+  `seq` / `par` / `call` tree the agent builds from the model's batch —
+  consecutive read-class calls fan out, at most `Limits.MaxParallelTools`
+  (8) at once, every write, command or unknown tool is a step of its own;
+  results and the session stay in request order; a machinery error
+  cancels the group, an error result or panic does not; optional
+  `ToolCall.After` hint on the wire, no `WireVersion` bump; read-class
+  tools are now contractually safe for concurrent `Run`).
+- **Next:** WP0.12. The Raspberry Pi smoke run on a `linux_arm64` release
+  archive and the `v0.1-alpha` tag are deferred until WP0.11 and WP0.12
+  have landed (decided 2026-09-07).
 - **Planned after project context:** WP0.12 — what the agent does when
   the instruction files do not fit the budget: a budget scaled to the
   model's window, outlines instead of blind cuts, an `instructions` tool
@@ -138,8 +143,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   gate (it explores the project itself and can edit it and run commands
   with confirmation), read the global and the project's `HINT.md`, and
   record every conversation as a session that `-c`, `-r` or `--session`
-  continues. CI and the release pipeline are in place; what is left for
-  `v0.1` is the acceptance run on a Raspberry Pi.
+  continues; independent reads in one tool batch run in parallel. CI and
+  the release pipeline are in place; what is left for `v0.1` is WP0.12
+  and the acceptance run on a Raspberry Pi.
 
 ## Compatibility decision
 
@@ -167,7 +173,11 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done).
 6. ~~CI, goreleaser, Homebrew.~~ Done — see
    [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution).
-   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
+7. ~~Tool schedule: parallel reads, ordered writes.~~ Done — see
+   [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done).
+8. WP0.12 (instructions beyond the budget). Then the Raspberry Pi smoke
+   run and tag `v0.1-alpha` (deferred behind WP0.11 and WP0.12 on
+   2026-09-07).
 
 ## Open questions
 
@@ -179,7 +189,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
-| Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains); revisit only with a concrete counterexample |
+| Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
 | Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | Decide when WP0.12 starts; the first three rungs do not depend on it |
 
 ## Prior art

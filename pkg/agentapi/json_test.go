@@ -98,6 +98,14 @@ func TestToolTypesRoundTrip(t *testing.T) {
 			Arguments: json.RawMessage(`{"command":"go test ./...","timeout":120}`),
 		})
 	})
+	t.Run("call with after", func(t *testing.T) {
+		roundTrip(t, agentapi.ToolCall{
+			ID:        "call_2",
+			Name:      "read_file",
+			Arguments: json.RawMessage(`{"path":"go.mod"}`),
+			After:     []string{"call_1"},
+		})
+	})
 	t.Run("result", func(t *testing.T) {
 		roundTrip(t, agentapi.TextResult("call_1", "bash", "ok\n"))
 	})
@@ -219,6 +227,13 @@ func TestJSONFieldNames(t *testing.T) {
 			name:  "tool call",
 			value: agentapi.ToolCall{ID: "c1", Name: "glob", Arguments: json.RawMessage(`{"pattern":"*.go"}`)},
 			want:  `{"id":"c1","name":"glob","arguments":{"pattern":"*.go"}}`,
+		},
+		{
+			// After is optional and omitted when empty, so a batch without
+			// hints — every provider today — is written exactly as before.
+			name:  "tool call with after",
+			value: agentapi.ToolCall{ID: "c2", Name: "read_file", Arguments: json.RawMessage(`{"path":"a"}`), After: []string{"c1"}},
+			want:  `{"id":"c2","name":"read_file","arguments":{"path":"a"},"after":["c1"]}`,
 		},
 		{
 			name:  "tool schema",
