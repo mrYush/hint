@@ -27,6 +27,7 @@ go.work.sum
 # Скомпилированные бинарные файлы
 /hint
 /hint.exe
+/hint_*
 /bin/
 /dist/
 

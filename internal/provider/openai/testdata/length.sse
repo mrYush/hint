@@ -1,0 +1,6 @@
+data: {"choices":[{"index":0,"delta":{"content":"truncat"}}]}
+
+data: {"choices":[{"index":0,"delta":{},"finish_reason":"max_tokens"}]}
+
+data: [DONE]
+
