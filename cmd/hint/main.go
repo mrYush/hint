@@ -34,7 +34,7 @@ func buildVersion() string {
 
 // formatVersion combines the -ldflags values with what the Go toolchain
 // stamps into the binary on its own: the module version of a
-// `go install ...@v0.1.0`, and the commit and its time of a `go build`
+// `go install ...@v0.2.0`, and the commit and its time of a `go build`
 // inside a checkout. The flags win when set, so a release build is
 // described the same way whichever path produced it.
 func formatVersion(version, commit, date string, info *debug.BuildInfo) string {

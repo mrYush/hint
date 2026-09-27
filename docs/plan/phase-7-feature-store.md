@@ -1,6 +1,6 @@
 # Phase 7 — Feature store (third-party catalog)
 
-> Status: Planned · Target release: **v0.8–v1.0** · Estimate: 10–14 weeks (part-time)
+> Status: Planned · Target release: **v0.9–v1.0** · Estimate: 10–14 weeks (part-time)
 > Depends on: Phase 2 (MCP), Phase 1 (stable agentapi)
 
 ## Goal
