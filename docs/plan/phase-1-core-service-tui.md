@@ -1,6 +1,6 @@
 # Phase 1 — Core as a service + TUI
 
-> Status: Planned · Target release: **v0.2** · Estimate: 4–6 weeks (part-time)
+> Status: Planned · Target release: **v0.3** · Estimate: 4–6 weeks (part-time)
 > Depends on: Phase 0
 
 ## Goal

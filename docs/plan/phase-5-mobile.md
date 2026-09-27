@@ -1,6 +1,6 @@
 # Phase 5 — Mobile: iPhone / iPad / Android
 
-> Status: Planned · Target release: **v0.6** (TestFlight / closed Google Play beta) · Estimate: 10–16 weeks (part-time)
+> Status: Planned · Target release: **v0.7** (TestFlight / closed Google Play beta) · Estimate: 10–16 weeks (part-time)
 > Depends on: Phase 1 (agentapi contract), Phase 3 (VLM/STT/TTS)
 > Can run in parallel with: Phase 6
 

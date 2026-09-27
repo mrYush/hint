@@ -1,6 +1,6 @@
 # Phase 2 — Memory, MCP, code maturity
 
-> Status: Planned · Target release: **v0.3** · Estimate: 6–8 weeks (part-time)
+> Status: Planned · Target release: **v0.4** · Estimate: 6–8 weeks (part-time)
 > Depends on: Phase 1
 > Exit bar: core parity with archived opencode / early Crush.
 

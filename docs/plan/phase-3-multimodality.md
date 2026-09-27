@@ -1,6 +1,6 @@
 # Phase 3 — Multimodality: VLM, STT, TTS
 
-> Status: Planned · Target release: **v0.4** · Estimate: 6–8 weeks (part-time)
+> Status: Planned · Target release: **v0.5** · Estimate: 6–8 weeks (part-time)
 > Depends on: Phase 2 (provider maturity), Phase 1 (TUI for voice UX)
 > Platforms unchanged; Raspberry Pi becomes a full voice device (mic+speaker).
 

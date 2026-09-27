@@ -95,8 +95,8 @@ Flow:
 - **Releases**: a `release/vX.Y` branch is cut from `develop` when the
   version's scope is complete. Only stabilization fixes and release chores
   land on it. It is then merged into `main` with a regular merge (`--no-ff`),
-  the merge commit on `main` is tagged with an annotated `vX.Y[.Z]` tag
-  (pre-releases like `v0.1-alpha` included), and the release branch is
+  the merge commit on `main` is tagged with an annotated `vX.Y.Z` tag
+  (pre-releases like `v0.2.0-alpha` included), and the release branch is
   **merged back into `develop`** so stabilization fixes aren't lost, then
   deleted. The version plan per phase is in [PLAN.md](PLAN.md).
 - **Release pipeline**: pushing the tag runs
