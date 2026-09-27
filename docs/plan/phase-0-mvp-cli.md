@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: In progress · Target release: **v0.1** · Estimate: 6–10 weeks (part-time)
+> Status: In progress · Target release: **v0.2.0** · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -936,7 +936,9 @@ depend on them:
 - [x] GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
 - [x] goreleaser config; binaries attached to GitHub Releases
 - [x] Homebrew tap
-- [ ] Raspberry Pi smoke run of the acceptance scenarios on linux/arm64
+- [ ] Raspberry Pi 5 smoke run of the acceptance scenarios on linux/arm64
+      (deferred to the tag after `v0.2.0-alpha`, decided 2026-09-14; Pi 4 4 GB
+      offline-fallback guide: [`docs/raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md))
 - [x] Update README for the new CLI surface
 
 Decisions (2026-09-07):
@@ -953,17 +955,25 @@ Decisions (2026-09-07):
   block in favour of `homebrew_casks`, and a prebuilt binary is what a
   cask is for. The cask depends on the `ripgrep` formula and carries the
   quarantine-lifting post-install hook goreleaser documents for unsigned
-  binaries. Signing and notarization stay out of scope for `v0.1`.
+  binaries. Signing and notarization stay out of scope for `v0.2.0`.
 - **The tap push is a separate secret.** `HOMEBREW_TAP_TOKEN` must be a
   token with write access to `mrYush/homebrew-hint`; the workflow's own
   `GITHUB_TOKEN` is scoped to this repository. Pre-releases skip the tap
-  (`skip_upload: auto`), so `v0.1-alpha` needs no token; the first final
+  (`skip_upload: auto`), so `v0.2.0-alpha` needs no token; the first final
   tag does.
 - **Version from two sources.** goreleaser sets `main.version`, `commit`
   and `date` through `-ldflags -X`; a `go install ...@vX.Y.Z` or a plain
   `go build` in a checkout gets the same shape from
   `debug.ReadBuildInfo` (module version, `vcs.revision`, `vcs.time`,
   `-dirty`). The flags win when set.
+
+Decision (2026-09-14):
+
+- **Pi 5 smoke does not block `v0.2.0-alpha`.** WP0.1–WP0.12 and the release
+  pipeline are enough for the pre-release tag. Acceptance criterion 5
+  (scenarios on a Raspberry Pi 5) and this checkbox remain required for
+  `v0.2.0`. A Pi 4 4 GB guide documents offline fallback under a tighter
+  RAM budget; it does not substitute for the Pi 5 gate.
 
 ### WP0.11 — Tool schedule: groups and chains — **done**
 
@@ -981,7 +991,7 @@ A schedule is a series-parallel tree of those nodes. Nesting is the point:
 four extra model turns. A missing or invalid schedule degrades to today's
 WP0.4 chain (request order) so the loop never blocks on a planner.
 
-Not on the `v0.1-alpha` critical path (WP0.1–WP0.7). Sequential execution
+Not on the `v0.2.0-alpha` critical path (WP0.1–WP0.7). Sequential execution
 remains the Phase 0 acceptance default. Depends on WP0.5 (something to
 schedule) and WP0.6 (gating must stay per-call and ordered).
 
@@ -1098,7 +1108,7 @@ bounded — but the cut has three defects worth a package of their own:
 
 The package is an escalation ladder. Each rung is cheaper and more
 faithful than the next, and a rung is taken only when the previous one
-cannot make the instructions fit. Nothing here is required for `v0.1`;
+cannot make the instructions fit. Nothing here is required for `v0.2.0`;
 the first three rungs are Phase 0 material once WP0.9 gives `Load` its
 config knobs, the fourth needs a per-turn hook in the agent loop.
 
@@ -1294,20 +1304,25 @@ Decisions recorded when the package was planned:
    calls `list_dir`/`read_file` itself and answers (no manual context assembly).
 2. `hint "add --version flag handling to main.go"` — the agent shows a diff,
    asks for confirmation, applies the edit.
-3. Internet off + Ollama running → the same scenario works through the
-   fallback profile without changing the command.
+3. Internet off + a local fallback profile running → the same scenario works
+   through the fallback without changing the command (Ollama on Pi 5 / desktop;
+   `llama-server` on Pi 4 4 GB — see [`raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md)).
 4. `hint -c` continues yesterday's dialogue with preserved context.
 5. A binary built with `GOOS=linux GOARCH=arm64` passes the same scenarios on
    a Raspberry Pi 5.
+
+Criteria 1–4 are the functional Phase 0 bar. Criterion 5 is the
+`linux/arm64` hardware gate for **`v0.2.0`**. It does **not** block
+`v0.2.0-alpha` (deferred 2026-09-14); the checklist is
+[`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md).
 
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
-WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending) →
-WP0.11 (done) → WP0.12 (done).
+WP0.9 (done) → WP0.10 (CI/release done; Pi 5 smoke deferred past
+`v0.2.0-alpha`) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` →
+Pi 5 smoke → `v0.2.0`.
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
-after WP0.9 (it needs the config knobs); neither was required for
-`v0.1-alpha`, but the decision of 2026-09-07 is to land both first: the
-Raspberry Pi smoke run and the `v0.1-alpha` tag follow WP0.12.
-`v0.1` after acceptance criteria pass.
+after WP0.9 (it needs the config knobs). Neither was required for
+`v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).

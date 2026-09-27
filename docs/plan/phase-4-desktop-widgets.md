@@ -1,6 +1,6 @@
 # Phase 4 — Desktop widgets (macOS / Windows / Linux)
 
-> Status: Planned · Target release: **v0.5** · Estimate: 6–10 weeks (part-time)
+> Status: Planned · Target release: **v0.6** · Estimate: 6–10 weeks (part-time)
 > Depends on: Phase 1 (RPC core), Phase 3 (camera/mic/screenshot scenarios)
 
 ## Goal

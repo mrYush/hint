@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-07
+> Status: living document · Last updated: 2026-09-27
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -59,14 +59,19 @@ part-time; roughly halve them for full-time.
 
 | Phase | Name | Release | Duration | Detailed plan |
 |---|---|---|---|---|
-| 0 | MVP CLI: agent loop, tools, permissions, sessions | v0.1 | 6–10 wk | [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md) |
-| 1 | Core as a service + TUI | v0.2 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
-| 2 | Memory, MCP client, code maturity | v0.3 | 6–8 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
-| 3 | Multimodality: VLM, STT, TTS | v0.4 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
-| 4 | Desktop widgets (macOS/Windows/Linux) | v0.5 | 6–10 wk | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
-| 5 | Mobile: iPhone / iPad / Android | v0.6 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
-| 6 | Sensors and devices (parallel with 5) | v0.7 | 8–12 wk | [phase-6-sensors.md](docs/plan/phase-6-sensors.md) |
-| 7 | Feature store (third-party catalog) | v0.8–v1.0 | 10–14 wk | [phase-7-feature-store.md](docs/plan/phase-7-feature-store.md) |
+| 0 | MVP CLI: agent loop, tools, permissions, sessions | v0.2.0 | 6–10 wk | [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md) |
+| 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
+| 2 | Memory, MCP client, code maturity | v0.4 | 6–8 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
+| 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
+| 4 | Desktop widgets (macOS/Windows/Linux) | v0.6 | 6–10 wk | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
+| 5 | Mobile: iPhone / iPad / Android | v0.7 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
+| 6 | Sensors and devices (parallel with 5) | v0.8 | 8–12 wk | [phase-6-sensors.md](docs/plan/phase-6-sensors.md) |
+| 7 | Feature store (third-party catalog) | v0.9–v1.0 | 10–14 wk | [phase-7-feature-store.md](docs/plan/phase-7-feature-store.md) |
+
+Version numbers start at `v0.2.0` (decided 2026-09-27): the `v0.1.0` tag
+already in the repository belongs to the earlier, substantially different
+application and is left as is. Pre-release tags carry a suffix
+(`v0.2.0-alpha`); every tag is full semver, as Go modules require.
 
 Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
@@ -121,7 +126,11 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   a `v*` tag: archives, checksums, GitHub Release, Homebrew cask in
   `mrYush/homebrew-hint` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
-  tree). The Raspberry Pi smoke run is the one box still open.
+  tree). The Raspberry Pi 5 smoke run that closes WP0.10's last checkbox is
+  **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Offline
+  fallback on a Pi 4 4 GB board is documented in
+  [`docs/raspberry-pi-4-4gb.md`](docs/raspberry-pi-4-4gb.md); that run does
+  not tick the Pi 5 acceptance criterion.
   WP0.11 — tool schedule (`internal/agent/schedule.go`: a sealed
   `seq` / `par` / `call` tree the agent builds from the model's batch —
   consecutive read-class calls fan out, at most `Limits.MaxParallelTools`
@@ -147,9 +156,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release
-  archive and the `v0.1-alpha` tag (deferred behind WP0.11 and WP0.12 on
-  2026-09-07; both have landed).
+- **Next:** cut `v0.2.0-alpha` (WP0.1–WP0.12 landed; Pi 5 acceptance deferred
+  to the following tag, 2026-09-14). Then the Raspberry Pi 5 smoke run from
+  [`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md)
+  before `v0.2.0`.
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
   interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
@@ -160,7 +170,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   instruction files that outgrow the budget arrive as outlines the
   `instructions` tool expands, or split into rules that load when the
   conversation reaches their paths. CI and the release pipeline are in
-  place; what is left for `v0.1` is the acceptance run on a Raspberry Pi.
+  place. What remains for `v0.2.0` (not for `v0.2.0-alpha`) is acceptance
+  criterion 5 on a Raspberry Pi 5.
 
 ## Compatibility decision
 
@@ -195,14 +206,17 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
 9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
-   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
+10. Tag `v0.2.0-alpha` (Pi 5 smoke deferred to the next tag — see
+    [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution)
+    and [raspberry-pi-smoke-test.md](docs/plan/raspberry-pi-smoke-test.md)).
+11. Raspberry Pi 5 acceptance run, then `v0.2.0`.
 
 ## Open questions
 
 | # | Question | Blocking | Resolution path |
 |---|---|---|---|
 | Q1 | api-bar.ru: exact `base_url`, model list, modality support (embeddings/vision/audio) | Phase 0 CI matrix entry only (config-driven, no code impact) | **Chat resolved by WP0.2**: `base_url` is `https://api-bar.ru/route/openai` (the gateway's public contour is `/route/<provider>/…`; models via `GET /route/openai/models`). Embeddings/vision/audio stay open for Phase 2–3 — other providers use different route shapes |
-| Q2 | Product name: keep `hint` or rebrand? | Phase 7 (public catalog) at the latest; binary/config names are cheap to alias earlier | Decide before v0.5 (first non-CLI audience) |
+| Q2 | Product name: keep `hint` or rebrand? | Phase 7 (public catalog) at the latest; binary/config names are cheap to alias earlier | Decide before v0.6 (first non-CLI audience) |
 | Q3 | Wails vs. native WinUI 3 for the Windows widget | Phase 4 | Spike at the start of Phase 4 |
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |

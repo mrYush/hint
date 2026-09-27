@@ -1,6 +1,6 @@
 # Phase 6 — Sensors and devices
 
-> Status: Planned · Target release: **v0.7** · Estimate: 8–12 weeks (part-time)
+> Status: Planned · Target release: **v0.8** · Estimate: 8–12 weeks (part-time)
 > Depends on: Phase 2 (MCP client) · Can run in parallel with: Phase 5
 
 ## Goal
