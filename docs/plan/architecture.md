@@ -23,6 +23,11 @@ The pattern is proven in the industry:
   clients connect to it.
 - **Claude Code** — CLI, VS Code plugin, and web UI run on one agent backend
   with a single master loop.
+- **DeepSeek Harness (`dsh`)** ([deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness))
+  — profile/bundle composition: `web`, `headless`, `sdk`, and `acp` are one
+  plugin tree assembled behind different thin-client surfaces (browser app,
+  one-shot runner, JSON-RPC SDK server, automation-only ACP server) from the
+  same binary.
 
 ## Target package layout
 
@@ -180,6 +185,7 @@ session files and shipped over RPC:
 | opencode (archived, MIT, Go) | [opencode-ai/opencode](https://github.com/opencode-ai/opencode) | Skeleton: agent loop, built-in tools, SQLite sessions, MCP client, Bubble Tea TUI, auto-compaction |
 | Crush (Go) | [charmbracelet/crush](https://github.com/charmbracelet/crush) | Granular permission system, mid-session model switching, LSP support, per-project session contexts |
 | Claude Code | [anthropics/claude-code](https://github.com/anthropics/claude-code) (docs) | Philosophy: one flat `while(tool_call)` loop, ~14 tools, TODO planning, depth-limited subagents, hooks/skills/plugins as 4 extension mechanisms, compaction at ~92% of the window |
+| DeepSeek Harness (`dsh`, TS) | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | Cordis "everything is a plugin" architecture: capability seam = Service Definition / Service Provider / Consumer, matching our own `pkg/agentapi` (interfaces) vs. `internal/provider`+`internal/tool` (implementations) split; profile/bundle composition (`web`/`headless`/`sdk`/`acp` share one plugin tree) as a second real-world "core as a service" validation, alongside Pi/OpenCode/Claude Code above; versioned session log under a "model-visible ⟺ logged" invariant, close in spirit to WP0.7's Record union. MIT, but TypeScript — a pattern source in practice, not code to port |
 | Aider (Python) | [Aider-AI/aider](https://github.com/Aider-AI/aider) | Repo map: tree-sitter + PageRank symbol ranking within ~1k tokens; edit formats (search/replace, udiff, whole-file) chosen per model strength; architect mode; git-first: every edit is a commit |
 | Codex CLI (Rust) | [openai/codex](https://github.com/openai/codex) | Sandboxed command execution, approval modes (suggest/auto-edit/full-auto) |
 | Gemini CLI (TS) | [google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | Tool schemas, checkpointing, built-in MCP, GEMINI.md context format |

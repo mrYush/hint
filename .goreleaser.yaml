@@ -63,7 +63,7 @@ release:
   github:
     owner: mrYush
     name: hint
-  # v0.1-alpha and friends are GitHub pre-releases; a plain vX.Y is final.
+  # v0.2.0-alpha and friends are GitHub pre-releases; a plain vX.Y.Z is final.
   prerelease: auto
   name_template: "{{ .Tag }}"
 

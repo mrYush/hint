@@ -12,6 +12,13 @@ roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
+| `raspberry-pi-smoke-test.md` | Checklist for WP0.10’s Raspberry Pi **5** acceptance run (required for `v0.2.0`; deferred past `v0.2.0-alpha`) |
+| [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe. Does not close WP0.10 |
+
+Product documentation under `docs/` is limited to launch instructions,
+examples, rationale for chosen solutions, device coverage, and use cases.
+Chronological field / incident logs for a later article are kept out of this
+index and are not part of the product doc set.
 
 ## Source of truth and issue tracking
 
