@@ -147,9 +147,11 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** the Raspberry Pi smoke run on a `linux_arm64` release
-  archive and the `v0.1-alpha` tag (deferred behind WP0.11 and WP0.12 on
-  2026-09-07; both have landed).
+- **Next:** [WP0.13 — release readiness](docs/plan/phase-0-mvp-cli.md#wp013--release-readiness-for-v01-alpha):
+  settle the tag name (Q10), fix the macOS-only test failures, a
+  goreleaser snapshot build, the Raspberry Pi smoke run on its
+  `linux_arm64` archive, README / release notes / `SECURITY.md`, then the
+  release branch and the tag.
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
   interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
@@ -160,7 +162,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   instruction files that outgrow the budget arrive as outlines the
   `instructions` tool expands, or split into rules that load when the
   conversation reaches their paths. CI and the release pipeline are in
-  place; what is left for `v0.1` is the acceptance run on a Raspberry Pi.
+  place; what is left before the first tag is WP0.13.
 
 ## Compatibility decision
 
@@ -195,7 +197,10 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
 9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
-   Then the Raspberry Pi smoke run and tag `v0.1-alpha`.
+10. Release readiness — see
+   [WP0.13](docs/plan/phase-0-mvp-cli.md#wp013--release-readiness-for-v01-alpha):
+   the checklist from the tag name to the published pre-release,
+   including the Raspberry Pi smoke run.
 
 ## Open questions
 
@@ -210,6 +215,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
 | Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
+| Q10 | Tag for the first pre-release: `v0.1-alpha` as planned, or a version above the stale 2025 `v0.1.0` (e.g. `v0.2.0-alpha.1`)? `v0.1-alpha` sorts below `v0.1.0`, and `go install …@latest` resolves to the 2025 code from the Go proxy either way until a final release retracts it | The first tag (WP0.13) | Open. Recommendation in [WP0.13](docs/plan/phase-0-mvp-cli.md#wp013--release-readiness-for-v01-alpha): `v0.2.0-alpha.1`, and `retract v0.1.0` in the first final release |
 
 ## Prior art
 

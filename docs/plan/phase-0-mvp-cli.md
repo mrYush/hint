@@ -1288,6 +1288,104 @@ Decisions recorded when the package was planned:
   gemini-cli's and goose's import syntaxes buy little over a directory
   of files and add a parser that can loop.
 
+### WP0.13 — Release readiness for `v0.1-alpha`
+
+Every feature package has landed, but a review of the repository on
+2026-09-27 found that the path from `develop` to a published pre-release
+was never walked end to end, and that two facts outside the code break it:
+
+1. **A stale `v0.1.0` already exists.** It is a GitHub pre-release from
+   2025-03-13, cut from the pre-WP0.3 code (it still has `internal/llm`),
+   and it is an ancestor of `develop`. `v0.1-alpha` parses as semver
+   `0.1.0-alpha`, which sorts *below* it, so the new build would look older
+   than the old one to GitHub, to goreleaser's "previous tag" and to Go.
+2. **`go install …@latest` installs the 2025 code.** proxy.golang.org has
+   cached `v0.1.0` for good; deleting the tag does not remove it. A
+   pre-release can never become `@latest` while a release exists, so the
+   README's `go install` line points every reader at the wrong program.
+
+Neither is a code defect; both must be settled before the tag, because a
+pushed tag is cached by the proxy the moment anyone fetches it.
+
+The package is a checklist, in order. A box is ticked in the PR that does
+it, as elsewhere in this file.
+
+Versioning (decide first; see Q10 in `PLAN.md`):
+
+- [ ] Choose the tag. Recommended: `v0.2.0-alpha.1` — above the stale
+      `v0.1.0`, a valid pre-release, and the "Target release" of this
+      phase becomes `v0.2` (renumber the later phases' targets by one in
+      the same PR). The alternative is to keep `v0.1-alpha` and accept
+      that it sorts below `v0.1.0` until the first final release
+- [ ] Mark the old `v0.1.0` GitHub Release as superseded in its notes (it
+      stays: the proxy has it anyway)
+- [ ] Plan `retract v0.1.0` in `go.mod` for the first final release, so
+      `@latest` skips it from then on (a retraction is only honoured from
+      a version that is itself `@latest`, which a pre-release is not)
+
+Verification:
+
+- [ ] Fix the three `cmd/hint` tests that fail on macOS
+      (`TestOneShotText`, `TestREPL`, `TestPreamble_LoadsRuleOnTouch`):
+      they compare against the raw `t.TempDir()`, while `tool.NewRoot`
+      resolves symlinks (`/var` → `/private/var`). Compare against the
+      resolved path; `go test ./...` must be clean on every dev machine
+- [ ] `goreleaser check` and `goreleaser release --snapshot --clean` pass
+      (they need a newer Go than `go.mod`'s floor; run them in CI or with
+      `GOTOOLCHAIN=auto`); the six archives and `checksums.txt` are in
+      `dist/`, and `hint --version` in the `linux_arm64` one prints the
+      snapshot version, not `dev`
+- [ ] The Raspberry Pi smoke run (WP0.10's open box) on that snapshot
+      `linux_arm64` archive, not on a hand `go build`: the five acceptance
+      scenarios below, recorded here with the date, the Pi model and OS,
+      the provider profile and the Ollama model used for scenario 3
+- [ ] One smoke run each of `hint -p` on macOS (arm64) and Windows
+      (amd64) from the snapshot archives: CI only compiles them (WP0.10)
+
+Documents:
+
+- [ ] `README.md`: the `go install` line names the tagged version instead
+      of `@latest` until the first final release; the Homebrew section
+      says the tap starts with the first final release
+- [ ] Release notes, written by hand in the GitHub Release (goreleaser's
+      generated changelog runs from `v0.1.0` and lists all of 2025–2026):
+      what works, the known limits from WP0.9, unsigned binaries and the
+      macOS quarantine, where to report problems
+- [ ] `SECURITY.md`: how to report a vulnerability, and what `--yolo` and
+      `--auto-edit` hand over — the agent runs shell commands
+- [ ] `CONTRIBUTING.md`: the tag example matches the chosen scheme
+- [ ] On release: this file's status line becomes `Released <tag>`, the
+      Pi box and this package are ticked, `PLAN.md`'s status and next
+      steps move on
+
+Release process (`CONTRIBUTING.md`, "Releases"):
+
+- [ ] Branch protection on `main` as `CONTRIBUTING.md` describes it (it
+      is not enabled today)
+- [ ] Cut `release/<version>` from `develop` (`main` is ~45 commits
+      behind), only stabilization fixes on it, PR into `main`, annotated
+      tag on the merge commit, merge back into `develop`
+- [ ] After the tag: the Release is marked pre-release, has six archives
+      and `checksums.txt`, and `go install github.com/mrYush/hint/cmd/hint@<tag>`
+      installs a binary whose `--version` names the tag
+
+Before the first final release (not needed for the alpha — pre-releases
+skip the tap):
+
+- [ ] Create `mrYush/homebrew-hint` and the `HOMEBREW_TAP_TOKEN` secret
+- [ ] Ship `retract v0.1.0`
+
+Decisions (2026-09-27):
+
+- **The release is a work package, not a footnote to WP0.10.** WP0.10
+  built the pipeline; nobody has run it against a real tag, and the
+  stale tag and the proxy cache are facts of the world, not of the code.
+  Keeping them in one checklist is what stops the tag from being pushed
+  with half of them done.
+- **Nothing is deleted.** Deleting `v0.1.0` would remove the GitHub
+  Release but not the proxy's copy, and would break anyone who pinned it.
+  The fix is to sort above it and, later, retract it.
+
 ## Acceptance criteria
 
 1. `hint -p "what files are in this project and what do they do"` — the agent
@@ -1305,9 +1403,10 @@ Decisions recorded when the package was planned:
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (done; the Raspberry Pi run is pending) →
-WP0.11 (done) → WP0.12 (done).
+WP0.11 (done) → WP0.12 (done) → WP0.13 (release readiness).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs); neither was required for
 `v0.1-alpha`, but the decision of 2026-09-07 is to land both first: the
-Raspberry Pi smoke run and the `v0.1-alpha` tag follow WP0.12.
+Raspberry Pi smoke run and the `v0.1-alpha` tag follow WP0.12; WP0.13
+(2026-09-27) collects them with the rest of what the tag needs.
 `v0.1` after acceptance criteria pass.
