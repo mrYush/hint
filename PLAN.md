@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-27
+> Status: living document · Last updated: 2026-09-30
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -157,7 +157,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
 - **Next:** cut `v0.2.0-alpha` (WP0.1–WP0.12 landed; Pi 5 acceptance deferred
-  to the following tag, 2026-09-14). Then the Raspberry Pi 5 smoke run from
+  to the following tag, 2026-09-14) by the checklist in
+  [WP0.13](docs/plan/phase-0-mvp-cli.md#wp013--release-readiness-v020-alpha--v020). Then the Raspberry Pi 5 smoke run from
   [`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md)
   before `v0.2.0`.
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
@@ -206,10 +207,12 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
 9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
-10. Tag `v0.2.0-alpha` (Pi 5 smoke deferred to the next tag — see
+10. Tag `v0.2.0-alpha` by
+    [WP0.13](docs/plan/phase-0-mvp-cli.md#wp013--release-readiness-v020-alpha--v020)'s
+    checklist (Pi 5 smoke deferred to the next tag — see
     [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution)
     and [raspberry-pi-smoke-test.md](docs/plan/raspberry-pi-smoke-test.md)).
-11. Raspberry Pi 5 acceptance run, then `v0.2.0`.
+11. Raspberry Pi 5 acceptance run and the rest of WP0.13, then `v0.2.0`.
 
 ## Open questions
 

@@ -1298,6 +1298,79 @@ Decisions recorded when the package was planned:
   gemini-cli's and goose's import syntaxes buy little over a directory
   of files and add a parser that can loop.
 
+### WP0.13 — Release readiness: `v0.2.0-alpha` → `v0.2.0`
+
+The tag scheme is settled (full semver from `v0.2.0`, see `PLAN.md`) and
+the Pi 5 run no longer blocks the pre-release (WP0.10, 2026-09-14). What
+is left is walking the path from `develop` to a published Release, which
+has not been done against a real tag yet. A review on 2026-09-27 found
+what that path still needs; this package keeps it in one checklist so the
+tag is not pushed with half of it done.
+
+One fact outside the code shapes it: **`go install …@latest` installs the
+2025 application.** proxy.golang.org cached the old `v0.1.0` for good,
+and a pre-release never becomes `@latest` while a release exists. Until
+`v0.2.0` is tagged the README must name the version explicitly.
+
+Before `v0.2.0-alpha`:
+
+- [ ] Fix the three `cmd/hint` tests that fail on macOS
+      (`TestOneShotText`, `TestREPL`, `TestPreamble_LoadsRuleOnTouch`):
+      they compare against the raw `t.TempDir()`, while `tool.NewRoot`
+      resolves symlinks (`/var` → `/private/var`). Compare against the
+      resolved path, so `go test ./...` is clean on every dev machine,
+      not only on CI's Linux runner
+- [ ] `goreleaser check` and `goreleaser release --snapshot --clean` pass
+      on the commit to be tagged: six archives and `checksums.txt` in
+      `dist/`, and `hint --version` from an archive prints the snapshot
+      version, not `dev`
+- [ ] `hint -p` smoke from the snapshot archives on macOS arm64 and
+      Windows amd64 — CI compiles those targets but never runs them
+- [ ] `README.md`: `go install` names `@v0.2.0-alpha` instead of
+      `@latest`; the Homebrew section says the tap starts with `v0.2.0`
+- [ ] Release notes written by hand for the GitHub Release (goreleaser's
+      changelog runs from `v0.1.0` and would list all of 2025–2026): what
+      works, the known limits from WP0.9, unsigned binaries and the macOS
+      quarantine, the Pi 5 run still pending, where to report problems
+- [ ] The old `v0.1.0` GitHub Release gets a note that it is the earlier
+      application and superseded by `v0.2.0-alpha`; the tag stays
+- [ ] Branch protection on `main` as `CONTRIBUTING.md` describes it (not
+      enabled today)
+- [ ] `release/v0.2` from `develop`, PR into `main`, annotated
+      `v0.2.0-alpha` on the merge commit, merged back into `develop`
+      (`CONTRIBUTING.md`, "Releases")
+- [ ] After the tag: the Release is a pre-release with six archives and
+      `checksums.txt`, and `go install github.com/mrYush/hint/cmd/hint@v0.2.0-alpha`
+      gives a binary whose `--version` names the tag
+
+Before `v0.2.0`:
+
+- [ ] Raspberry Pi 5 smoke run
+      ([`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md)), which
+      ticks WP0.10's last box and acceptance criterion 5
+- [ ] Create `mrYush/homebrew-hint` and the `HOMEBREW_TAP_TOKEN` secret;
+      without them the final release fails at the cask step after the
+      GitHub Release is already out
+- [ ] `retract v0.1.0` in `go.mod`, so `go list -m -versions` and anyone
+      who pinned it are told it is not this program
+- [ ] `README.md`: `go install …@latest` again, and the Homebrew section
+      without the "from `v0.2.0`" note
+- [ ] `SECURITY.md` with the paragraph now in `CONTRIBUTING.md`
+      ("Security-sensitive areas"), so GitHub shows it in the Security
+      tab, plus what `--auto-edit` and `--yolo` hand over
+- [ ] On release: this file's status line becomes `Released v0.2.0`,
+      `PLAN.md`'s status and next steps move to Phase 1
+
+Decisions (2026-09-30):
+
+- **The release is a work package, not a footnote to WP0.10.** WP0.10
+  built the pipeline; nobody has run it against a real tag, and the
+  proxy cache and the missing tap repository are facts of the world,
+  not of the code.
+- **Nothing is deleted.** Deleting `v0.1.0` removes the GitHub Release
+  but not the proxy's copy, and breaks anyone who pinned it. `v0.2.0`
+  sorts above it; the retraction says the rest.
+
 ## Acceptance criteria
 
 1. `hint -p "what files are in this project and what do they do"` — the agent
@@ -1321,8 +1394,8 @@ Criteria 1–4 are the functional Phase 0 bar. Criterion 5 is the
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (CI/release done; Pi 5 smoke deferred past
-`v0.2.0-alpha`) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` →
-Pi 5 smoke → `v0.2.0`.
+`v0.2.0-alpha`) → WP0.11 (done) → WP0.12 (done) → WP0.13 (release readiness) → tag
+`v0.2.0-alpha` → Pi 5 smoke → `v0.2.0`.
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).
