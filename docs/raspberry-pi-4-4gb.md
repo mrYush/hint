@@ -167,6 +167,7 @@ providers:
     base_url: http://127.0.0.1:8080/v1
     api_key: local
     model: Qwen2.5-1.5B-Instruct-Q4_K_M
+    header_timeout: 15m
 default_provider: api-bar
 fallback_provider: local
 EOF
@@ -175,6 +176,12 @@ EOF
 Zero-config from `API_BAR_KEY` alone synthesizes only a cloud profile.
 Without this file there is nothing to fail over to. Keep `model:` equal to
 the `-a` alias.
+
+`header_timeout` is required here.
+`llama-server` sends the response headers only after it has processed the
+whole prompt, and hint's default wait of 60s is shorter than that on a Pi 4.
+Without it the request times out and the router retries, queueing more
+work behind the prompt the server is still processing.
 
 ### 6. Build and copy hint (development machine)
 
@@ -232,6 +239,9 @@ while all cores sit at 100% — wait before concluding a hang.
   That is a **model-class** limit, not proof that failover is broken. Confirm
   with `HINT_PROVIDER=local $HINT models` and the stderr failover line first.
 - Active cooling matters; an uncooled A72 invalidates any timing anecdote.
+- So does the power supply: `vcgencmd get_throttled` must read `0x0`.
+  Under-voltage pins the A72 at 600 MHz; a measured run there processed
+  the prompt at ~3 tokens/s and generated at ~2 tokens/s.
 - For the `v0.2.0` gate and the plan’s default Ollama example, use a
   Raspberry Pi 5 and
   [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).
