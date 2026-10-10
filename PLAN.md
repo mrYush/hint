@@ -157,7 +157,11 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
 - **Next:** cut `v0.2.0-alpha` (WP0.1–WP0.12 landed; Pi 5 acceptance deferred
-  to the following tag, 2026-09-14). Then the Raspberry Pi 5 smoke run from
+  to the following tag, 2026-09-14). The alpha ships with the three
+  blockers of the Go-practices audit
+  ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md))
+  as known issues (decided 2026-09-28). Then fix B1–B3 and M1–M2 of that
+  audit and run the Raspberry Pi 5 smoke test from
   [`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md)
   before `v0.2.0`.
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
@@ -171,7 +175,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `instructions` tool expands, or split into rules that load when the
   conversation reaches their paths. CI and the release pipeline are in
   place. What remains for `v0.2.0` (not for `v0.2.0-alpha`) is acceptance
-  criterion 5 on a Raspberry Pi 5.
+  criterion 5 on a Raspberry Pi 5 and the blocker fixes from the
+  2026-09-28 audit.
 
 ## Compatibility decision
 
