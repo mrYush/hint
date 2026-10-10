@@ -69,3 +69,5 @@ hint.yaml
 *.log
 *.bak
 .*.kate-swp
+
+__pycache__/

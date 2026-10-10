@@ -233,6 +233,13 @@ Offline pass: `llama-server` stays up, stderr shows the router failover
 notice, the turn completes on `local`. Prefill on a Pi 4 A72 can look idle
 while all cores sit at 100% — wait before concluding a hang.
 
+## Measuring
+
+[`scripts/pi-bench`](../scripts/pi-bench/README.md) runs the raw model
+speed, a hint turn, the prefix-cache follow-up and the failover scenario
+in one go, with clock and throttling sampled alongside, and writes a
+summary table per run.
+
 ## Limits to expect
 
 - A 1.5B model may refuse or mishandle tools even when serving is correct.

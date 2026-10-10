@@ -370,6 +370,30 @@ your convenience.
    - Try rephrasing your question to be more specific
    - Check if you're in the correct directory related to your question
 
+### Known issues
+
+`v0.2.0-alpha` ships with these confirmed bugs; each has a GitHub issue and
+is fixed before `v0.2.0`. Details and the full audit:
+[`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+
+1. **Compaction loses the summary.** When a long conversation is
+   compacted, the summary is dropped on the next request, so the model
+   continues with the system prompt and the current exchange only. Keep
+   conversations short or start a new session when the compaction notice
+   appears.
+2. **Crash after a compaction that follows a context-overflow error**
+   (`slice bounds out of range`) when the profile sets `context_window`
+   (or `HINT_CONTEXT_WINDOW` / `--context-window`). Leave it unset to
+   avoid the path.
+3. **A session file can become unreadable** if `hint` is interrupted at
+   the exact end of a write; the next `hint -c` then fails to open it.
+   Start a new session; the old file can be repaired by adding a newline
+   after the last complete line.
+4. `grep` on a single file with more than 200 matches reports an error
+   instead of a truncated list; search a directory or narrow the pattern.
+5. `write_file` on a file `hint` cannot read shows the overwrite prompt
+   as "too large to diff" instead of the read error.
+
 ### Debug mode
 
 `--debug` (or `HINT_DEBUG=true`) writes a trace of the run — the requests
