@@ -29,11 +29,15 @@ func TestPreamble_LoadsRuleOnTouch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	pc, err := project.Load(context.Background(), dir, project.WithGit(""), project.WithOverview(project.None{}))
+	// Built in assemble's order: the project is loaded from the resolved
+	// root, so rule paths and touched paths agree under a symlinked temp
+	// directory (macOS's /var).
+	root, err := tool.NewRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := tool.NewRoot(dir)
+	dir = root.Dir()
+	pc, err := project.Load(context.Background(), dir, project.WithGit(""), project.WithOverview(project.None{}))
 	if err != nil {
 		t.Fatal(err)
 	}
