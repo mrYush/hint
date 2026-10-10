@@ -257,6 +257,8 @@ depend on them:
 - [x] Limits: max iterations per turn (default 25), max context tokens
 - [x] Compaction at 80% of the window: summarize old turns into one system block (reference — auto-compact in opencode/Crush)
 - [x] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
+- [ ] Follow-up (audit 2026-09-28, B1): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh)
+- [ ] Follow-up (audit 2026-09-28, B2): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -336,6 +338,8 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - [x] `todo(items[])` — current-task plan, shown to the user
 - [x] Tool registry + schema generation for the provider layer
 - [x] Per-tool unit tests incl. truncation and timeout behavior
+- [ ] Follow-up (audit 2026-09-28, M1): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
+- [ ] Follow-up (audit 2026-09-28, M2): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -618,6 +622,7 @@ Reference — Pi session format.
       travels inside its assistant message), `compaction` (checkpoint)
 - [x] Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - [x] Golden tests for the session format (backward-compat gate)
+- [ ] Follow-up (audit 2026-09-28, B3): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
