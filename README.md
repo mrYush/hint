@@ -295,6 +295,7 @@ providers:
     base_url: http://localhost:11434/v1
     model: qwen2.5:7b
     context_window: 8192
+    header_timeout: 15m                         # wait for response headers (default 60s)
 default_provider: api-bar
 fallback_provider: local
 ```
@@ -302,6 +303,12 @@ fallback_provider: local
 The project file overlays the global one profile-by-profile (matched by
 `name`, non-empty fields win), so a project can override just the model or
 key of a globally defined profile.
+
+`header_timeout` bounds how long hint waits for the response headers of a
+chat request; a Go duration such as `90s` or `15m`, units required.
+A local server like `llama-server` sends them only after it has processed
+the whole prompt, which on a Raspberry Pi takes minutes, so raise it for
+such profiles.
 
 ### Environment variables
 
