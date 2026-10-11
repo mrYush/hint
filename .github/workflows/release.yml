@@ -1,10 +1,10 @@
 # Release: pushing an annotated v* tag (CONTRIBUTING.md, "Releases")
 # builds every target with goreleaser, attaches the archives and
 # checksums to a GitHub Release, and — for a final version — updates the
-# Homebrew formula in mrYush/homebrew-hint.
+# Homebrew cask in mrYush/homebrew-tap.
 #
 # Secrets: GITHUB_TOKEN is provided by GitHub; HOMEBREW_TAP_TOKEN must be
-# a token with write access to mrYush/homebrew-hint. Without it the brew
+# a token with write access to mrYush/homebrew-tap. Without it the brew
 # step fails on a final release (pre-releases skip it).
 name: Release
 
