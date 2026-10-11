@@ -4,9 +4,10 @@ How to run `hint` with a local OpenAI-compatible model on a **4 GB Raspberry Pi 
 (or any similar `linux/arm64` board with ~4 GiB RAM).
 
 This is a **product guide**: devices, use cases, why this stack, launch recipe,
-and examples. It is **not** the Phase 0 acceptance gate — that remains a
-**Raspberry Pi 5** run with Ollama
-([smoke-test checklist](plan/raspberry-pi-smoke-test.md)).
+and examples. The recorded `v0.2.0` hardware run is the Pi 4 `pi-bench`
+[`20261011-105151`](plan/evidence/pi-4-20261011-105151/summary.md), not this
+guide. A Raspberry Pi 5 + Ollama smoke remains backlog
+([checklist](plan/raspberry-pi-smoke-test.md)).
 
 ## Devices and use cases
 
@@ -15,7 +16,7 @@ and examples. It is **not** the Phase 0 acceptance gate — that remains a
 | Raspberry Pi 4 Model B, **4 GB** | Yes (primary target) | Desk / lab board: cloud primary, local failover when the net drops |
 | Pi 4 **2 GB** | Marginal | Only with a smaller GGUF and lower `-c`; expect swapping and poor tokens/s |
 | Pi 4 **8 GB** | Yes, with headroom | Same recipe; optional larger Q4 (e.g. ~3B) once 1.5B tool quality is not enough |
-| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Phase 0 / `v0.2.0` gate uses Pi 5 + Ollama (`qwen2.5:7b` class) |
+| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Pi 5 + Ollama smoke is backlog (2026-10-11); `v0.2.0`'s hardware record is the Pi 4 bench |
 | Other `aarch64` SBCs (~4 GiB) | Yes if CPU-only | Same memory math; retune `-t` to core count |
 
 **When to use this setup**
@@ -28,7 +29,7 @@ and examples. It is **not** the Phase 0 acceptance gate — that remains a
 
 **When not to**
 
-- You need the official Phase 0 / `v0.2.0` hardware checkbox → Pi 5 checklist.
+- You need the original Pi 5 + Ollama checklist → that item is backlog, not the `v0.2.0` gate.
 - You insist on stock Ollama + 7B on 4 GB → it does not fit the working set.
 - You need strong agent quality offline → use a larger host, or stay on cloud.
 
@@ -249,6 +250,7 @@ summary table per run.
 - So does the power supply: `vcgencmd get_throttled` must read `0x0`.
   Under-voltage pins the A72 at 600 MHz; a measured run there processed
   the prompt at ~3 tokens/s and generated at ~2 tokens/s.
-- For the `v0.2.0` gate and the plan’s default Ollama example, use a
-  Raspberry Pi 5 and
+- The `v0.2.0` hardware record is
+  [`plan/evidence/pi-4-20261011-105151/summary.md`](plan/evidence/pi-4-20261011-105151/summary.md).
+  A later Pi 5 + Ollama pass still uses
   [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).

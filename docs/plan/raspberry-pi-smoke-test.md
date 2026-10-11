@@ -1,8 +1,9 @@
 # Raspberry Pi smoke test
 
-> Status: **deferred past `v0.2.0-alpha`** (decided 2026-09-14) · Still required
-> for `v0.2.0` and for ticking [WP0.10](phase-0-mvp-cli.md#wp010--ci-release-distribution)'s
-> Pi 5 checkbox ([PLAN.md](../../PLAN.md#current-status))
+> Status: **backlog** (decided 2026-10-11) · Does **not** gate `v0.2.0-alpha`
+> or `v0.2.0`. The linux/arm64 record for this release is the Pi 4 bench
+> [`evidence/pi-4-20261011-105151/`](evidence/pi-4-20261011-105151/summary.md)
+> ([PLAN.md](../../PLAN.md#current-status)).
 
 ## Goal
 
@@ -13,8 +14,8 @@ actually executes tests. This is the manual run that exercises a real
 [acceptance criteria](phase-0-mvp-cli.md#acceptance-criteria) of Phase 0,
 executed on a **Raspberry Pi 5**.
 
-Pass/fail on every scenario below gates ticking WP0.10's Raspberry Pi
-checkbox and cutting **`v0.2.0`**. It does **not** block `v0.2.0-alpha`.
+Pass/fail on every scenario below was the original WP0.10 hardware gate.
+As of 2026-10-11 it does **not** block `v0.2.0-alpha` or `v0.2.0`.
 
 For running `hint`'s offline fallback on a **Pi 4 4 GB** (different hardware
 budget, different local stack), see
@@ -154,13 +155,16 @@ platform, on a Raspberry Pi 5.
 
 ## Appendix — Raspberry Pi 4 (4 GB)
 
-Not the Phase 0 / `v0.2.0` gate. Use
-[`docs/raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) for devices, use
-cases, why `llama-server` instead of Ollama, and the launch recipe on 4 GB.
+The `v0.2.0` hardware record is the Pi 4 `pi-bench` run
+`20261011-105151`
+([summary](evidence/pi-4-20261011-105151/summary.md),
+[runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
+The launch recipe for that board stays
+[`docs/raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md).
 
 ## 5. Record the result
 
-After a green Pi 5 run (for `v0.2.0`, not for `v0.2.0-alpha`):
+After a green Pi 5 run, if that backlog item is picked up:
 
 - [ ] Tick WP0.10's Raspberry Pi checkbox in
       [phase-0-mvp-cli.md](phase-0-mvp-cli.md#wp010--ci-release-distribution)

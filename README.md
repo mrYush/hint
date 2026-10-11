@@ -372,8 +372,9 @@ your convenience.
 
 ### Known issues
 
-`v0.2.0-alpha` ships with these confirmed bugs; each has a GitHub issue and
-is fixed before `v0.2.0`. Details and the full audit:
+`v0.2.0-alpha` and `v0.2.0` ship with these confirmed bugs. They are
+backlog (decided 2026-10-11) and do not block either tag. Details and the
+full audit:
 [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
 1. **Compaction loses the summary.** When a long conversation is
