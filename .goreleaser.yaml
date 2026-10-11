@@ -71,8 +71,8 @@ release:
     *Troubleshooting → Known issues*; the open bugs are tracked as
     `[Phase 0]` GitHub issues.
 
-# Homebrew tap: the cask is pushed to mrYush/homebrew-hint, so that
-# `brew install --cask mrYush/hint/hint` works. goreleaser is retiring the
+# Homebrew tap: the cask is pushed to mrYush/homebrew-tap, so that
+# `brew install --cask mrYush/tap/hint` works. goreleaser is retiring the
 # formula-based `brews` block in favour of casks, which is what a prebuilt
 # binary is anyway. The push needs a token with write access to that
 # repository in the HOMEBREW_TAP_TOKEN secret; the workflow's own
@@ -81,7 +81,7 @@ homebrew_casks:
   - name: hint
     repository:
       owner: mrYush
-      name: homebrew-hint
+      name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
     homepage: https://github.com/mrYush/hint
