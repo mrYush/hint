@@ -970,7 +970,7 @@ Decisions (2026-09-07):
   quarantine-lifting post-install hook goreleaser documents for unsigned
   binaries. Signing and notarization stay out of scope for `v0.2.0`.
 - **The tap push is a separate secret.** `HOMEBREW_TAP_TOKEN` must be a
-  token with write access to `mrYush/homebrew-hint`; the workflow's own
+  token with write access to `mrYush/homebrew-tap`; the workflow's own
   `GITHUB_TOKEN` is scoped to this repository. Pre-releases skip the tap
   (`skip_upload: auto`), so `v0.2.0-alpha` needs no token; the first final
   tag does.
