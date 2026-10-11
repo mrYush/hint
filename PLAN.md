@@ -124,7 +124,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `go test -race` on Linux with ripgrep, a cross-compilation matrix of
   `{linux,darwin,windows}` × `{amd64,arm64}`; `release.yml` + goreleaser on
   a `v*` tag: archives, checksums, GitHub Release, Homebrew cask in
-  `mrYush/homebrew-hint` for final versions; `hint --version` from ldflags
+  `mrYush/homebrew-tap` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
   tree). The Raspberry Pi 5 smoke run that closes WP0.10's last checkbox is
   **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Decision

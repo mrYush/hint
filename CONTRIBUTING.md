@@ -105,7 +105,7 @@ Flow:
   × `{amd64,arm64}`, attaches the archives and `checksums.txt` to a GitHub
   Release (marked pre-release when the tag has a suffix such as `-alpha`),
   and for a final version pushes the Homebrew cask to
-  [`mrYush/homebrew-hint`](https://github.com/mrYush/homebrew-hint). That
+  [`mrYush/homebrew-tap`](https://github.com/mrYush/homebrew-tap). That
   push needs the `HOMEBREW_TAP_TOKEN` repository secret: a token with write
   access to the tap repository. Without it a final release fails at the
   cask step after the GitHub Release is already published; pre-releases
