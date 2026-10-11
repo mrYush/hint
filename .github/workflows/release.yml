@@ -38,3 +38,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Two tags on one commit make GoReleaser pick whichever git lists
+          # first (v0.2.0 was built as v0.2.0-alpha). The ref that triggered
+          # the run is the tag we mean to publish.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
