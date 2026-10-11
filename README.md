@@ -295,6 +295,7 @@ providers:
     base_url: http://localhost:11434/v1
     model: qwen2.5:7b
     context_window: 8192
+    header_timeout: 15m                         # wait for response headers (default 60s)
 default_provider: api-bar
 fallback_provider: local
 ```
@@ -302,6 +303,12 @@ fallback_provider: local
 The project file overlays the global one profile-by-profile (matched by
 `name`, non-empty fields win), so a project can override just the model or
 key of a globally defined profile.
+
+`header_timeout` bounds how long hint waits for the response headers of a
+chat request; a Go duration such as `90s` or `15m`, units required.
+A local server like `llama-server` sends them only after it has processed
+the whole prompt, which on a Raspberry Pi takes minutes, so raise it for
+such profiles.
 
 ### Environment variables
 
@@ -362,6 +369,31 @@ your convenience.
 3. **Empty or irrelevant responses**
    - Try rephrasing your question to be more specific
    - Check if you're in the correct directory related to your question
+
+### Known issues
+
+`v0.2.0-alpha` and `v0.2.0` ship with these confirmed bugs. They are
+backlog (decided 2026-10-11) and do not block either tag. Details and the
+full audit:
+[`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+
+1. **Compaction loses the summary.** When a long conversation is
+   compacted, the summary is dropped on the next request, so the model
+   continues with the system prompt and the current exchange only. Keep
+   conversations short or start a new session when the compaction notice
+   appears.
+2. **Crash after a compaction that follows a context-overflow error**
+   (`slice bounds out of range`) when the profile sets `context_window`
+   (or `HINT_CONTEXT_WINDOW` / `--context-window`). Leave it unset to
+   avoid the path.
+3. **A session file can become unreadable** if `hint` is interrupted at
+   the exact end of a write; the next `hint -c` then fails to open it.
+   Start a new session; the old file can be repaired by adding a newline
+   after the last complete line.
+4. `grep` on a single file with more than 200 matches reports an error
+   instead of a truncated list; search a directory or narrow the pattern.
+5. `write_file` on a file `hint` cannot read shows the overwrite prompt
+   as "too large to diff" instead of the read error.
 
 ### Debug mode
 

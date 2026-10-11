@@ -66,6 +66,10 @@ release:
   # v0.2.0-alpha and friends are GitHub pre-releases; a plain vX.Y.Z is final.
   prerelease: auto
   name_template: "{{ .Tag }}"
+  footer: |
+    Known issues for this release are listed in the README under
+    *Troubleshooting → Known issues*; the open bugs are tracked as
+    `[Phase 0]` GitHub issues.
 
 # Homebrew tap: the cask is pushed to mrYush/homebrew-hint, so that
 # `brew install --cask mrYush/hint/hint` works. goreleaser is retiring the

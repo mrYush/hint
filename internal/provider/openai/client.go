@@ -31,9 +31,9 @@ const (
 	// completionsPath is appended to the profile's base URL.
 	completionsPath = "/chat/completions"
 	// responseHeaderTimeout bounds the wait for the first response byte
-	// (time-to-first-token on a cold model can be tens of seconds). The
-	// overall request deliberately has no deadline: a healthy stream may
-	// run for minutes.
+	// (time-to-first-token on a cold model can be tens of seconds) unless
+	// the profile sets header_timeout. The overall request deliberately
+	// has no deadline: a healthy stream may run for minutes.
 	responseHeaderTimeout = 60 * time.Second
 )
 
@@ -78,7 +78,7 @@ func New(profile config.Profile, opts ...Option) *Client {
 	c := &Client{
 		profile: profile,
 		url:     completionsURL(profile.BaseURL),
-		http:    defaultHTTPClient(),
+		http:    defaultHTTPClient(profile.HeaderTimeout),
 	}
 	for _, o := range opts {
 		o(c)
@@ -99,9 +99,13 @@ func completionsURL(base string) string {
 // defaultHTTPClient builds the client used when the caller injects none. The
 // zero http.Client would work but has no header timeout, so a provider that
 // accepts the connection and never answers would hang the run forever.
-func defaultHTTPClient() *http.Client {
+// headerTimeout is the profile's override; zero keeps the default.
+func defaultHTTPClient(headerTimeout time.Duration) *http.Client {
+	if headerTimeout <= 0 {
+		headerTimeout = responseHeaderTimeout
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ResponseHeaderTimeout = responseHeaderTimeout
+	transport.ResponseHeaderTimeout = headerTimeout
 	return &http.Client{Transport: transport}
 }
 

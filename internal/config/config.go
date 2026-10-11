@@ -9,6 +9,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 )
 
 // Kind identifies the API dialect of a provider profile.
@@ -49,13 +50,19 @@ type Profile struct {
 	// --context-window). Zero means unknown: the agent loop then keeps
 	// its built-in window for proactive compaction.
 	ContextWindow int
+	// HeaderTimeout bounds the wait for the response headers of a chat
+	// request (`header_timeout`, e.g. "15m"). A local server such as
+	// llama-server sends them only after the whole prompt is processed,
+	// which on a small board takes minutes. Zero keeps the client's
+	// built-in default.
+	HeaderTimeout time.Duration
 }
 
 // String implements fmt.Stringer with the API key masked, so a Profile
 // printed via %v/%+v/%s can never leak the secret.
 func (p Profile) String() string {
-	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s ContextWindow:%d}",
-		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model, p.ContextWindow)
+	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s ContextWindow:%d HeaderTimeout:%s}",
+		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model, p.ContextWindow, p.HeaderTimeout)
 }
 
 // Built-in defaults of the project-context limits, applied by the loader

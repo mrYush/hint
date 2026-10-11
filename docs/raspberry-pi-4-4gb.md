@@ -4,9 +4,10 @@ How to run `hint` with a local OpenAI-compatible model on a **4 GB Raspberry Pi 
 (or any similar `linux/arm64` board with ~4 GiB RAM).
 
 This is a **product guide**: devices, use cases, why this stack, launch recipe,
-and examples. It is **not** the Phase 0 acceptance gate — that remains a
-**Raspberry Pi 5** run with Ollama
-([smoke-test checklist](plan/raspberry-pi-smoke-test.md)).
+and examples. The recorded `v0.2.0` hardware run is the Pi 4 `pi-bench`
+[`20261011-105151`](plan/evidence/pi-4-20261011-105151/summary.md), not this
+guide. A Raspberry Pi 5 + Ollama smoke remains backlog
+([checklist](plan/raspberry-pi-smoke-test.md)).
 
 ## Devices and use cases
 
@@ -15,7 +16,7 @@ and examples. It is **not** the Phase 0 acceptance gate — that remains a
 | Raspberry Pi 4 Model B, **4 GB** | Yes (primary target) | Desk / lab board: cloud primary, local failover when the net drops |
 | Pi 4 **2 GB** | Marginal | Only with a smaller GGUF and lower `-c`; expect swapping and poor tokens/s |
 | Pi 4 **8 GB** | Yes, with headroom | Same recipe; optional larger Q4 (e.g. ~3B) once 1.5B tool quality is not enough |
-| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Phase 0 / `v0.2.0` gate uses Pi 5 + Ollama (`qwen2.5:7b` class) |
+| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Pi 5 + Ollama smoke is backlog (2026-10-11); `v0.2.0`'s hardware record is the Pi 4 bench |
 | Other `aarch64` SBCs (~4 GiB) | Yes if CPU-only | Same memory math; retune `-t` to core count |
 
 **When to use this setup**
@@ -28,7 +29,7 @@ and examples. It is **not** the Phase 0 acceptance gate — that remains a
 
 **When not to**
 
-- You need the official Phase 0 / `v0.2.0` hardware checkbox → Pi 5 checklist.
+- You need the original Pi 5 + Ollama checklist → that item is backlog, not the `v0.2.0` gate.
 - You insist on stock Ollama + 7B on 4 GB → it does not fit the working set.
 - You need strong agent quality offline → use a larger host, or stay on cloud.
 
@@ -167,6 +168,7 @@ providers:
     base_url: http://127.0.0.1:8080/v1
     api_key: local
     model: Qwen2.5-1.5B-Instruct-Q4_K_M
+    header_timeout: 15m
 default_provider: api-bar
 fallback_provider: local
 EOF
@@ -175,6 +177,12 @@ EOF
 Zero-config from `API_BAR_KEY` alone synthesizes only a cloud profile.
 Without this file there is nothing to fail over to. Keep `model:` equal to
 the `-a` alias.
+
+`header_timeout` is required here.
+`llama-server` sends the response headers only after it has processed the
+whole prompt, and hint's default wait of 60s is shorter than that on a Pi 4.
+Without it the request times out and the router retries, queueing more
+work behind the prompt the server is still processing.
 
 ### 6. Build and copy hint (development machine)
 
@@ -226,12 +234,23 @@ Offline pass: `llama-server` stays up, stderr shows the router failover
 notice, the turn completes on `local`. Prefill on a Pi 4 A72 can look idle
 while all cores sit at 100% — wait before concluding a hang.
 
+## Measuring
+
+[`scripts/pi-bench`](../scripts/pi-bench/README.md) runs the raw model
+speed, a hint turn, the prefix-cache follow-up and the failover scenario
+in one go, with clock and throttling sampled alongside, and writes a
+summary table per run.
+
 ## Limits to expect
 
 - A 1.5B model may refuse or mishandle tools even when serving is correct.
   That is a **model-class** limit, not proof that failover is broken. Confirm
   with `HINT_PROVIDER=local $HINT models` and the stderr failover line first.
 - Active cooling matters; an uncooled A72 invalidates any timing anecdote.
-- For the `v0.2.0` gate and the plan’s default Ollama example, use a
-  Raspberry Pi 5 and
+- So does the power supply: `vcgencmd get_throttled` must read `0x0`.
+  Under-voltage pins the A72 at 600 MHz; a measured run there processed
+  the prompt at ~3 tokens/s and generated at ~2 tokens/s.
+- The `v0.2.0` hardware record is
+  [`plan/evidence/pi-4-20261011-105151/summary.md`](plan/evidence/pi-4-20261011-105151/summary.md).
+  A later Pi 5 + Ollama pass still uses
   [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).
