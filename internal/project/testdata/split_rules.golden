@@ -1,0 +1,38 @@
+<project_instructions>
+<file path="$ROOT/HINT.md">
+# Root
+
+Root rules apply everywhere.
+</file>
+<file path="$ROOT/.hint/rules/always.md">
+# Always on
+
+Applies to every file.
+</file>
+<file path="$ROOT/.hint/rules/badglob.md">
+# Bad glob
+
+Loads always too.
+</file>
+<file path="$ROOT/.hint/rules/broken.md">
+# Broken header
+
+Still loads, always.
+</file>
+<file path="$ROOT/.hint/rules/go.md" paths="**/*.go">
+# Go
+
+Use gofmt. Keep errors last.
+</file>
+<file path="$ROOT/sub/AGENTS.md">
+Sub rules.
+</file>
+<file path="$ROOT/sub/.hint/rules/sub.md">
+Sub rule, always.
+</file>
+</project_instructions>
+<project_rules>
+These rules apply to particular paths and load into the instructions above once a tool reads or writes a matching file; until then only their titles are listed. The instructions tool can read any of them now.
+- TypeScript conventions ($ROOT/.cursor/rules/ts.mdc) for *.ts, *.tsx
+- deep ($ROOT/sub/.hint/rules/deep.md) for deep/*.go
+</project_rules>
