@@ -127,10 +127,14 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `mrYush/homebrew-hint` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
   tree). The Raspberry Pi 5 smoke run that closes WP0.10's last checkbox is
-  **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Offline
-  fallback on a Pi 4 4 GB board is documented in
-  [`docs/raspberry-pi-4-4gb.md`](docs/raspberry-pi-4-4gb.md); that run does
-  not tick the Pi 5 acceptance criterion.
+  **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Decision
+  2026-10-11: that Pi 5 run is backlog and does not gate `v0.2.0` either.
+  The linux/arm64 record is the Pi 4 4 GB `pi-bench` run `20261011-105151`
+  on commit `b2aee40`
+  ([summary](docs/plan/evidence/pi-4-20261011-105151/summary.md),
+  [runs.jsonl](docs/plan/evidence/pi-4-20261011-105151/runs.jsonl)).
+  The product guide for that board stays
+  [`docs/raspberry-pi-4-4gb.md`](docs/raspberry-pi-4-4gb.md).
   WP0.11 — tool schedule (`internal/agent/schedule.go`: a sealed
   `seq` / `par` / `call` tree the agent builds from the model's batch —
   consecutive read-class calls fan out, at most `Limits.MaxParallelTools`
@@ -156,14 +160,14 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** cut `v0.2.0-alpha` (WP0.1–WP0.12 landed; Pi 5 acceptance deferred
-  to the following tag, 2026-09-14). The alpha ships with the three
-  blockers of the Go-practices audit
+- **Next:** tag `v0.2.0-alpha`, then `v0.2.0`. WP0.1–WP0.12 have landed.
+  The audit fixes B1–B3 and M1–M2
   ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md))
-  as known issues (decided 2026-09-28). Then fix B1–B3 and M1–M2 of that
-  audit and run the Raspberry Pi 5 smoke test from
-  [`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md)
-  before `v0.2.0`.
+  stay known issues and are backlog (decided 2026-10-11); they do not block
+  either tag. The Raspberry Pi 5 smoke
+  ([`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md))
+  is backlog on the same date. The linux/arm64 record is the Pi 4 bench
+  [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
 - Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
   interactive session, `hint -p` answers once, both run through the
   agent loop with every built-in tool registered behind the permission
@@ -174,9 +178,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   instruction files that outgrow the budget arrive as outlines the
   `instructions` tool expands, or split into rules that load when the
   conversation reaches their paths. CI and the release pipeline are in
-  place. What remains for `v0.2.0` (not for `v0.2.0-alpha`) is acceptance
-  criterion 5 on a Raspberry Pi 5 and the blocker fixes from the
-  2026-09-28 audit.
+  place. Nothing in the Phase 0 scope still blocks `v0.2.0`: the audit
+  fixes and the Pi 5 smoke are backlog (2026-10-11), and criterion 5 is
+  the Pi 4 bench cited above.
 
 ## Compatibility decision
 
@@ -211,10 +215,10 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
 9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
-10. Tag `v0.2.0-alpha` (Pi 5 smoke deferred to the next tag — see
-    [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution)
-    and [raspberry-pi-smoke-test.md](docs/plan/raspberry-pi-smoke-test.md)).
-11. Raspberry Pi 5 acceptance run, then `v0.2.0`.
+10. Tag `v0.2.0-alpha`. Known issues and the Pi 5 smoke do not block it
+    (2026-10-11).
+11. Tag `v0.2.0`. The hardware record is the Pi 4 bench, not a Pi 5 run.
+    The final tag needs `HOMEBREW_TAP_TOKEN`.
 
 ## Open questions
 

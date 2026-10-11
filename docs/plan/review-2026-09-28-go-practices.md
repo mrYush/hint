@@ -21,9 +21,10 @@ Severity:
 
 - **blocker** — confirmed wrong behaviour in the default configuration
   that loses data, crashes the process, or makes a file unreadable.
-  Fix before `v0.2.0` (final); `v0.2.0-alpha` may ship with them listed
-  in the release notes.
-- **must** — confirmed bug with a wrong user-visible result; fix in Phase 0.
+  Backlog as of 2026-10-11: `v0.2.0-alpha` and `v0.2.0` may ship with
+  them listed in the release notes.
+- **must** — confirmed bug with a wrong user-visible result. Backlog as of
+  2026-10-11; M1 and M2 do not block `v0.2.0`.
 - **should** — a deviation from Go practice that will bite under a
   realistic condition (locale, load, platform, a future change).
 - **nit** — style, naming, an idiom the toolchain now offers.

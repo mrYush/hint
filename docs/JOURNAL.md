@@ -6,7 +6,8 @@
 > Narrative polish belongs in the article, not here.
 >
 > Product launch guide: [`raspberry-pi-4-4gb.md`](raspberry-pi-4-4gb.md).
-> Pi 5 acceptance checklist:
+> Pi 5 acceptance checklist (backlog as of 2026-10-11; the `v0.2.0`
+> hardware record is the Pi 4 bench, not this journal):
 > [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).
 >
 > Do not treat this file as part of the shipped doc set until the article

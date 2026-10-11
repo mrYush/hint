@@ -64,6 +64,9 @@ hint.yaml
 # Директория vendor, если не используется вендоринг
 /vendor/
 
+# Сырые замеры pi-bench: храним только summary, runs.jsonl — локально
+docs/plan/evidence/*/runs.jsonl
+
 # Другие временные файлы и директории
 /tmp/
 *.log
