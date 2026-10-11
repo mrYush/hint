@@ -13,6 +13,7 @@ import (
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/session"
+	"github.com/mrYush/hint/internal/tool"
 )
 
 // newSessionsCommand lists the recorded sessions of the working directory,
@@ -44,6 +45,13 @@ func newSessionsCommand() *cobra.Command {
 // notice on stderr, not an error, so a script can tell "none" from a
 // failure by the exit status.
 func listSessions(store *session.Store, cwd string, out, stderr io.Writer) error {
+	// Sessions are keyed by the symlink-resolved root assemble uses, not
+	// by the path the shell reports.
+	root, err := tool.NewRoot(cwd)
+	if err != nil {
+		return err
+	}
+	cwd = root.Dir()
 	infos, err := store.List(cwd)
 	if err != nil {
 		return err

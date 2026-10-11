@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -105,6 +106,9 @@ func LoadFrom(opts Options) (*Config, error) {
 		if p.ContextWindow != nil {
 			prof.ContextWindow = *p.ContextWindow
 		}
+		if p.HeaderTimeout != nil {
+			prof.HeaderTimeout = *p.HeaderTimeout
+		}
 		cfg.Providers = append(cfg.Providers, prof)
 	}
 
@@ -179,6 +183,9 @@ type fileProfile struct {
 	APIKey        string `yaml:"api_key"`
 	Model         string `yaml:"model"`
 	ContextWindow *int   `yaml:"context_window"`
+	// HeaderTimeout is a Go duration string ("90s", "15m"); yaml.v3
+	// refuses a bare number for a time.Duration, so units are mandatory.
+	HeaderTimeout *time.Duration `yaml:"header_timeout"`
 }
 
 type fileInstructions struct {
@@ -337,6 +344,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 			}
 			if pp.ContextWindow != nil {
 				out.Providers[i].ContextWindow = pp.ContextWindow
+			}
+			if pp.HeaderTimeout != nil {
+				out.Providers[i].HeaderTimeout = pp.HeaderTimeout
 			}
 			merged = true
 			break
@@ -625,6 +635,9 @@ func (l *loader) validate(cfg *Config) error {
 		case KindOpenAI, KindOllama:
 		default:
 			return fmt.Errorf("config: profile %q: unknown kind %q (want %q or %q)", p.Name, p.Kind, KindOpenAI, KindOllama)
+		}
+		if p.HeaderTimeout < 0 {
+			return fmt.Errorf("config: profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
 		}
 	}
 	if cfg.DefaultProvider == "" {

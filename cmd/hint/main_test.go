@@ -392,7 +392,7 @@ func TestOneShotText(t *testing.T) {
 	if len(reqs) != 1 || len(reqs[0].Messages) != 2 || reqs[0].Messages[1].Text() != "the question" {
 		t.Fatalf("requests = %+v", reqs)
 	}
-	infos, err := as.store.List(as.cwd)
+	infos, err := as.store.List(a.sess.Cwd())
 	if err != nil || len(infos) != 1 || infos[0].Messages != 2 {
 		t.Errorf("sessions = %+v, %v; want one with 2 messages", infos, err)
 	}
@@ -481,7 +481,7 @@ func TestREPL(t *testing.T) {
 	if reqs[1].Messages[2].Text() != "a" || reqs[1].Messages[3].Text() != "second" {
 		t.Errorf("second request carries %q then %q", reqs[1].Messages[2].Text(), reqs[1].Messages[3].Text())
 	}
-	infos, err := as.store.List(as.cwd)
+	infos, err := as.store.List(a.sess.Cwd())
 	if err != nil || len(infos) != 1 || infos[0].Messages != 4 {
 		t.Errorf("sessions = %+v, %v; want one with 4 messages", infos, err)
 	}
@@ -613,7 +613,11 @@ func TestListSessions(t *testing.T) {
 	if err := listSessions(store, cwd, &out, &stderr); err != nil || out.Len() != 0 || !strings.Contains(stderr.String(), "no recorded sessions") {
 		t.Errorf("empty: %v, out %q, stderr %q", err, out.String(), stderr.String())
 	}
-	s, err := store.Create(cwd)
+	resolved, err := tool.NewRoot(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.Create(resolved.Dir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,6 +625,27 @@ func TestListSessions(t *testing.T) {
 	out.Reset()
 	if err := listSessions(store, cwd, &out, &stderr); err != nil || !strings.Contains(out.String(), s.ID()) || !strings.Contains(out.String(), "--session") {
 		t.Errorf("one session: %v, out %q", err, out.String())
+	}
+
+	// A session recorded under the resolved root is listed from a path
+	// that reaches it through a symlink, as assemble keys it.
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	root, err := tool.NewRoot(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Create(root.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	out.Reset()
+	if err := listSessions(store, link, &out, &stderr); err != nil || !strings.Contains(out.String(), s.ID()) {
+		t.Errorf("through a symlink: %v, out %q", err, out.String())
 	}
 }
 

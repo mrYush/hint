@@ -565,3 +565,32 @@ func TestStreamLargeToolArgumentLine(t *testing.T) {
 		t.Fatalf("no tool call: %v", kinds(events))
 	}
 }
+
+func TestHeaderTimeoutFromProfile(t *testing.T) {
+	transportTimeout := func(c *Client) time.Duration {
+		return c.http.Transport.(*http.Transport).ResponseHeaderTimeout
+	}
+	if got := transportTimeout(New(testProfile("http://x"))); got != responseHeaderTimeout {
+		t.Errorf("default header timeout = %s, want %s", got, responseHeaderTimeout)
+	}
+	p := testProfile("http://x")
+	p.HeaderTimeout = 15 * time.Minute
+	if got := transportTimeout(New(p)); got != 15*time.Minute {
+		t.Errorf("profile header timeout = %s, want 15m", got)
+	}
+
+	// A server slower than the profile's bound is cut off before any
+	// header arrives, the way llama-server is while it ingests a prompt.
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) }) // runs first: Close waits for the handler
+	p = testProfile(srv.URL)
+	p.HeaderTimeout = 50 * time.Millisecond
+	_, err := New(p).Stream(context.Background(), simpleRequest())
+	if err == nil || !strings.Contains(err.Error(), "timeout awaiting response headers") {
+		t.Errorf("Stream error = %v, want a response-header timeout", err)
+	}
+}

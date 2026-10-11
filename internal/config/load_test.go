@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // writeFile creates a file with any missing parent directories.
@@ -852,5 +853,68 @@ func TestGlobalDir(t *testing.T) {
 	}
 	if got := GlobalDir("", lookup(map[string]string{"XDG_CONFIG_HOME": ""})); got != "" {
 		t.Errorf("GlobalDir without home = %q, want empty", got)
+	}
+}
+
+func TestHeaderTimeout(t *testing.T) {
+	t.Run("project file overrides the global profile", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
+providers:
+  - name: local
+    kind: openai
+    base_url: http://127.0.0.1:8080/v1
+    api_key: local
+    header_timeout: 90s
+`)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: local
+    header_timeout: 15m
+`)
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		if got := mustDefault(t, cfg).HeaderTimeout; got != 15*time.Minute {
+			t.Errorf("HeaderTimeout = %s, want 15m", got)
+		}
+	})
+
+	t.Run("unset is zero", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: p
+    kind: openai
+    api_key: k
+`)
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("LoadFrom: %v", err)
+		}
+		if got := mustDefault(t, cfg).HeaderTimeout; got != 0 {
+			t.Errorf("HeaderTimeout = %s, want 0 (client default)", got)
+		}
+	})
+
+	for name, value := range map[string]string{
+		"negative":       "-1s",
+		"bare number":    "600",
+		"not a duration": "soon",
+	} {
+		t.Run(name+" is refused", func(t *testing.T) {
+			opts := dirs(t)
+			writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: p
+    kind: openai
+    api_key: k
+    header_timeout: `+value+`
+`)
+			if _, err := LoadFrom(opts); err == nil {
+				t.Errorf("header_timeout: %s loaded without an error", value)
+			}
+		})
 	}
 }

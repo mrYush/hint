@@ -257,6 +257,8 @@ depend on them:
 - [x] Limits: max iterations per turn (default 25), max context tokens
 - [x] Compaction at 80% of the window: summarize old turns into one system block (reference — auto-compact in opencode/Crush)
 - [x] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
+- [ ] Backlog (audit 2026-09-28, B1; does not block `v0.2.0`, decided 2026-10-11): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh)
+- [ ] Backlog (audit 2026-09-28, B2; does not block `v0.2.0`, decided 2026-10-11): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -336,6 +338,8 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - [x] `todo(items[])` — current-task plan, shown to the user
 - [x] Tool registry + schema generation for the provider layer
 - [x] Per-tool unit tests incl. truncation and timeout behavior
+- [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
+- [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -618,6 +622,7 @@ Reference — Pi session format.
       travels inside its assistant message), `compaction` (checkpoint)
 - [x] Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - [x] Golden tests for the session format (backward-compat gate)
+- [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -936,9 +941,17 @@ depend on them:
 - [x] GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
 - [x] goreleaser config; binaries attached to GitHub Releases
 - [x] Homebrew tap
-- [ ] Raspberry Pi 5 smoke run of the acceptance scenarios on linux/arm64
-      (deferred to the tag after `v0.2.0-alpha`, decided 2026-09-14; Pi 4 4 GB
-      offline-fallback guide: [`docs/raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md))
+- [x] linux/arm64 hardware run: Pi 4 4 GB `pi-bench` `20261011-105151` on
+      commit `b2aee40`
+      ([summary](evidence/pi-4-20261011-105151/summary.md),
+      [runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
+      Cold turn, `-c` follow-up, new session, and failover (notice present,
+      all exits 0). The board thermally throttled (max 85.7 °C, clock down
+      to 600 MHz); the 2048-token raw row is not a cool-board ceiling.
+      The run does not exercise criterion 2's edit-confirmation prompt.
+- [ ] Backlog: Raspberry Pi 5 + Ollama smoke of the acceptance scenarios
+      (no longer a `v0.2.0` gate, decided 2026-10-11; checklist
+      [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md))
 - [x] Update README for the new CLI surface
 
 Decisions (2026-09-07):
@@ -970,10 +983,15 @@ Decisions (2026-09-07):
 Decision (2026-09-14):
 
 - **Pi 5 smoke does not block `v0.2.0-alpha`.** WP0.1–WP0.12 and the release
-  pipeline are enough for the pre-release tag. Acceptance criterion 5
-  (scenarios on a Raspberry Pi 5) and this checkbox remain required for
-  `v0.2.0`. A Pi 4 4 GB guide documents offline fallback under a tighter
-  RAM budget; it does not substitute for the Pi 5 gate.
+  pipeline are enough for the pre-release tag.
+
+Decision (2026-10-11):
+
+- **Pi 5 smoke and the audit fixes do not block `v0.2.0` either.** B1–B3
+  and M1–M2 stay known issues on the backlog. Criterion 5 is the Pi 4
+  `pi-bench` run `20261011-105151`, not a Pi 5 + Ollama pass. The Pi 5
+  checklist remains the procedure for that backlog item. The Pi 4 product
+  guide is still a launch recipe, not the record of the run.
 
 ### WP0.11 — Tool schedule: groups and chains — **done**
 
@@ -1308,21 +1326,23 @@ Decisions recorded when the package was planned:
    through the fallback without changing the command (Ollama on Pi 5 / desktop;
    `llama-server` on Pi 4 4 GB — see [`raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md)).
 4. `hint -c` continues yesterday's dialogue with preserved context.
-5. A binary built with `GOOS=linux GOARCH=arm64` passes the same scenarios on
-   a Raspberry Pi 5.
+5. A binary built with `GOOS=linux GOARCH=arm64` runs on a Raspberry Pi.
+   For `v0.2.0` this is the Pi 4 4 GB `pi-bench` run `20261011-105151`
+   ([evidence](evidence/pi-4-20261011-105151/summary.md)). A Pi 5 + Ollama
+   pass of the same scenarios is backlog
+   ([`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md)).
 
 Criteria 1–4 are the functional Phase 0 bar. Criterion 5 is the
-`linux/arm64` hardware gate for **`v0.2.0`**. It does **not** block
-`v0.2.0-alpha` (deferred 2026-09-14); the checklist is
-[`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md).
+`linux/arm64` hardware record. The Pi 5 checklist does not block
+`v0.2.0-alpha` or `v0.2.0` (2026-10-11).
 
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
-WP0.9 (done) → WP0.10 (CI/release done; Pi 5 smoke deferred past
-`v0.2.0-alpha`) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` →
-Pi 5 smoke → `v0.2.0`.
+WP0.9 (done) → WP0.10 (CI/release done; Pi 4 bench is the hardware
+record) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` → tag
+`v0.2.0`. Pi 5 smoke and the audit fixes are backlog (2026-10-11).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).

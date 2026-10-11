@@ -12,8 +12,10 @@ roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
-| `raspberry-pi-smoke-test.md` | Checklist for WP0.10’s Raspberry Pi **5** acceptance run (required for `v0.2.0`; deferred past `v0.2.0-alpha`) |
-| [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe. Does not close WP0.10 |
+| `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
+| `raspberry-pi-smoke-test.md` | Checklist for a Raspberry Pi **5** + Ollama smoke. Backlog as of 2026-10-11; does not gate `v0.2.0` |
+| `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
+| [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
 Product documentation under `docs/` is limited to launch instructions,
 examples, rationale for chosen solutions, device coverage, and use cases.
