@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: In progress · Target release: **v0.2.0** · Estimate: 6–10 weeks (part-time)
+> Status: Released v0.2.0 · WP0.14 runs in parallel with Phase 1 and does not gate v0.3 · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -1390,7 +1390,9 @@ WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (CI/release done; Pi 4 bench is the hardware
 record) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` → tag
-`v0.2.0`. Pi 5 smoke and the audit fixes are backlog (2026-10-11).
+`v0.2.0`.
+WP0.14 (apt repository and Scoop bucket) runs in parallel with Phase 1 and does not gate `v0.3` (2026-10-11).
+Pi 5 smoke and the audit fixes are backlog (2026-10-11).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).
