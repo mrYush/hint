@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-09-27
+> Status: living document · Last updated: 2026-10-11
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -16,8 +16,12 @@ store") for third-party developers.
 
 ## Core architectural principle: "core as a service, shells as clients"
 
-One Go core (agent runtime) exposes an API (JSON-RPC/gRPC over stdio or a
-localhost socket). Every interface is a thin client of that core:
+One Go core (agent runtime) exposes an API over stdio or a localhost socket.
+Every interface is a thin client of that core.
+`v0.3` speaks JSON-RPC 2.0 ([`docs/rpc.md`](docs/rpc.md)).
+gRPC is a second adapter on the same engine, added when the first client of `hint serve` is not Go in this module — the native desktop shells in Phase 4.
+It does not replace JSON-RPC: stdio embedding and the Go TUI keep the line protocol.
+The in-process mobile core (Phase 5, gomobile) does not go through either wire.
 
 ```
                     ┌─────────────────────────────┐
@@ -82,7 +86,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
 ## Current status
 
-- **Active phase:** Phase 0 — MVP CLI (in progress).
+- **Active phase:** Phase 1 — core as a service + TUI (`v0.3`).
+  Phase 0 shipped as `v0.2.0`.
+  WP1.1 and the RPC contract (WP1.2) are in the tree: `hint serve` and `hint --mode rpc`.
+  The CLI and the TUI still call the agent in-process (WP1.3, WP1.4).
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
@@ -169,7 +176,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** tag `v0.2.0-alpha`, then `v0.2.0`. WP0.1–WP0.12 have landed.
+- **Next:** Phase 1 (`v0.3`).
+  `v0.2.0-alpha` and `v0.2.0` are tagged; `v0.2.0` is the GitHub Release and the Homebrew cask in `mrYush/homebrew-tap`.
+  WP0.1–WP0.12 have landed.
+  [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) proceeds on its own and does not have to finish first.
   The audit fixes B1–B3 and M1–M2
   ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md))
   stay known issues and are backlog (decided 2026-10-11); they do not block
@@ -224,15 +234,18 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
 9. ~~WP0.12 rung 4 (split rules loaded on first touch).~~ Done — see
    [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done).
-10. Tag `v0.2.0-alpha`. Known issues and the Pi 5 smoke do not block it
-    (2026-10-11).
-11. Tag `v0.2.0`. The hardware record is the Pi 4 bench, not a Pi 5 run.
-    The final tag needs `HOMEBREW_TAP_TOKEN`.
+10. ~~Tag `v0.2.0-alpha`.~~ Done — published pre-release.
+    Known issues and the Pi 5 smoke did not block it (2026-10-11).
+11. ~~Tag `v0.2.0`.~~ Done — GitHub Release and Homebrew cask `0.2.0` in `mrYush/homebrew-tap`.
+    The hardware record is the Pi 4 bench, not a Pi 5 run.
+    The tag needed `HOMEBREW_TAP_TOKEN`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented, awaiting the signing key, Pages and a final tag; Scoop: not started.
     The cask already covers macOS.
     This does not gate `v0.3`.
     Official catalogs stay a separate parallel path and do not gate either track.
+13. Phase 1 (`v0.3`): `hint serve` and the TUI.
+    It starts without waiting for WP0.14.
 
 ## Open questions
 

@@ -105,7 +105,7 @@ func newRootCommand() *cobra.Command {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
-	var sessionID, prompt, output string
+	var sessionID, prompt, output, rpcMode string
 	var debug bool
 
 	rootCmd := &cobra.Command{
@@ -126,7 +126,9 @@ one-shot for compatibility and prints a note about -p.`,
   hint -c                                # continue this directory's last session
   hint --session 3f2a                    # continue the session whose id starts with 3f2a
   hint sessions                          # list this directory's sessions
-  hint models                            # list the models the profile serves`,
+  hint models                            # list the models the profile serves
+  hint serve                             # JSON-RPC on a local socket
+  hint --mode rpc                        # the same protocol on stdin/stdout`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// A run-time failure is printed once, by main; cobra keeps
@@ -139,6 +141,14 @@ one-shot for compatibility and prints a note about -p.`,
 				session:   sessionModeOf(continueLast, resume, noSession, sessionID),
 				sessionID: sessionID,
 				debug:     debug,
+			}
+			if rpcMode != "" && rpcMode != "rpc" {
+				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
+			}
+			if rpcMode == "rpc" {
+				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+				defer stop()
+				return serveStdio(ctx, opts)
 			}
 			switch outputFormat(output) {
 			case outputText, outputJSON:
@@ -170,6 +180,7 @@ one-shot for compatibility and prints a note about -p.`,
 
 	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
 	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
+	rootCmd.Flags().StringVar(&rpcMode, "mode", "", "Speak JSON-RPC on stdin/stdout instead of running the CLI (rpc)")
 
 	// Run modes are a policy of this run, not part of a provider profile,
 	// so they are plain flags rather than config.Flags. --ask exists so
@@ -206,7 +217,7 @@ one-shot for compatibility and prints a note about -p.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags))
 	return rootCmd
 }
 
