@@ -44,6 +44,10 @@ func (g *Gate) Review(ctx context.Context, call agentapi.ToolCall, t agentapi.To
 	if g.grants.allows(req) {
 		return req, false
 	}
+	// The label is decided here, where the allow-list rules live, and
+	// travels with the request: an RPC client renders it, it does not
+	// recompute it.
+	req.Always = g.alwaysLabel(req)
 	return req, true
 }
 
@@ -54,7 +58,12 @@ func (g *Gate) Authorize(ctx context.Context, req agentapi.PermissionRequest) (b
 	if g.prompter == nil {
 		return false, nil
 	}
-	decision, err := g.prompter.Prompt(ctx, Ask{Request: req, Always: g.alwaysLabel(req)})
+	if req.Always == "" {
+		// Review labels every request it asks about; a caller that built
+		// the request itself gets the same policy applied here.
+		req.Always = g.alwaysLabel(req)
+	}
+	decision, err := g.prompter.Prompt(ctx, Ask{Request: req})
 	if err != nil {
 		if ctx.Err() != nil {
 			return false, ctx.Err()

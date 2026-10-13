@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-11
+> Status: living document · Last updated: 2026-10-12
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -89,7 +89,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - **Active phase:** Phase 1 — core as a service + TUI (`v0.3`).
   Phase 0 shipped as `v0.2.0`.
   WP1.1 and the RPC contract (WP1.2) are in the tree: `hint serve` and `hint --mode rpc`.
-  The CLI and the TUI still call the agent in-process (WP1.3, WP1.4).
+  WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
+  Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
+  The TUI (WP1.4) is next.
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
@@ -244,8 +246,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     The cask already covers macOS.
     This does not gate `v0.3`.
     Official catalogs stay a separate parallel path and do not gate either track.
-13. Phase 1 (`v0.3`): `hint serve` and the TUI.
-    It starts without waiting for WP0.14.
+13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
+14. WP1.4: the TUI on Bubble Tea, as a second client of the same protocol.
 
 ## Open questions
 

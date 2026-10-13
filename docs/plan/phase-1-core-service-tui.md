@@ -28,11 +28,11 @@ Reference — [Pi RPC mode](https://github.com/badlogic/pi-mono/blob/main/packag
 - [x] Versioned protocol handshake (`protocol_version` in hello)
 - [x] Golden tests for the wire format; document the protocol in `docs/rpc.md`
 
-### WP1.3 — CLI/REPL on top of the RPC API
+### WP1.3 — CLI/REPL on top of the RPC API — **done**
 
-- [ ] REPL and one-shot modes become RPC clients of an in-process (or spawned) core
-- [ ] No behavior change for users; acceptance scenarios from Phase 0 re-run green
-- [ ] Delete any direct agent-loop calls from `cmd/hint` — the API is the only path
+- [x] REPL and one-shot modes become RPC clients of an in-process (or spawned) core (`internal/rpc.Client` over a `net.Pipe` to the same `rpc.Server` that `hint serve` runs; `hint --connect` points the same shell at a running server)
+- [x] No behavior change for users; acceptance scenarios from Phase 0 re-run green (`cmd/hint` tests unchanged in what they assert; `TestPermissionOverRPC` drives a permission question and its answer across the wire)
+- [x] Delete any direct agent-loop calls from `cmd/hint` — the API is the only path (`TestShellNeverImportsTheAgent` pins it: only the engine wiring imports `internal/agent`)
 
 ### WP1.4 — TUI on Bubble Tea
 
@@ -63,6 +63,21 @@ Decisions (2026-10-11):
   Holding the pipes is the credential for `--mode rpc`.
   TCP listen is rejected unless the address is loopback.
   The wait for a permission answer is 2 minutes; expiry denies.
+- **The CLI is a real client, not a shortcut (2026-10-12).**
+  Bare `hint` serves the engine on one end of a `net.Pipe` and dials the other with the same `rpc.Client` an external Go program would use; the messages are marshalled and parsed, not passed as Go values.
+  The price is one JSON round trip per event inside one process, which is nothing at terminal speed; the gain is that every bug in the wire format is hit by the daily CLI, not first by Phase 4's shells.
+  Calling `rpc.Engine` directly would have kept the agent loop reachable from the shell and left the protocol exercised only by its own tests.
+- **Permission labels travel with the request (2026-10-12).**
+  `agentapi.PermissionRequest.Always` carries what an "always" answer would remember.
+  The gate computes it; the client shows it.
+  The alternative, the client recomputing `permission.CommandScope`, would have put policy in every client and let them drift from the core.
+  Additive, `omitempty`, no `WireVersion` bump.
+- **`--no-session` is an ephemeral session on the server (2026-10-12).**
+  `session.open {"ephemeral":true}`: an id with no file.
+  Turns need a session id, and the alternative — dropping `--no-session` — was a behavior change WP1.3 rules out.
+- **Engine notices stay on the server's stderr (2026-10-12).**
+  Project-context warnings, a session file that stops being writable and the `--debug` trace belong to the core; in-process they are the same stderr the shell uses, with `--connect` they appear where the server runs.
+  A `notice` notification can be added when a client needs them; nothing today does.
 - **gRPC waits for a non-Go client of `hint serve`.**
   Phase 4's native shells (Swift, and WinUI if that spike wins) are the trigger: a second adapter on the same `Engine` and the same `pkg/agentapi` events, with generated stubs and a server stream.
   JSON-RPC stays for `--mode rpc` and for the Go TUI.
@@ -72,7 +87,9 @@ Decisions (2026-10-11):
 ## Acceptance criteria
 
 1. A second terminal can attach to a running `hint serve` and continue the
-   same session.
+   same session. **Met 2026-10-12** by `hint --connect -c` (checked by hand
+   against `hint serve --listen tcp:127.0.0.1:0`; the automated check is
+   `TestOpenSession` over a client).
 2. An external script drives a full agentic turn (incl. answering a
    permission request) through `hint --mode rpc` with JSON only.
 3. All Phase 0 acceptance scenarios pass through the TUI.

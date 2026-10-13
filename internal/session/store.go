@@ -59,7 +59,7 @@ func WithIDs(newID func() (string, error)) Option {
 
 // NewStore returns a Store over dir, creating nothing until a session is.
 func NewStore(dir string, opts ...Option) *Store {
-	s := &Store{dir: dir, now: time.Now, newID: randomID}
+	s := &Store{dir: dir, now: time.Now, newID: NewID}
 	for _, o := range opts {
 		o(s)
 	}
@@ -83,9 +83,11 @@ func projectHash(cwd string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// randomID returns 16 hex digits from crypto/rand: unique enough for a
-// per-user directory of session files, with no module for UUIDs.
-func randomID() (string, error) {
+// NewID returns 16 hex digits from crypto/rand: unique enough for a
+// per-user directory of session files, with no module for UUIDs. It is
+// exported for the one session kind the Store never sees, the ephemeral
+// session of --no-session, which still needs an id on the wire.
+func NewID() (string, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", fmt.Errorf("session: generate id: %w", err)

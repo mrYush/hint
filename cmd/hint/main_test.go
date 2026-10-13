@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"go/parser"
+	"go/token"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +25,7 @@ import (
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/provider"
+	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -158,102 +163,130 @@ func TestDispatch(t *testing.T) {
 	}
 }
 
-// TestOpenSession walks the modes against one store: a new session per
-// run by default, -c continuing the latest (or starting one when there is
-// none), -r reading the choice through the shared line reader, --session
-// naming one, and --no-session recording nothing.
+// testClient serves an engine built from as on a pipe and returns the
+// shell's client to it, the way serveInProcess does.
+func testClient(t *testing.T, as assembly) *rpc.Client {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	eng, err := newEngine(ctx, as)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	srv := &rpc.Server{Engine: eng}
+	shell, core := net.Pipe()
+	go func() { _ = srv.ServeConn(ctx, core) }()
+	cl, err := rpc.Dial(ctx, shell, "")
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cl.Close(); srv.Close(); cancel() })
+	return cl
+}
+
+// TestOpenSession walks the modes through the client: a new session per
+// run by default, --no-session an ephemeral one, -c continuing the latest
+// (or starting one when there is none), -r reading the choice through the
+// shared line reader, and --session naming one.
 func TestOpenSession(t *testing.T) {
-	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
-	cwd := t.TempDir()
+	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
+	cl := testClient(t, as)
 	ctx := context.Background()
 	noInput := console.NewLineReader(strings.NewReader(""))
 
-	if sess, err := openSession(ctx, store, cwd, sessionOff, "", noInput, io.Discard); sess != nil || err != nil {
-		t.Fatalf("sessionOff = %v, %v; want nil, nil", sess, err)
+	view, recorded, err := openSession(ctx, cl, sessionOff, "", noInput, io.Discard)
+	if err != nil || recorded || view.ID == "" {
+		t.Fatalf("sessionOff = %+v, %v, %v; want an unrecorded session with an id", view, recorded, err)
+	}
+	if infos := sessionsOf(t, as); len(infos) != 0 {
+		t.Fatalf("an ephemeral session reached the disk: %+v", infos)
 	}
 
 	// --session in an empty directory is refused, not silently replaced.
-	if _, err := openSession(ctx, store, cwd, sessionByID, "abc", noInput, io.Discard); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
+	if _, _, err := openSession(ctx, cl, sessionByID, "abc", noInput, io.Discard); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
 		t.Fatalf("--session with nothing recorded: %v", err)
 	}
 
 	var stderr bytes.Buffer
-	first, err := openSession(ctx, store, cwd, sessionContinue, "", noInput, &stderr)
-	if err != nil {
-		t.Fatalf("continue with nothing to continue: %v", err)
+	if _, recorded, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr); err != nil || !recorded {
+		t.Fatalf("continue with nothing to continue: %v, %v", recorded, err)
 	}
 	if !strings.Contains(stderr.String(), "starting a new one") {
 		t.Errorf("no notice about the fallback:\n%s", stderr.String())
+	}
+
+	// Two earlier conversations of this directory, recorded by earlier
+	// runs: the first is older by creation but touched last.
+	root, err := tool.NewRoot(as.cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := as.store.Create(root.Dir())
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := first.AppendMessage(agentapi.UserMessage("first")); err != nil {
 		t.Fatal(err)
 	}
 	_ = first.Close()
-
-	second, err := openSession(ctx, store, cwd, sessionNew, "", noInput, io.Discard)
+	second, err := as.store.Create(root.Dir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.ID() == first.ID() {
-		t.Fatal("sessionNew reused the existing session")
-	}
 	_ = second.Close()
-
-	stderr.Reset()
-	// The first session is older by creation but touched last: -c follows
-	// modification time.
 	later := time.Now().Add(time.Hour)
 	if err := os.Chtimes(first.Path(), later, later); err != nil {
 		t.Fatal(err)
 	}
-	cont, err := openSession(ctx, store, cwd, sessionContinue, "", noInput, &stderr)
+
+	stderr.Reset()
+	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cont.ID() != first.ID() || cont.Len() != 1 {
-		t.Fatalf("continue = %s with %d messages, want %s with 1", cont.ID(), cont.Len(), first.ID())
+	if cont.ID != first.ID() || len(cont.Messages) != 1 {
+		t.Fatalf("continue = %s with %d messages, want %s with 1", cont.ID, len(cont.Messages), first.ID())
 	}
 	if !strings.Contains(stderr.String(), "continuing session "+first.ID()) {
 		t.Errorf("no notice:\n%s", stderr.String())
 	}
-	_ = cont.Close()
 
 	// -r: the second listed entry is the older, untouched session.
 	stderr.Reset()
-	picked, err := openSession(ctx, store, cwd, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr)
+	picked, _, err := openSession(ctx, cl, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if picked.ID() != second.ID() {
-		t.Fatalf("resume picked %s, want %s", picked.ID(), second.ID())
+	if picked.ID != second.ID() {
+		t.Fatalf("resume picked %s, want %s", picked.ID, second.ID())
 	}
-	_ = picked.Close()
 
 	// --session: the full id, or an unambiguous prefix of it.
 	stderr.Reset()
-	named, err := openSession(ctx, store, cwd, sessionByID, second.ID(), noInput, &stderr)
-	if err != nil || named.ID() != second.ID() {
-		t.Fatalf("--session %s: %v, %v", second.ID(), named, err)
+	named, _, err := openSession(ctx, cl, sessionByID, second.ID()[:6], noInput, &stderr)
+	if err != nil || named.ID != second.ID() {
+		t.Fatalf("--session %s: %v, %v", second.ID()[:6], named.ID, err)
 	}
-	_ = named.Close()
 	if !strings.Contains(stderr.String(), "continuing session "+second.ID()) {
 		t.Errorf("no notice:\n%s", stderr.String())
 	}
-	if _, err := openSession(ctx, store, cwd, sessionByID, "no-such-id", noInput, io.Discard); !errors.Is(err, session.ErrUnknownSession) {
+	_, _, err = openSession(ctx, cl, sessionByID, "no-such-id", noInput, io.Discard)
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotFound || !strings.Contains(err.Error(), "no-such-id") {
 		t.Errorf("--session with an unknown id: %v", err)
 	}
 
 	// -r with nobody answering is a refusal, not a silent new session.
-	if _, err := openSession(ctx, store, cwd, sessionResume, "", noInput, io.Discard); !errors.Is(err, session.ErrNoChoice) {
+	if _, _, err := openSession(ctx, cl, sessionResume, "", noInput, io.Discard); !errors.Is(err, session.ErrNoChoice) {
 		t.Fatalf("resume without an answer = %v, want ErrNoChoice", err)
 	}
 
 	// -r in a directory with no sessions starts a new one, like -c.
-	fresh, err := openSession(ctx, store, t.TempDir(), sessionResume, "", noInput, io.Discard)
-	if err != nil || fresh == nil {
-		t.Fatalf("resume with nothing to resume = %v, %v", fresh, err)
+	fresh, _, _, _ := testAssembly(t, &fakeChat{}, "")
+	if view, recorded, err := openSession(ctx, testClient(t, fresh), sessionResume, "", noInput, io.Discard); err != nil || !recorded || view.ID == "" {
+		t.Fatalf("resume with nothing to resume = %+v, %v, %v", view, recorded, err)
 	}
-	_ = fresh.Close()
 }
 
 func TestSystemPrompt(t *testing.T) {
@@ -304,8 +337,11 @@ type fakeChat struct {
 	mu       sync.Mutex
 	requests []agentapi.ChatRequest
 	reply    func(n int) string
-	fail     *agentapi.Error
-	hang     bool
+	// call, when set, is asked for a tool call to make instead of a
+	// text reply on request n; nil means answer with text.
+	call func(n int) *agentapi.ToolCall
+	fail *agentapi.Error
+	hang bool
 }
 
 func (f *fakeChat) Name() string { return "fake" }
@@ -326,11 +362,20 @@ func (f *fakeChat) Stream(ctx context.Context, req agentapi.ChatRequest) (<-chan
 			out <- agentapi.ChatEvent{Kind: agentapi.ChatError, Err: agentapi.WrapError(agentapi.ErrCanceled, ctx.Err(), "canceled")}
 			return
 		}
-		for _, ev := range []agentapi.ChatEvent{
+		events := []agentapi.ChatEvent{
 			{Kind: agentapi.ChatTextDelta, Text: f.reply(n)},
 			{Kind: agentapi.ChatUsage, Usage: &agentapi.Usage{InputTokens: 10, OutputTokens: 3}},
 			{Kind: agentapi.ChatDone, FinishReason: agentapi.FinishStop},
-		} {
+		}
+		if f.call != nil {
+			if call := f.call(n); call != nil {
+				events = []agentapi.ChatEvent{
+					{Kind: agentapi.ChatToolCall, Call: call},
+					{Kind: agentapi.ChatDone, FinishReason: agentapi.FinishToolCalls},
+				}
+			}
+		}
+		for _, ev := range events {
 			select {
 			case out <- ev:
 			case <-ctx.Done():
@@ -348,8 +393,10 @@ func (f *fakeChat) seen() []agentapi.ChatRequest {
 }
 
 // testAssembly builds an assembly over temp directories, a fake provider
-// and buffers, in --no-session mode unless the caller changes it.
-func testAssembly(t *testing.T, chat agentapi.ChatProvider, stdin string) (assembly, *bytes.Buffer, *bytes.Buffer) {
+// and buffers, in --no-session mode unless the caller changes it. The
+// engine's notices and the shell's stderr are the same buffer, as they
+// are the same stream in the process.
+func testAssembly(t *testing.T, chat agentapi.ChatProvider, stdin string) (assembly, stdio, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	var out, stderr bytes.Buffer
 	cfg := &config.Config{
@@ -358,21 +405,37 @@ func testAssembly(t *testing.T, chat agentapi.ChatProvider, stdin string) (assem
 		Instructions:    config.InstructionSettings{Budget: config.DefaultInstructionBudget},
 		Overview:        config.OverviewSettings{Depth: 1, MaxEntries: 10},
 	}
-	return assembly{
-		chat:  chat,
-		cfg:   cfg,
-		opts:  options{mode: permission.ModeAsk, session: sessionOff, output: outputText},
-		cwd:   t.TempDir(),
-		store: session.NewStore(filepath.Join(t.TempDir(), "sessions")),
-		io:    stdio{in: strings.NewReader(stdin), out: &out, err: &stderr, tty: true},
-	}, &out, &stderr
+	as := assembly{
+		chat:    chat,
+		cfg:     cfg,
+		opts:    options{mode: permission.ModeAsk, session: sessionOff, output: outputText},
+		cwd:     t.TempDir(),
+		store:   session.NewStore(filepath.Join(t.TempDir(), "sessions")),
+		notices: &stderr,
+	}
+	return as, stdio{in: strings.NewReader(stdin), out: &out, err: &stderr, tty: true}, &out, &stderr
+}
+
+// sessionsOf lists the sessions the store recorded for as.cwd, keyed the
+// way the engine keys them: by the symlink-resolved root.
+func sessionsOf(t *testing.T, as assembly) []session.Info {
+	t.Helper()
+	root, err := tool.NewRoot(as.cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	infos, err := as.store.List(root.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return infos
 }
 
 func TestOneShotText(t *testing.T) {
 	chat := &fakeChat{reply: func(int) string { return "the answer" }}
-	as, out, stderr := testAssembly(t, chat, "")
+	as, sio, out, stderr := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
-	a, err := assemble(context.Background(), as)
+	a, err := assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,18 +455,17 @@ func TestOneShotText(t *testing.T) {
 	if len(reqs) != 1 || len(reqs[0].Messages) != 2 || reqs[0].Messages[1].Text() != "the question" {
 		t.Fatalf("requests = %+v", reqs)
 	}
-	infos, err := as.store.List(a.sess.Cwd())
-	if err != nil || len(infos) != 1 || infos[0].Messages != 2 {
-		t.Errorf("sessions = %+v, %v; want one with 2 messages", infos, err)
+	if infos := sessionsOf(t, as); len(infos) != 1 || infos[0].Messages != 2 {
+		t.Errorf("sessions = %+v; want one with 2 messages", infos)
 	}
 }
 
 func TestOneShotJSON(t *testing.T) {
 	chat := &fakeChat{reply: func(int) string { return "42" }}
-	as, out, _ := testAssembly(t, chat, "")
+	as, sio, out, _ := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
 	as.opts.output = outputJSON
-	a, err := assemble(context.Background(), as)
+	a, err := assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +476,7 @@ func TestOneShotJSON(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatalf("stdout is not one JSON object: %v\n%s", err, out.String())
 	}
-	if got.Answer != "42" || got.FinishReason != agentapi.FinishStop || got.SessionID != a.sess.ID() || got.Usage == nil || got.Usage.OutputTokens != 3 || got.Error != nil {
+	if got.Answer != "42" || got.FinishReason != agentapi.FinishStop || got.SessionID != a.sessionID || got.Usage == nil || got.Usage.OutputTokens != 3 || got.Error != nil {
 		t.Errorf("answer = %+v", got)
 	}
 	a.close()
@@ -422,9 +484,9 @@ func TestOneShotJSON(t *testing.T) {
 	// A failing provider is an exit status and an error field, and the
 	// object is still the only thing on stdout.
 	failing := &fakeChat{fail: agentapi.NewError(agentapi.ErrAuth, "bad key").WithProvider("fake")}
-	as, out, _ = testAssembly(t, failing, "")
+	as, sio, out, _ = testAssembly(t, failing, "")
 	as.opts.output = outputJSON
-	a, err = assemble(context.Background(), as)
+	a, err = assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,9 +511,9 @@ func TestOneShotJSON(t *testing.T) {
 // cancels that turn and the loop goes on.
 func TestREPL(t *testing.T) {
 	chat := &fakeChat{reply: func(n int) string { return strings.Repeat("a", n) }}
-	as, out, stderr := testAssembly(t, chat, "/help\n/bogus x\n\nfirst\nsecond\n/exit\nnever sent\n")
+	as, sio, out, stderr := testAssembly(t, chat, "/help\n/bogus x\n\nfirst\nsecond\n/exit\nnever sent\n")
 	as.opts.session = sessionNew
-	a, err := assemble(context.Background(), as)
+	a, err := assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,14 +543,13 @@ func TestREPL(t *testing.T) {
 	if reqs[1].Messages[2].Text() != "a" || reqs[1].Messages[3].Text() != "second" {
 		t.Errorf("second request carries %q then %q", reqs[1].Messages[2].Text(), reqs[1].Messages[3].Text())
 	}
-	infos, err := as.store.List(a.sess.Cwd())
-	if err != nil || len(infos) != 1 || infos[0].Messages != 4 {
-		t.Errorf("sessions = %+v, %v; want one with 4 messages", infos, err)
+	if infos := sessionsOf(t, as); len(infos) != 1 || infos[0].Messages != 4 {
+		t.Errorf("sessions = %+v; want one with 4 messages", infos)
 	}
 
 	// EOF at the prompt ends the loop like /exit.
-	as, _, _ = testAssembly(t, chat, "")
-	a, err = assemble(context.Background(), as)
+	as, sio, _, _ = testAssembly(t, chat, "")
+	a, err = assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,9 +563,9 @@ func TestREPLInterrupt(t *testing.T) {
 	// turn reports "interrupted", and the next line is still read.
 	hanging := &fakeChat{hang: true}
 	pr, pw := io.Pipe()
-	as, out, stderr := testAssembly(t, hanging, "")
-	as.io.in = pr
-	a, err := assemble(context.Background(), as)
+	as, sio, out, stderr := testAssembly(t, hanging, "")
+	sio.in = pr
+	a, err := assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,13 +612,13 @@ func TestREPLInterrupt(t *testing.T) {
 // mask it and the writer did not redact it.
 func TestTrace(t *testing.T) {
 	chat := &fakeChat{reply: func(int) string { return "traced" }}
-	as, _, stderr := testAssembly(t, chat, "")
+	as, sio, _, stderr := testAssembly(t, chat, "")
 	trace, err := debuglog.Open(filepath.Join(t.TempDir(), "log"), time.Now(), as.cfg.Secrets())
 	if err != nil {
 		t.Fatal(err)
 	}
 	as.trace = trace
-	a, err := assemble(context.Background(), as)
+	a, err := assemble(context.Background(), as, sio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -684,5 +745,89 @@ func TestFormatVersion(t *testing.T) {
 	devel := &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}
 	if got, want := formatVersion("dev", "none", "unknown", devel), "dev (commit none, built unknown)"; got != want {
 		t.Errorf("(devel) is not a version: got %q, want %q", got, want)
+	}
+}
+
+// TestPermissionOverRPC is WP1.3's acceptance in one test: the model asks
+// for a command, the question reaches the terminal as a permission event
+// over the wire — with the "always" label the core decided on — and the
+// answer typed on stdin goes back as permission.reply. A denial never
+// starts the tool; an allowance runs it.
+func TestPermissionOverRPC(t *testing.T) {
+	bash := func(command string) func(int) *agentapi.ToolCall {
+		return func(n int) *agentapi.ToolCall {
+			if n != 1 {
+				return nil
+			}
+			return &agentapi.ToolCall{ID: "call-1", Name: "bash", Arguments: json.RawMessage(`{"command":` + strconv.Quote(command) + `}`)}
+		}
+	}
+	denied := &fakeChat{reply: func(int) string { return "as you wish" }, call: bash("go test ./...")}
+	as, sio, out, stderr := testAssembly(t, denied, "n\n")
+	a, err := assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.oneShot(context.Background(), "run the tests"); err != nil {
+		t.Fatalf("oneShot: %v", err)
+	}
+	a.close()
+	if out.String() != "as you wish\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+	for _, want := range []string{"go test ./...", `[y]es / [N]o / [a]lways (commands starting with "go test"): `} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("prompt lacks %q:\n%s", want, stderr.String())
+		}
+	}
+	if strings.Contains(stderr.String(), "hint: bash {") {
+		t.Errorf("a denied command was started:\n%s", stderr.String())
+	}
+	if reqs := denied.seen(); len(reqs) != 2 {
+		t.Fatalf("%d requests, want the call and the retry after the denial", len(reqs))
+	}
+
+	allowed := &fakeChat{reply: func(int) string { return "it printed ok" }, call: bash("echo ok")}
+	as, sio, out, stderr = testAssembly(t, allowed, "y\n")
+	a, err = assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.oneShot(context.Background(), "say ok"); err != nil {
+		t.Fatalf("oneShot: %v", err)
+	}
+	a.close()
+	if out.String() != "it printed ok\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "hint: bash {") || strings.Contains(stderr.String(), "[a]lways") {
+		t.Errorf("an allowed echo should run, with no always option for an unscoped command:\n%s", stderr.String())
+	}
+}
+
+// TestShellNeverImportsTheAgent is the dependency rule of WP1.3 as a test:
+// the CLI shell reaches the agent loop only through the core the RPC
+// server serves. The engine wiring is the one file allowed to know the
+// agent exists; everything else in cmd/hint is a client.
+func TestShellNeverImportsTheAgent(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") || file == "rpcengine.go" || file == "rules.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range f.Imports {
+			switch path := strings.Trim(imp.Path.Value, `"`); path {
+			case "github.com/mrYush/hint/internal/agent", "github.com/mrYush/hint/internal/tool/builtin", "github.com/mrYush/hint/internal/project":
+				t.Errorf("%s imports %s; the shell talks to the core over RPC only", file, path)
+			}
+		}
 	}
 }
