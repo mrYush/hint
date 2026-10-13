@@ -115,7 +115,7 @@ func TestAllowList_ExecutePrefix(t *testing.T) {
 		if asks == c.covered {
 			t.Errorf("grant %q, later %q: asks again = %v, want covered = %v", c.grant, c.later, asks, c.covered)
 		}
-		if ask.Always == "" {
+		if ask.Request.Always == "" {
 			t.Errorf("grant %q: prompt offered no always option", c.grant)
 		}
 	}
@@ -128,8 +128,8 @@ func TestAllowList_WriteIsNeverRemembered(t *testing.T) {
 	if !asks {
 		t.Fatal("a write was remembered")
 	}
-	if ask.Always != "" {
-		t.Fatalf("always offered for a write: %q", ask.Always)
+	if ask.Request.Always != "" {
+		t.Fatalf("always offered for a write: %q", ask.Request.Always)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestAllowList_UnscopableCommandIsOneOff(t *testing.T) {
 	if err != nil || !allowed {
 		t.Fatalf("Authorize = %v, %v; an always answer still allows this call", allowed, err)
 	}
-	if p.asks[0].Always != "" {
+	if p.asks[0].Request.Always != "" {
 		t.Fatalf("always was offered for %q", req.Detail)
 	}
 	if _, asks := g.Review(context.Background(), reqCall(req), fakeTool{class: agentapi.ClassExecute, desc: req}); !asks {

@@ -24,7 +24,8 @@ func promptWith(t *testing.T, input string, ask permission.Ask) (permission.Deci
 }
 
 func TestReaderPrompter_Answers(t *testing.T) {
-	ask := permission.Ask{Request: execReq("go test ./..."), Always: `commands starting with "go test"`}
+	ask := permission.Ask{Request: execReq("go test ./...")}
+	ask.Request.Always = `commands starting with "go test"`
 	cases := map[string]permission.Decision{
 		"y\n":        permission.Allow,
 		"yes\n":      permission.Allow,
@@ -47,10 +48,8 @@ func TestReaderPrompter_Answers(t *testing.T) {
 }
 
 func TestReaderPrompter_ShowsSummaryDetailAndAlways(t *testing.T) {
-	ask := permission.Ask{
-		Request: execReq("go test ./..."),
-		Always:  `commands starting with "go test"`,
-	}
+	ask := permission.Ask{Request: execReq("go test ./...")}
+	ask.Request.Always = `commands starting with "go test"`
 	ask.Request.Summary = "edit main.go"
 	ask.Request.Detail = "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n-old\n+new\n"
 	_, out := promptWith(t, "y\n", ask)

@@ -34,12 +34,12 @@ const (
 
 // Ask is one question put to a Prompter.
 type Ask struct {
-	// Request is what the agent wants to do, with the preview in Detail.
+	// Request is what the agent wants to do, with the preview in Detail
+	// and, in Always, what an AllowAlways answer would remember — empty
+	// when that option is not offered. The same request travels the event
+	// stream, so a prompter on the far side of an RPC connection sees
+	// exactly what the local one does.
 	Request agentapi.PermissionRequest
-	// Always says what an AllowAlways answer would remember, for the
-	// prompt to show, e.g. `commands starting with "go test"`. Empty when
-	// the option is not offered.
-	Always string
 }
 
 // Prompter puts a permission question to whoever can answer it. The CLI's
@@ -93,8 +93,8 @@ func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) 
 		fmt.Fprintln(p.out, detail)
 	}
 	options := "[y]es / [N]o"
-	if ask.Always != "" {
-		options += fmt.Sprintf(" / [a]lways (%s)", ask.Always)
+	if ask.Request.Always != "" {
+		options += fmt.Sprintf(" / [a]lways (%s)", ask.Request.Always)
 	}
 
 	for {
@@ -115,7 +115,7 @@ func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) 
 		case "n", "no", "":
 			return Deny, nil
 		case "a", "always":
-			if ask.Always == "" {
+			if ask.Request.Always == "" {
 				fmt.Fprintln(p.out, "hint: \"always\" is not available for this command; answer y or n")
 				continue
 			}

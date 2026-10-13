@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -22,8 +23,8 @@ func TestHelloThenTurnWithPermission(t *testing.T) {
 	defer cancel()
 
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(ctx, peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
 
 	enc := json.NewEncoder(client)
 	dec := json.NewDecoder(client)
@@ -91,15 +92,15 @@ func TestHelloThenTurnWithPermission(t *testing.T) {
 func TestMethodBeforeHelloIsRejected(t *testing.T) {
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}}
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(context.Background(), peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
 
 	enc := json.NewEncoder(client)
 	dec := json.NewDecoder(client)
 	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "session.list"})
 	msg := mustRecv(t, dec)
 	errObj, _ := msg["error"].(map[string]any)
-	if errObj["code"] != float64(codeNotReady) {
+	if errObj["code"] != float64(CodeNotReady) {
 		t.Fatalf("error = %v", msg["error"])
 	}
 }
@@ -107,8 +108,8 @@ func TestMethodBeforeHelloIsRejected(t *testing.T) {
 func TestSocketTokenRequired(t *testing.T) {
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Token: "secret-token"}
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(context.Background(), peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
 
 	enc := json.NewEncoder(client)
 	dec := json.NewDecoder(client)
@@ -118,7 +119,7 @@ func TestSocketTokenRequired(t *testing.T) {
 	})
 	msg := mustRecv(t, dec)
 	errObj, _ := msg["error"].(map[string]any)
-	if errObj["code"] != float64(codeUnauthorized) {
+	if errObj["code"] != float64(CodeUnauthorized) {
 		t.Fatalf("error = %v", msg["error"])
 	}
 }
@@ -127,8 +128,8 @@ func TestPermissionTimeoutDenies(t *testing.T) {
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: 20 * time.Millisecond}
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(context.Background(), peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
 
 	enc := json.NewEncoder(client)
 	dec := json.NewDecoder(client)
@@ -161,8 +162,8 @@ func TestSecondTurnIsBusy(t *testing.T) {
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: time.Second}
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(context.Background(), peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
 
 	enc := json.NewEncoder(client)
 	dec := json.NewDecoder(client)
@@ -196,7 +197,7 @@ func TestSecondTurnIsBusy(t *testing.T) {
 	})
 	busy := mustRecv(t, dec)
 	errObj, _ := busy["error"].(map[string]any)
-	if errObj["code"] != float64(codeBusy) {
+	if errObj["code"] != float64(CodeBusy) {
 		t.Fatalf("second turn = %v", busy)
 	}
 }
@@ -228,8 +229,8 @@ func TestWriteTokenIsOwnerOnly(t *testing.T) {
 func TestHelloGolden(t *testing.T) {
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Version: "test"}
 	client, peer := net.Pipe()
-	defer client.Close()
-	go srv.serveConn(context.Background(), peer, peer, peer)
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
 
 	if _, err := io.WriteString(client, `{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol_version":1}}`+"\n"); err != nil {
 		t.Fatal(err)
@@ -279,23 +280,29 @@ type fakeEngine struct {
 
 func (e *fakeEngine) List(context.Context) ([]Info, error) { return nil, nil }
 
-func (e *fakeEngine) Open(context.Context) (Session, error) {
-	s := &fakeSession{id: "sess-1"}
+func (e *fakeEngine) Open(_ context.Context, opts OpenOptions) (Session, error) {
+	s := &fakeSession{id: "sess-1", ephemeral: opts.Ephemeral}
 	e.sessions[s.id] = s
 	return s, nil
 }
 
-func (e *fakeEngine) Attach(context.Context, string) (Session, error) {
-	return e.sessions["sess-1"], nil
+func (e *fakeEngine) Attach(_ context.Context, id string) (Session, error) {
+	if s := e.sessions[id]; s != nil {
+		return s, nil
+	}
+	return nil, errors.New("no such session")
 }
 
 type fakeSession struct {
-	id      string
-	allowed bool
+	id        string
+	ephemeral bool
+	allowed   bool
 }
 
 func (s *fakeSession) ID() string                   { return s.id }
+func (s *fakeSession) Created() time.Time           { return time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC) }
 func (s *fakeSession) Messages() []agentapi.Message { return nil }
+func (s *fakeSession) Warnings() []string           { return nil }
 func (s *fakeSession) Close() error                 { return nil }
 
 func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {

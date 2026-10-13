@@ -96,6 +96,10 @@ type options struct {
 	sessionID string
 	debug     bool
 	output    outputFormat
+	// connect names a running `hint serve` to use instead of an
+	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
+	// runs the core in this process.
+	connect string
 }
 
 // newRootCommand builds the command tree. Flags are bound to locals and
@@ -105,7 +109,7 @@ func newRootCommand() *cobra.Command {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
-	var sessionID, prompt, output, rpcMode string
+	var sessionID, prompt, output, rpcMode, connect string
 	var debug bool
 
 	rootCmd := &cobra.Command{
@@ -128,6 +132,7 @@ one-shot for compatibility and prints a note about -p.`,
   hint sessions                          # list this directory's sessions
   hint models                            # list the models the profile serves
   hint serve                             # JSON-RPC on a local socket
+  hint --connect -c                      # join that server from another terminal
   hint --mode rpc                        # the same protocol on stdin/stdout`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -141,6 +146,7 @@ one-shot for compatibility and prints a note about -p.`,
 				session:   sessionModeOf(continueLast, resume, noSession, sessionID),
 				sessionID: sessionID,
 				debug:     debug,
+				connect:   connect,
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
 				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
@@ -181,6 +187,12 @@ one-shot for compatibility and prints a note about -p.`,
 	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
 	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
 	rootCmd.Flags().StringVar(&rpcMode, "mode", "", "Speak JSON-RPC on stdin/stdout instead of running the CLI (rpc)")
+	// The CLI is a client of the core either way; --connect only changes
+	// which process runs it. A bare --connect finds the server through
+	// the files hint serve wrote; a value names the address outright.
+	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:127.0.0.1:port")
+	rootCmd.Flags().Lookup("connect").NoOptDefVal = connectAuto
+	rootCmd.MarkFlagsMutuallyExclusive("connect", "mode")
 
 	// Run modes are a policy of this run, not part of a provider profile,
 	// so they are plain flags rather than config.Flags. --ask exists so

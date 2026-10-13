@@ -269,6 +269,12 @@ type PermissionRequest struct {
 	Detail string `json:"detail,omitempty"`
 	// Path is the file the action targets, when there is one.
 	Path string `json:"path,omitempty"`
+	// Always, when set, says what an "always" answer would remember, e.g.
+	// `commands starting with "go test"`, so the client can offer that
+	// choice and label it. Empty means only allow and deny are offered.
+	// The policy behind it belongs to the core, which is why it travels
+	// with the request instead of being recomputed by every client.
+	Always string `json:"always,omitempty"`
 }
 
 // Validate reports whether the request is well-formed.
