@@ -34,14 +34,35 @@ otherwise: recommended, not required. To answer anything it needs an
 OpenAI-compatible endpoint or a local Ollama; see
 [Configuration](#configuration).
 
+### apt (Ubuntu, Debian, Linux Mint, Pop!_OS, Raspberry Pi OS)
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://mryush.github.io/hint/hint.gpg | sudo tee /etc/apt/keyrings/hint.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/hint.gpg] https://mryush.github.io/hint stable main" \
+  | sudo tee /etc/apt/sources.list.d/hint.list
+sudo apt update
+sudo apt install hint
+```
+
+One `stable` suite serves every release of every apt-based distribution
+on amd64 and arm64: the binary is static and does not depend on the
+distribution's libraries. The package depends on `ripgrep`, so apt installs
+it too. Updates arrive with `sudo apt update && sudo apt upgrade`.
+The `Release` file is signed; `hint.gpg` is the public half of the key
+and `signed-by` limits it to this one repository. Pre-releases are not
+published to the repository. A single `.deb` is also attached to each
+[release](https://github.com/mrYush/hint/releases) for `dpkg -i`.
+
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install --cask mrYush/hint/hint
+brew install --cask mrYush/tap/hint
 ```
 
-The tap is `mrYush/hint`; the cask installs the release binary and brings
-ripgrep with it. Pre-releases are not published to the tap.
+The tap is `mrYush/tap` (the repository `mrYush/homebrew-tap`); the cask
+installs the release binary and brings ripgrep with it. Pre-releases are
+not published to the tap.
 
 ### Release archive
 

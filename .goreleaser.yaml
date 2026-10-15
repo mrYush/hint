@@ -52,6 +52,29 @@ archives:
 checksum:
   name_template: checksums.txt
 
+nfpms:
+  - id: hint
+    package_name: hint
+    ids:
+      - hint
+    formats:
+      - deb
+    # hint_0.2.0_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    maintainer: Yurii Simonov <rep.yurii@gmail.com>
+    homepage: https://github.com/mrYush/hint
+    description: Context-aware CLI assistant that reads, edits and runs your project
+    license: MIT
+    section: utils
+    priority: optional
+    bindir: /usr/bin
+    # Same reasoning as the cask: grep and glob use ripgrep when present and
+    # fall back to a pure-Go walk, so it is recommended-by-default, not a
+    # hard requirement of the binary. The plan (WP0.14) asks for a
+    # dependency so the fast path is what apt users get.
+    dependencies:
+      - ripgrep
+
 changelog:
   sort: asc
   filters:
