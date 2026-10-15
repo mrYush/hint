@@ -1,11 +1,15 @@
 # Release: pushing an annotated v* tag (CONTRIBUTING.md, "Releases")
 # builds every target with goreleaser, attaches the archives and
-# checksums to a GitHub Release, and — for a final version — updates the
-# Homebrew cask in mrYush/homebrew-tap.
+# checksums and .deb packages to a GitHub Release, and — for a final
+# version — updates the Homebrew cask in mrYush/homebrew-tap and rebuilds
+# the apt repository on the gh-pages branch (served by GitHub Pages).
 #
 # Secrets: GITHUB_TOKEN is provided by GitHub; HOMEBREW_TAP_TOKEN must be
 # a token with write access to mrYush/homebrew-tap. Without it the brew
 # step fails on a final release (pre-releases skip it).
+# APT_SIGNING_KEY is the ASCII-armored private key that signs the apt
+# Release file (APT_SIGNING_PASSPHRASE if it has one). Without it the apt
+# step fails on a final release, after the GitHub Release is published.
 name: Release
 
 on:
@@ -42,3 +46,23 @@ jobs:
           # first (v0.2.0 was built as v0.2.0-alpha). The ref that triggered
           # the run is the tag we mean to publish.
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+
+      # Final versions only, like the cask: a tag with a suffix such as
+      # -alpha is a pre-release and stays off every index. The repository is
+      # rebuilt from this release's debs alone and pushed as a single orphan
+      # commit, so gh-pages never accumulates old binaries.
+      - name: Publish apt repository
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          scripts/apt-repo.sh dist "$RUNNER_TEMP/apt-site"
+          cd "$RUNNER_TEMP/apt-site"
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "apt repository for ${GITHUB_REF_NAME}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

@@ -109,7 +109,16 @@ Flow:
   push needs the `HOMEBREW_TAP_TOKEN` repository secret: a token with write
   access to the tap repository. Without it a final release fails at the
   cask step after the GitHub Release is already published; pre-releases
-  skip the step. `goreleaser check` validates the config and
+  skip the step. The same goreleaser run builds a `.deb` per Linux
+  architecture (nFPM), and for a final version
+  [`scripts/apt-repo.sh`](scripts/apt-repo.sh) turns them into a signed apt
+  repository that the workflow force-pushes as one orphan commit to the
+  `gh-pages` branch, served by GitHub Pages at
+  `https://mryush.github.io/hint`. It needs the `APT_SIGNING_KEY`
+  repository secret (ASCII-armored private key; `APT_SIGNING_PASSPHRASE` if
+  the key has one). `gh-pages` is generated output: never edit it by hand.
+  The apt step also runs after the GitHub Release is published, so a
+  missing key fails it late. `goreleaser check` validates the config and
   `goreleaser release --snapshot --clean` builds everything into `dist/`
   without publishing.
 - **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
