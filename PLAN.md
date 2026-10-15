@@ -60,6 +60,7 @@ part-time; roughly halve them for full-time.
 | Phase | Name | Release | Duration | Detailed plan |
 |---|---|---|---|---|
 | 0 | MVP CLI: agent loop, tools, permissions, sessions | v0.2.0 | 6–10 wk | [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md) |
+| — | Install indexes: apt + Scoop, cask cleanup. Parallel with Phase 1; does not gate v0.3 | current final tag | — | [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) |
 | 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
 | 2 | Memory, MCP client, code maturity | v0.4 | 6–8 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
 | 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
@@ -73,11 +74,19 @@ already in the repository belongs to the earlier, substantially different
 application and is left as is. Pre-release tags carry a suffix
 (`v0.2.0-alpha`); every tag is full semver, as Go modules require.
 
+[WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) publishes the current CLI to the indexes a user installs from: the Homebrew cask (macOS, already shipped), an apt repository (Ubuntu, Debian and the other apt systems, including Raspberry Pi OS) and a Scoop bucket (Windows).
+It runs **in parallel with Phase 1**.
+`v0.3` does not wait for it, and a tag that only updates those indexes is not the Phase 1 release.
+
 Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
 ## Current status
 
 - **Active phase:** Phase 0 — MVP CLI (in progress).
+- **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
+  It does not block `v0.3`.
+  The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
+  It goes live with the first final tag after the signing key (`APT_SIGNING_KEY`) is set and Pages is enabled; `v0.2.0` was built before the packages existed and is not republished.
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
   WP0.2 — config profiles and sources (provider profiles,
@@ -219,6 +228,11 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     (2026-10-11).
 11. Tag `v0.2.0`. The hardware record is the Pi 4 bench, not a Pi 5 run.
     The final tag needs `HOMEBREW_TAP_TOKEN`.
+12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
+    apt: implemented, awaiting the signing key, Pages and a final tag; Scoop: not started.
+    The cask already covers macOS.
+    This does not gate `v0.3`.
+    Official catalogs stay a separate parallel path and do not gate either track.
 
 ## Open questions
 
