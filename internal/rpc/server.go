@@ -79,7 +79,7 @@ func (s *Server) Serve(ctx context.Context, lis net.Listener) error {
 			err = fmt.Errorf("rpc: accept: %w", accErr)
 			break
 		}
-		go s.serveConn(ctx, nc, nc, nc)
+		go func() { _ = s.serveConn(ctx, nc, nc, nc) }()
 	}
 	return err
 }
@@ -91,9 +91,18 @@ func (s *Server) ServeStdio(ctx context.Context, r io.Reader, w io.Writer) error
 	return s.serveOne(ctx, nil, r, w)
 }
 
-func (s *Server) serveConn(ctx context.Context, nc net.Conn, r io.Reader, w io.Writer) {
-	defer nc.Close()
+// ServeConn runs one connection to completion: until the peer closes it,
+// ctx ends, or the client sends shutdown. The in-process CLI uses it on
+// one end of a net.Pipe, so the same bytes flow whether the client is in
+// this process or across a socket.
+func (s *Server) ServeConn(ctx context.Context, nc net.Conn) error {
+	return s.serveConn(ctx, nc, nc, nc)
+}
+
+func (s *Server) serveConn(ctx context.Context, nc net.Conn, r io.Reader, w io.Writer) error {
+	defer func() { _ = nc.Close() }()
 	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -101,8 +110,7 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn, r io.Reader, w io.W
 		case <-done:
 		}
 	}()
-	_ = s.serveOne(ctx, nc, r, w)
-	close(done)
+	return s.serveOne(ctx, nc, r, w)
 }
 
 func (s *Server) serveOne(ctx context.Context, nc net.Conn, r io.Reader, w io.Writer) error {
@@ -150,6 +158,13 @@ func (s *Server) track(c *conn, add bool) {
 	delete(s.conns, c)
 }
 
+// Close releases the sessions the server holds. Serve does it when the
+// listener closes; a caller that only used ServeConn does it itself once
+// the last connection is gone.
+func (s *Server) Close() {
+	s.dropSessions()
+}
+
 func (s *Server) dropSessions() {
 	s.mu.Lock()
 	helds := s.sessions
@@ -190,11 +205,11 @@ func (c *conn) loop() error {
 		var req request
 		if err := c.dec.Decode(&req); err != nil {
 			if errors.Is(err, io.EOF) || c.ctx.Err() != nil {
-				return nil
+				return nil //nolint:nilerr // the peer hanging up is how a connection ends, not a failure
 			}
 			var syn *json.SyntaxError
 			if errors.As(err, &syn) || errors.Is(err, io.ErrUnexpectedEOF) {
-				_ = c.writeError(json.RawMessage("null"), errCode(codeParse, "parse error"))
+				_ = c.writeError(json.RawMessage("null"), errCode(CodeParse, "parse error"))
 			}
 			return nil
 		}
@@ -208,11 +223,11 @@ func (c *conn) dispatch(req request) {
 		if !req.hasID || len(id) == 0 {
 			id = json.RawMessage("null")
 		}
-		_ = c.writeError(id, errCode(codeInvalidRequest, "invalid request"))
+		_ = c.writeError(id, errCode(CodeInvalidRequest, "invalid request"))
 		return
 	}
 	if req.Method != "hello" && !c.helloed {
-		_ = c.writeError(req.ID, errCode(codeNotReady, "hello is required first"))
+		_ = c.writeError(req.ID, errCode(CodeNotReady, "hello is required first"))
 		return
 	}
 	switch req.Method {
@@ -233,22 +248,22 @@ func (c *conn) dispatch(req request) {
 	case "shutdown":
 		c.shutdown(req)
 	default:
-		_ = c.writeError(req.ID, errCode(codeMethodNotFound, "method %q not found", req.Method))
+		_ = c.writeError(req.ID, errCode(CodeMethodNotFound, "method %q not found", req.Method))
 	}
 }
 
 func (c *conn) hello(req request) {
 	var p helloParams
 	if err := unmarshalParams(req.Params, &p); err != nil {
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "%v", err))
 		return
 	}
 	if p.ProtocolVersion != ProtocolVersion {
-		_ = c.writeError(req.ID, errCode(codeProtocol, "protocol_version %d is not supported", p.ProtocolVersion))
+		_ = c.writeError(req.ID, errCode(CodeProtocol, "protocol_version %d is not supported", p.ProtocolVersion))
 		return
 	}
 	if c.srv.Token != "" && !tokenEqual(c.srv.Token, p.Token) {
-		_ = c.writeError(req.ID, errCode(codeUnauthorized, "token rejected"))
+		_ = c.writeError(req.ID, errCode(CodeUnauthorized, "token rejected"))
 		return
 	}
 	c.helloed = true
@@ -258,19 +273,24 @@ func (c *conn) hello(req request) {
 func (c *conn) sessionList(req request) {
 	infos, err := c.srv.Engine.List(c.ctx)
 	if err != nil {
-		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
 		return
 	}
 	if infos == nil {
 		infos = []Info{}
 	}
-	_ = c.writeResult(req.ID, map[string]any{"sessions": infos})
+	_ = c.writeResult(req.ID, listResult{Sessions: infos})
 }
 
 func (c *conn) sessionOpen(req request) {
-	sess, err := c.srv.Engine.Open(c.ctx)
+	var opts OpenOptions
+	if err := unmarshalParams(req.Params, &opts); err != nil {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "%v", err))
+		return
+	}
+	sess, err := c.srv.Engine.Open(c.ctx, opts)
 	if err != nil {
-		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
 		return
 	}
 	sess = c.srv.hold(sess)
@@ -280,7 +300,7 @@ func (c *conn) sessionOpen(req request) {
 func (c *conn) sessionAttach(req request) {
 	var p sessionParams
 	if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "id is required"))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "id is required"))
 		return
 	}
 	if sess := c.srv.lookup(p.ID); sess != nil {
@@ -289,31 +309,35 @@ func (c *conn) sessionAttach(req request) {
 	}
 	sess, err := c.srv.Engine.Attach(c.ctx, p.ID)
 	if err != nil {
-		_ = c.writeError(req.ID, errCode(codeNotFound, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "%v", err))
 		return
 	}
 	sess = c.srv.hold(sess)
 	_ = c.writeResult(req.ID, sessionView(sess))
 }
 
-func sessionView(sess Session) map[string]any {
-	return map[string]any{"id": sess.ID(), "messages": sess.Messages()}
+func sessionView(sess Session) SessionView {
+	messages := sess.Messages()
+	if messages == nil {
+		messages = []agentapi.Message{}
+	}
+	return SessionView{ID: sess.ID(), Created: sess.Created(), Messages: messages, Warnings: sess.Warnings()}
 }
 
 func (c *conn) turnStart(req request) {
 	var p turnParams
 	if err := unmarshalParams(req.Params, &p); err != nil || p.SessionID == "" || p.Text == "" {
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "session_id and text are required"))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "session_id and text are required"))
 		return
 	}
 	sess := c.srv.lookup(p.SessionID)
 	if sess == nil {
-		_ = c.writeError(req.ID, errCode(codeNotFound, "session %q is not open on this server; attach it first", p.SessionID))
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "session %q is not open on this server; attach it first", p.SessionID))
 		return
 	}
 	turnID, err := newID()
 	if err != nil {
-		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
 		return
 	}
 	ctx, cancel := context.WithCancel(c.ctx)
@@ -321,14 +345,14 @@ func (c *conn) turnStart(req request) {
 	lt := &liveTurn{id: turnID, sessionID: sess.ID(), cancel: cancel, box: box, owner: c}
 	if !c.srv.beginTurn(lt) {
 		cancel()
-		_ = c.writeError(req.ID, errCode(codeBusy, "session %s already has a turn in flight", sess.ID()))
+		_ = c.writeError(req.ID, errCode(CodeBusy, "session %s already has a turn in flight", sess.ID()))
 		return
 	}
 	events, err := sess.RunTurn(ctx, p.Text, box)
 	if err != nil {
 		c.srv.finishTurn(turnID)
 		cancel()
-		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
 		return
 	}
 	// The id goes back before the turn ends so the client can reply to
@@ -348,7 +372,6 @@ func (c *conn) turnStart(req request) {
 }
 
 func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
-	defer c.srv.finishTurn(lt.id)
 	defer lt.cancel()
 	finish := ""
 	for ev := range events {
@@ -360,10 +383,14 @@ func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
 			Method:  "event",
 			Params:  eventParams{TurnID: lt.id, SessionID: lt.sessionID, Event: ev},
 		}); err != nil {
-			lt.cancel()
+			c.srv.finishTurn(lt.id)
 			return
 		}
 	}
+	// The session is free before the client hears turn.done: the contract
+	// lets the next turn.start follow at once, so this turn must not still
+	// count as in flight when that request arrives.
+	c.srv.finishTurn(lt.id)
 	_ = c.writeNote(notification{
 		JSONRPC: jsonRPC,
 		Method:  "turn.done",
@@ -374,7 +401,7 @@ func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
 func (c *conn) permissionReply(req request) {
 	var p permissionParams
 	if err := unmarshalParams(req.Params, &p); err != nil || p.TurnID == "" || p.CallID == "" {
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "turn_id, call_id and decision are required"))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "turn_id, call_id and decision are required"))
 		return
 	}
 	var decision permission.Decision
@@ -386,38 +413,38 @@ func (c *conn) permissionReply(req request) {
 	case DecisionAlways:
 		decision = permission.AllowAlways
 	default:
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "decision must be allow, deny or always"))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "decision must be allow, deny or always"))
 		return
 	}
 	lt := c.srv.turnByID(p.TurnID)
 	if lt == nil || lt.owner != c {
-		_ = c.writeError(req.ID, errCode(codeNotFound, "turn %q is not owned by this connection", p.TurnID))
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "turn %q is not owned by this connection", p.TurnID))
 		return
 	}
 	if !lt.box.deliver(p.CallID, decision) {
-		_ = c.writeError(req.ID, errCode(codeNotFound, "no permission question is waiting for call %q", p.CallID))
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "no permission question is waiting for call %q", p.CallID))
 		return
 	}
-	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+	_ = c.writeResult(req.ID, okResult{OK: true})
 }
 
 func (c *conn) turnCancel(req request) {
 	var p cancelParams
 	if err := unmarshalParams(req.Params, &p); err != nil || p.TurnID == "" {
-		_ = c.writeError(req.ID, errCode(codeInvalidParams, "turn_id is required"))
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "turn_id is required"))
 		return
 	}
 	lt := c.srv.turnByID(p.TurnID)
 	if lt == nil || lt.owner != c {
-		_ = c.writeError(req.ID, errCode(codeNotFound, "turn %q is not owned by this connection", p.TurnID))
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "turn %q is not owned by this connection", p.TurnID))
 		return
 	}
 	lt.cancel()
-	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+	_ = c.writeResult(req.ID, okResult{OK: true})
 }
 
 func (c *conn) shutdown(req request) {
-	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+	_ = c.writeResult(req.ID, okResult{OK: true})
 	c.srv.markClosed()
 	if c.srv.Stop != nil {
 		c.srv.Stop()
@@ -431,7 +458,7 @@ func (c *conn) writeResult(id json.RawMessage, result any) error {
 	return c.enc.Encode(response{JSONRPC: jsonRPC, ID: id, Result: result})
 }
 
-func (c *conn) writeError(id json.RawMessage, e *rpcError) error {
+func (c *conn) writeError(id json.RawMessage, e *Error) error {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	return c.enc.Encode(response{JSONRPC: jsonRPC, ID: id, Error: e})

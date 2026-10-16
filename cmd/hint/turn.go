@@ -7,12 +7,19 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
+	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
 // errInterrupted is the outcome of a turn cancelled by Ctrl-C.
 var errInterrupted = errors.New("interrupted")
+
+// cancelWait bounds the turn.cancel sent after the run's own context has
+// ended: that context is gone, and the server may already be too.
+const cancelWait = 5 * time.Second
 
 // turnResult is what one turn produced, in the shape the one-shot
 // outputs print.
@@ -26,26 +33,32 @@ type turnResult struct {
 	err *agentapi.Error
 }
 
-// turn runs one user turn: it records the question, hands the whole
-// conversation to the agent, follows the event stream into the session
-// recorder, the debug trace and the terminal, and returns what came back.
-// stream receives the answer text as it arrives; nil collects it silently
-// for an output that prints once at the end.
+// turn runs one user turn through the core: it starts the turn, follows
+// the event stream to the terminal, answers permission questions on it,
+// and returns what came back. stream receives the answer text as it
+// arrives; nil collects it silently for an output that prints once at the
+// end.
 //
 // The returned error is the turn's outcome — nil for a normal answer,
 // "interrupted" for a cancel, the classified failure otherwise — and is
 // what a one-shot exits with and what the REPL prints before the next
 // prompt.
 func (a *app) turn(ctx context.Context, question string, stream io.Writer) (turnResult, error) {
-	user := agentapi.UserMessage(question)
-	// Fail before the first request if the session cannot be written at
-	// all; a read-only disk is better learned about now than after the
-	// answer.
-	if err := a.rec.Append(user); err != nil {
+	t, err := a.client.StartTurn(ctx, a.sessionID, question)
+	if err != nil {
 		return turnResult{}, err
 	}
-	history := append(append([]agentapi.Message(nil), a.preamble...), a.rec.Messages()...)
-	a.tracef("turn: %q (%d messages)", question, len(history))
+	// Ctrl-C cancels the turn on the server; the events are still read
+	// to the end, so the turn closes the way the server recorded it.
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancelTurn(t)
+		case <-finished:
+		}
+	}()
 
 	var res turnResult
 	var answer strings.Builder
@@ -56,9 +69,7 @@ func (a *app) turn(ctx context.Context, question string, stream io.Writer) (turn
 	// closes with FinishError.
 	var lastErr *agentapi.Error
 	var runErr error
-	for ev := range a.agent.RunTurn(ctx, history) {
-		a.rec.Observe(ev)
-		a.traceEvent(ev)
+	for ev := range t.Events() {
 		switch ev.Kind {
 		case agentapi.EventTextDelta:
 			answer.WriteString(ev.Text)
@@ -66,10 +77,7 @@ func (a *app) turn(ctx context.Context, question string, stream io.Writer) (turn
 				fmt.Fprint(stream, ev.Text)
 			}
 		case agentapi.EventPermission:
-			// The prompt itself is drawn by the gate's ReaderPrompter,
-			// which also reads the answer; rendering it here too would
-			// print it twice. The event still travels the stream for a
-			// Phase 1 client that answers over RPC.
+			a.answer(ctx, t, *ev.Permission)
 		case agentapi.EventToolStart:
 			// Tool activity goes to stderr so the answer on stdout stays
 			// clean for pipes and scripts.
@@ -108,14 +116,34 @@ func (a *app) turn(ctx context.Context, question string, stream io.Writer) (turn
 			// the sum of deltas already printed.
 		}
 	}
-	if err := a.rec.Err(); err != nil && !a.warnedSave {
-		// Recording is best effort once the answer is streaming: say so,
-		// but the exit status stays the turn's.
-		a.warnedSave = true
-		fmt.Fprintf(a.io.err, "hint: warning: the session is not being saved: %v\n", err)
+	if err := t.Err(); err != nil {
+		// The stream ended without turn.done: the connection to the core
+		// is gone, and so is whatever the turn still had to say.
+		return res, fmt.Errorf("lost the connection to the core: %w", err)
 	}
 	res.answer = answer.String()
 	return res, runErr
+}
+
+// answer puts a permission question to the terminal and sends the
+// decision back. ctx ending at the prompt is not answered at all: the
+// cancel watcher in turn ends the turn, and the server denies.
+func (a *app) answer(ctx context.Context, t *rpc.Turn, req agentapi.PermissionRequest) {
+	decision, err := a.prompter.Prompt(ctx, permission.Ask{Request: req})
+	if err != nil {
+		return
+	}
+	if err := t.Reply(ctx, req.CallID, decision); err != nil && ctx.Err() == nil {
+		fmt.Fprintf(a.io.err, "hint: warning: the answer did not reach the core: %v\n", err)
+	}
+}
+
+// cancelTurn asks the server to stop t. A turn that has already ended
+// makes this an error nobody needs to hear about.
+func cancelTurn(t *rpc.Turn) {
+	ctx, cancel := context.WithTimeout(context.Background(), cancelWait)
+	defer cancel()
+	_ = t.Cancel(ctx)
 }
 
 // oneShot answers one question and returns the turn's outcome as the
@@ -148,8 +176,8 @@ type jsonAnswer struct {
 func (a *app) oneShotJSON(ctx context.Context, question string) error {
 	res, err := a.turn(ctx, question, nil)
 	out := jsonAnswer{Answer: res.answer, FinishReason: res.finish, Error: res.err}
-	if a.sess != nil {
-		out.SessionID = a.sess.ID()
+	if a.recorded {
+		out.SessionID = a.sessionID
 	}
 	if res.usage != (agentapi.Usage{}) {
 		out.Usage = &res.usage
@@ -175,41 +203,6 @@ func asAgentError(err error) *agentapi.Error {
 		return e
 	}
 	return agentapi.WrapError(agentapi.KindOf(err), err, "%v", err)
-}
-
-// traceEvent writes an event to the debug log: the complete messages (the
-// responses, in the sense the requirement means — the request bodies are
-// logged by the provider client), the tool calls with their arguments,
-// and everything that went wrong.
-func (a *app) traceEvent(ev agentapi.Event) {
-	if a.trace == nil {
-		return
-	}
-	switch ev.Kind {
-	case agentapi.EventMessage:
-		body, err := json.Marshal(ev.Message)
-		if err != nil {
-			a.trace.Printf("message %s: (unmarshalable: %v)", ev.Message.Role, err)
-			return
-		}
-		a.trace.Printf("message %s: %s", ev.Message.Role, body)
-	case agentapi.EventToolStart:
-		a.trace.Printf("tool %s start %s: %s", ev.Call.Name, ev.Call.ID, ev.Call.Arguments)
-	case agentapi.EventToolEnd:
-		a.trace.Printf("tool %s end %s: error=%v %d bytes: %s", ev.Result.Name, ev.Result.CallID, ev.Result.IsError, len(ev.Result.Text()), firstLine(ev.Result.Text()))
-	case agentapi.EventPermission:
-		a.trace.Printf("permission asked: %s", ev.Permission.Summary)
-	case agentapi.EventCompaction:
-		a.trace.Printf("compaction: %d messages replaced, ~%d -> ~%d tokens", ev.Compaction.MessagesReplaced, ev.Compaction.TokensBefore, ev.Compaction.TokensAfter)
-	case agentapi.EventUsage:
-		a.trace.Printf("usage: %+v", *ev.Usage)
-	case agentapi.EventError:
-		a.trace.Printf("error %s: %s", ev.Err.Kind, ev.Err.Message)
-	case agentapi.EventTurnEnd:
-		a.trace.Printf("turn end: %s", ev.FinishReason)
-	case agentapi.EventTurnStart, agentapi.EventTextDelta, agentapi.EventThinkingDelta:
-		// The deltas add up to the message logged above.
-	}
 }
 
 // summarizeArgs renders a tool call's arguments on one short line.

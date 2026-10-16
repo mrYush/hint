@@ -12,6 +12,10 @@ The address actually bound is written to `listen` in the same directory.
 `hint --mode rpc` uses stdin and stdout.
 It does not use a token: the process that holds the pipes is the client.
 
+The CLI itself is a client of this protocol.
+Bare `hint` and `hint -p` run the core in the same process and talk to it over an in-process pipe with exactly these messages; `hint --connect` talks to a running `hint serve` instead, reading `listen` and `auth.token` from the runtime directory (or `--connect unix:/path`, `--connect tcp:127.0.0.1:port`).
+The Go client is `internal/rpc.Client`.
+
 ## Handshake
 
 The first request must be `hello`.
@@ -34,8 +38,16 @@ The server is bound to the working directory it was started in.
 Tools cannot leave that directory.
 
 `session.open` creates a session.
+With `{"ephemeral":true}` it is not written to disk: it has an id for the life of the server and nothing else (`hint --no-session`).
 `session.attach` with `{"id":"..."}` continues one that already exists (an id prefix is enough when it is unique).
-`session.list` returns `{id, messages, created, first_prompt}` rows.
+Both return the session:
+
+```json
+{"jsonrpc":"2.0","id":2,"result":{"id":"<id>","created":"2026-10-12T06:48:19Z","messages":[],"warnings":["..."]}}
+```
+
+`messages` is the conversation so far, as `pkg/agentapi` messages; `warnings` is what loading the file had to repair, usually absent.
+`session.list` returns `{id, cwd, messages, created, modified, first_prompt}` rows, most recently modified first; `messages` there is a count.
 
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.
@@ -81,6 +93,8 @@ Silence denies.
 
 `decision` is `allow`, `deny`, or `always`.
 `always` remembers the grant for the rest of that session only.
+It is offered only when the request carries `always`, a label of what would be remembered (`commands starting with "go test"`); the core decides that, the client only shows it.
+An `always` answer to a request without the label is treated as `allow`.
 
 ## Shutdown
 
