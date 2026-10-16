@@ -88,8 +88,9 @@ Decisions (2026-10-11):
 
 1. A second terminal can attach to a running `hint serve` and continue the
    same session. **Met 2026-10-12** by `hint --connect -c` (checked by hand
-   against `hint serve --listen tcp:127.0.0.1:0`; the automated check is
-   `TestOpenSession` over a client).
+   against `hint serve --listen tcp:127.0.0.1:0`; since 2026-10-16
+   `TestConnect` in `cmd/hint` publishes a server the way `hint serve`
+   does and continues its session from a second `--connect` shell).
 2. An external script drives a full agentic turn (incl. answering a
    permission request) through `hint --mode rpc` with JSON only.
 3. All Phase 0 acceptance scenarios pass through the TUI.

@@ -37,9 +37,10 @@ The pattern is proven in the industry:
 
 ```
 hint/
-├── cmd/hint/main.go            # CLI, flags, wiring
+├── cmd/hint/                   # CLI shell: an RPC client of the core it serves in-process
+│   └── rpcengine.go            # the one file that wires internal/agent into rpc.Engine
 ├── internal/
-│   ├── rpc/                    # JSON-RPC server: socket, loopback TCP, stdio (WP1.1)
+│   ├── rpc/                    # JSON-RPC server (socket, loopback TCP, stdio) and Client (WP1.1, WP1.3)
 │   ├── provider/               # implementations of the modality interfaces
 │   │   ├── openai/             # openai-compatible client (chat+stream+tools)
 │   │   └── router/             # default/fallback routing
