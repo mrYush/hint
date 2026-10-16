@@ -372,7 +372,6 @@ func (c *conn) turnStart(req request) {
 }
 
 func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
-	defer c.srv.finishTurn(lt.id)
 	defer lt.cancel()
 	finish := ""
 	for ev := range events {
@@ -384,10 +383,14 @@ func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
 			Method:  "event",
 			Params:  eventParams{TurnID: lt.id, SessionID: lt.sessionID, Event: ev},
 		}); err != nil {
-			lt.cancel()
+			c.srv.finishTurn(lt.id)
 			return
 		}
 	}
+	// The session is free before the client hears turn.done: the contract
+	// lets the next turn.start follow at once, so this turn must not still
+	// count as in flight when that request arrives.
+	c.srv.finishTurn(lt.id)
 	_ = c.writeNote(notification{
 		JSONRPC: jsonRPC,
 		Method:  "turn.done",

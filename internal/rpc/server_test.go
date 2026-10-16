@@ -202,6 +202,65 @@ func TestSecondTurnIsBusy(t *testing.T) {
 	}
 }
 
+// TestNextTurnStartsRightAfterDone pins the other half of the busy rule:
+// turn.done means the session is free, so a turn.start sent the moment
+// it arrives is accepted, not refused as busy. A REPL does exactly this
+// between one answer and the next question.
+func TestNextTurnStartsRightAfterDone(t *testing.T) {
+	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
+	srv := &Server{Engine: engine, PermissionWait: time.Second}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion},
+	})
+	_ = mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.open"})
+	sid := mustRecv(t, dec)["result"].(map[string]any)["id"].(string)
+
+	// runTurn drives one turn to turn.done, allowing its permission
+	// question on the way, and returns the turn.start response.
+	runTurn := func(id int, text string) map[string]any {
+		mustSend(t, enc, map[string]any{
+			"jsonrpc": "2.0", "id": id, "method": "turn.start",
+			"params": map[string]any{"session_id": sid, "text": text},
+		})
+		started := mustRecv(t, dec)
+		turnID, _ := started["result"].(map[string]any)["turn_id"].(string)
+		if turnID == "" {
+			return started
+		}
+		for {
+			msg := mustRecv(t, dec)
+			if msg["method"] == "turn.done" {
+				return started
+			}
+			if msg["method"] != "event" {
+				continue
+			}
+			ev, _ := msg["params"].(map[string]any)["event"].(map[string]any)
+			if ev["kind"] == string(agentapi.EventPermission) {
+				perm, _ := ev["permission"].(map[string]any)
+				mustSend(t, enc, map[string]any{
+					"jsonrpc": "2.0", "id": id + 1, "method": "permission.reply",
+					"params": map[string]any{"turn_id": turnID, "call_id": perm["call_id"], "decision": DecisionAllow},
+				})
+			}
+		}
+	}
+	if first := runTurn(3, "first"); first["error"] != nil {
+		t.Fatalf("first turn: %v", first["error"])
+	}
+	if second := runTurn(5, "second"); second["error"] != nil {
+		t.Fatalf("turn.start right after turn.done = %v; want it accepted", second["error"])
+	}
+}
+
 func TestListenRejectsNonLoopback(t *testing.T) {
 	if _, err := Listen("tcp", "0.0.0.0:0"); err == nil {
 		t.Fatal("Listen accepted a non-loopback address")
