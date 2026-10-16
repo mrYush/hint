@@ -1,0 +1,599 @@
+package rpc
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/pkg/agentapi"
+)
+
+// DefaultPermissionWait is how long a turn waits for permission.reply
+// before the call is denied. A client that has gone away must not leave
+// a tool blocked on a question nobody will see.
+const DefaultPermissionWait = 2 * time.Minute
+
+// Server accepts connections and runs turns on Engine. A non-empty Token
+// is required in hello; an empty Token is the stdio mode, where holding
+// the pipe is the credential.
+type Server struct {
+	Engine Engine
+	// Token, when set, must match hello's token.
+	Token string
+	// Version is reported by hello. Empty is fine.
+	Version string
+	// PermissionWait overrides DefaultPermissionWait when set.
+	PermissionWait time.Duration
+	// Stop, when set, is called by the shutdown method so the process
+	// can cancel the context Serve is using.
+	Stop func()
+
+	mu       sync.Mutex
+	sessions map[string]*held
+	turns    map[string]*liveTurn
+	conns    map[*conn]struct{}
+	closed   bool
+}
+
+// held is one session and whether a turn is running on it.
+type held struct {
+	session Session
+	turnID  string
+}
+
+// liveTurn is the in-flight turn a connection owns.
+type liveTurn struct {
+	id        string
+	sessionID string
+	cancel    context.CancelFunc
+	box       *mailbox
+	owner     *conn
+}
+
+// Serve accepts on lis until ctx ends or Shutdown, then closes lis.
+// Connections started before the close run until their own context ends.
+func (s *Server) Serve(ctx context.Context, lis net.Listener) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		_ = lis.Close()
+	}()
+	defer s.dropSessions()
+
+	var err error
+	for {
+		nc, accErr := lis.Accept()
+		if accErr != nil {
+			if ctx.Err() != nil || s.isClosed() {
+				return nil
+			}
+			err = fmt.Errorf("rpc: accept: %w", accErr)
+			break
+		}
+		go s.serveConn(ctx, nc, nc, nc)
+	}
+	return err
+}
+
+// ServeStdio runs one connection on r and w. Closing is the caller's:
+// cancelling ctx does not unblock a read on a pipe, so the parent ends
+// the process by closing the pipe or by the turn methods returning.
+func (s *Server) ServeStdio(ctx context.Context, r io.Reader, w io.Writer) error {
+	return s.serveOne(ctx, nil, r, w)
+}
+
+func (s *Server) serveConn(ctx context.Context, nc net.Conn, r io.Reader, w io.Writer) {
+	defer nc.Close()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = nc.Close()
+		case <-done:
+		}
+	}()
+	_ = s.serveOne(ctx, nc, r, w)
+	close(done)
+}
+
+func (s *Server) serveOne(ctx context.Context, nc net.Conn, r io.Reader, w io.Writer) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	c := &conn{
+		ctx:    ctx,
+		cancel: cancel,
+		nc:     nc,
+		dec:    json.NewDecoder(r),
+		enc:    json.NewEncoder(w),
+		srv:    s,
+	}
+	s.track(c, true)
+	defer s.track(c, false)
+	defer s.cancelOwned(c)
+	return c.loop()
+}
+
+// Shutdown refuses new accepts. Serve's listener is closed by the caller
+// cancelling the context passed to Serve; this marks the server so a
+// shutdown request from a client has the same effect through OnShutdown.
+func (s *Server) markClosed() {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+}
+
+func (s *Server) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
+func (s *Server) track(c *conn, add bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conns == nil {
+		s.conns = map[*conn]struct{}{}
+	}
+	if add {
+		s.conns[c] = struct{}{}
+		return
+	}
+	delete(s.conns, c)
+}
+
+func (s *Server) dropSessions() {
+	s.mu.Lock()
+	helds := s.sessions
+	s.sessions = nil
+	s.mu.Unlock()
+	for _, h := range helds {
+		_ = h.session.Close()
+	}
+}
+
+func (s *Server) cancelOwned(c *conn) {
+	s.mu.Lock()
+	var turns []*liveTurn
+	for _, t := range s.turns {
+		if t.owner == c {
+			turns = append(turns, t)
+		}
+	}
+	s.mu.Unlock()
+	for _, t := range turns {
+		t.cancel()
+	}
+}
+
+type conn struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	nc      net.Conn
+	dec     *json.Decoder
+	enc     *json.Encoder
+	srv     *Server
+	wmu     sync.Mutex
+	helloed bool
+}
+
+func (c *conn) loop() error {
+	for {
+		var req request
+		if err := c.dec.Decode(&req); err != nil {
+			if errors.Is(err, io.EOF) || c.ctx.Err() != nil {
+				return nil
+			}
+			var syn *json.SyntaxError
+			if errors.As(err, &syn) || errors.Is(err, io.ErrUnexpectedEOF) {
+				_ = c.writeError(json.RawMessage("null"), errCode(codeParse, "parse error"))
+			}
+			return nil
+		}
+		c.dispatch(req)
+	}
+}
+
+func (c *conn) dispatch(req request) {
+	if req.JSONRPC != jsonRPC || req.Method == "" || !req.hasID || string(req.ID) == "null" {
+		id := req.ID
+		if !req.hasID || len(id) == 0 {
+			id = json.RawMessage("null")
+		}
+		_ = c.writeError(id, errCode(codeInvalidRequest, "invalid request"))
+		return
+	}
+	if req.Method != "hello" && !c.helloed {
+		_ = c.writeError(req.ID, errCode(codeNotReady, "hello is required first"))
+		return
+	}
+	switch req.Method {
+	case "hello":
+		c.hello(req)
+	case "session.list":
+		c.sessionList(req)
+	case "session.open":
+		c.sessionOpen(req)
+	case "session.attach":
+		c.sessionAttach(req)
+	case "turn.start":
+		c.turnStart(req)
+	case "permission.reply":
+		c.permissionReply(req)
+	case "turn.cancel":
+		c.turnCancel(req)
+	case "shutdown":
+		c.shutdown(req)
+	default:
+		_ = c.writeError(req.ID, errCode(codeMethodNotFound, "method %q not found", req.Method))
+	}
+}
+
+func (c *conn) hello(req request) {
+	var p helloParams
+	if err := unmarshalParams(req.Params, &p); err != nil {
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "%v", err))
+		return
+	}
+	if p.ProtocolVersion != ProtocolVersion {
+		_ = c.writeError(req.ID, errCode(codeProtocol, "protocol_version %d is not supported", p.ProtocolVersion))
+		return
+	}
+	if c.srv.Token != "" && !tokenEqual(c.srv.Token, p.Token) {
+		_ = c.writeError(req.ID, errCode(codeUnauthorized, "token rejected"))
+		return
+	}
+	c.helloed = true
+	_ = c.writeResult(req.ID, helloResult{ProtocolVersion: ProtocolVersion, Server: "hint", Version: c.srv.Version})
+}
+
+func (c *conn) sessionList(req request) {
+	infos, err := c.srv.Engine.List(c.ctx)
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		return
+	}
+	if infos == nil {
+		infos = []Info{}
+	}
+	_ = c.writeResult(req.ID, map[string]any{"sessions": infos})
+}
+
+func (c *conn) sessionOpen(req request) {
+	sess, err := c.srv.Engine.Open(c.ctx)
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		return
+	}
+	sess = c.srv.hold(sess)
+	_ = c.writeResult(req.ID, sessionView(sess))
+}
+
+func (c *conn) sessionAttach(req request) {
+	var p sessionParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "id is required"))
+		return
+	}
+	if sess := c.srv.lookup(p.ID); sess != nil {
+		_ = c.writeResult(req.ID, sessionView(sess))
+		return
+	}
+	sess, err := c.srv.Engine.Attach(c.ctx, p.ID)
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(codeNotFound, "%v", err))
+		return
+	}
+	sess = c.srv.hold(sess)
+	_ = c.writeResult(req.ID, sessionView(sess))
+}
+
+func sessionView(sess Session) map[string]any {
+	return map[string]any{"id": sess.ID(), "messages": sess.Messages()}
+}
+
+func (c *conn) turnStart(req request) {
+	var p turnParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.SessionID == "" || p.Text == "" {
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "session_id and text are required"))
+		return
+	}
+	sess := c.srv.lookup(p.SessionID)
+	if sess == nil {
+		_ = c.writeError(req.ID, errCode(codeNotFound, "session %q is not open on this server; attach it first", p.SessionID))
+		return
+	}
+	turnID, err := newID()
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		return
+	}
+	ctx, cancel := context.WithCancel(c.ctx)
+	box := newMailbox(c.srv.wait())
+	lt := &liveTurn{id: turnID, sessionID: sess.ID(), cancel: cancel, box: box, owner: c}
+	if !c.srv.beginTurn(lt) {
+		cancel()
+		_ = c.writeError(req.ID, errCode(codeBusy, "session %s already has a turn in flight", sess.ID()))
+		return
+	}
+	events, err := sess.RunTurn(ctx, p.Text, box)
+	if err != nil {
+		c.srv.finishTurn(turnID)
+		cancel()
+		_ = c.writeError(req.ID, errCode(codeInternal, "%v", err))
+		return
+	}
+	// The id goes back before the turn ends so the client can reply to
+	// permissions and cancel while events are still arriving. RunTurn
+	// must return before it needs a receiver; the pump is that receiver
+	// and it starts only after this response is written.
+	if err := c.writeResult(req.ID, turnResult{TurnID: turnID}); err != nil {
+		cancel()
+		go func() {
+			for range events {
+			}
+			c.srv.finishTurn(turnID)
+		}()
+		return
+	}
+	go c.pump(lt, events)
+}
+
+func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
+	defer c.srv.finishTurn(lt.id)
+	defer lt.cancel()
+	finish := ""
+	for ev := range events {
+		if ev.Kind == agentapi.EventTurnEnd {
+			finish = string(ev.FinishReason)
+		}
+		if err := c.writeNote(notification{
+			JSONRPC: jsonRPC,
+			Method:  "event",
+			Params:  eventParams{TurnID: lt.id, SessionID: lt.sessionID, Event: ev},
+		}); err != nil {
+			lt.cancel()
+			return
+		}
+	}
+	_ = c.writeNote(notification{
+		JSONRPC: jsonRPC,
+		Method:  "turn.done",
+		Params:  doneParams{TurnID: lt.id, SessionID: lt.sessionID, FinishReason: finish},
+	})
+}
+
+func (c *conn) permissionReply(req request) {
+	var p permissionParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.TurnID == "" || p.CallID == "" {
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "turn_id, call_id and decision are required"))
+		return
+	}
+	var decision permission.Decision
+	switch p.Decision {
+	case DecisionAllow:
+		decision = permission.Allow
+	case DecisionDeny, "":
+		decision = permission.Deny
+	case DecisionAlways:
+		decision = permission.AllowAlways
+	default:
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "decision must be allow, deny or always"))
+		return
+	}
+	lt := c.srv.turnByID(p.TurnID)
+	if lt == nil || lt.owner != c {
+		_ = c.writeError(req.ID, errCode(codeNotFound, "turn %q is not owned by this connection", p.TurnID))
+		return
+	}
+	if !lt.box.deliver(p.CallID, decision) {
+		_ = c.writeError(req.ID, errCode(codeNotFound, "no permission question is waiting for call %q", p.CallID))
+		return
+	}
+	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+}
+
+func (c *conn) turnCancel(req request) {
+	var p cancelParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.TurnID == "" {
+		_ = c.writeError(req.ID, errCode(codeInvalidParams, "turn_id is required"))
+		return
+	}
+	lt := c.srv.turnByID(p.TurnID)
+	if lt == nil || lt.owner != c {
+		_ = c.writeError(req.ID, errCode(codeNotFound, "turn %q is not owned by this connection", p.TurnID))
+		return
+	}
+	lt.cancel()
+	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+}
+
+func (c *conn) shutdown(req request) {
+	_ = c.writeResult(req.ID, map[string]any{"ok": true})
+	c.srv.markClosed()
+	if c.srv.Stop != nil {
+		c.srv.Stop()
+	}
+	c.cancel()
+}
+
+func (c *conn) writeResult(id json.RawMessage, result any) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	return c.enc.Encode(response{JSONRPC: jsonRPC, ID: id, Result: result})
+}
+
+func (c *conn) writeError(id json.RawMessage, e *rpcError) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	return c.enc.Encode(response{JSONRPC: jsonRPC, ID: id, Error: e})
+}
+
+func (c *conn) writeNote(n notification) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	return c.enc.Encode(n)
+}
+
+func (s *Server) wait() time.Duration {
+	if s.PermissionWait > 0 {
+		return s.PermissionWait
+	}
+	return DefaultPermissionWait
+}
+
+func (s *Server) hold(sess Session) Session {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessions == nil {
+		s.sessions = map[string]*held{}
+	}
+	if old := s.sessions[sess.ID()]; old != nil {
+		// A second attach lost the race. Keep the session that may
+		// already have a turn, and drop the duplicate handle.
+		_ = sess.Close()
+		return old.session
+	}
+	s.sessions[sess.ID()] = &held{session: sess}
+	return sess
+}
+
+func (s *Server) lookup(id string) Session {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if h := s.sessions[id]; h != nil {
+		return h.session
+	}
+	return nil
+}
+
+// beginTurn marks the session busy and records the turn. It reports
+// whether this connection won the session.
+func (s *Server) beginTurn(lt *liveTurn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h := s.sessions[lt.sessionID]
+	if h == nil || h.turnID != "" {
+		return false
+	}
+	h.turnID = lt.id
+	if s.turns == nil {
+		s.turns = map[string]*liveTurn{}
+	}
+	s.turns[lt.id] = lt
+	return true
+}
+
+func (s *Server) finishTurn(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lt := s.turns[id]
+	if lt == nil {
+		return
+	}
+	delete(s.turns, id)
+	if h := s.sessions[lt.sessionID]; h != nil && h.turnID == id {
+		h.turnID = ""
+	}
+}
+
+func (s *Server) turnByID(id string) *liveTurn {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.turns[id]
+}
+
+func unmarshalParams(raw json.RawMessage, dest any) error {
+	if len(raw) == 0 {
+		raw = []byte("{}")
+	}
+	if err := json.Unmarshal(raw, dest); err != nil {
+		return fmt.Errorf("params: %w", err)
+	}
+	return nil
+}
+
+func newID() (string, error) {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func tokenEqual(want, got string) bool {
+	if len(want) != len(got) {
+		return false
+	}
+	var diff byte
+	for i := 0; i < len(want); i++ {
+		diff |= want[i] ^ got[i]
+	}
+	return diff == 0
+}
+
+// mailbox is the Prompter a turn hands to the engine. Prompt waits until
+// deliver, the context ends, or the wait expires — expiry denies, which
+// is the same answer as a client that never speaks.
+type mailbox struct {
+	wait time.Duration
+	mu   sync.Mutex
+	pend map[string]chan permission.Decision
+}
+
+func newMailbox(wait time.Duration) *mailbox {
+	return &mailbox{wait: wait, pend: map[string]chan permission.Decision{}}
+}
+
+func (m *mailbox) Prompt(ctx context.Context, ask permission.Ask) (permission.Decision, error) {
+	ch := make(chan permission.Decision, 1)
+	m.mu.Lock()
+	if existing, ok := m.pend[ask.Request.CallID]; ok {
+		ch = existing
+	} else {
+		m.pend[ask.Request.CallID] = ch
+	}
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.pend, ask.Request.CallID)
+		m.mu.Unlock()
+	}()
+	timer := time.NewTimer(m.wait)
+	defer timer.Stop()
+	select {
+	case d := <-ch:
+		return d, nil
+	case <-ctx.Done():
+		return permission.Deny, ctx.Err()
+	case <-timer.C:
+		return permission.Deny, nil
+	}
+}
+
+func (m *mailbox) deliver(callID string, d permission.Decision) bool {
+	m.mu.Lock()
+	ch := m.pend[callID]
+	if ch == nil {
+		// The client answered as soon as it saw the event, which can
+		// be before Prompt has registered. Keep the decision; Prompt
+		// picks the same channel up.
+		ch = make(chan permission.Decision, 1)
+		m.pend[callID] = ch
+	}
+	m.mu.Unlock()
+	select {
+	case ch <- d:
+		return true
+	default:
+		return false
+	}
+}

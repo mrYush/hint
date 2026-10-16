@@ -17,6 +17,7 @@ resident assistant daemon.
 - [ ] Single-instance socket discovery for clients
 - [ ] Idle resource budget: near-zero CPU, bounded RSS when no session is active
 - [ ] Auto-update channel decision (goreleaser + built-in updater vs. package managers) — spike
+- [ ] If the shell is not Go (Swift, or WinUI if that spike wins): add a gRPC adapter beside JSON-RPC, same `Engine` and same `pkg/agentapi` events. JSON-RPC stays for stdio and for a Wails/Go shell. Decided 2026-10-11; not a `v0.3` deliverable.
 
 ### WP4.2 — macOS menu-bar app
 
