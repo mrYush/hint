@@ -3,6 +3,9 @@ package rpc
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/mrYush/hint/pkg/agentapi"
 )
 
 // ProtocolVersion is the only version this server speaks. A client sends
@@ -15,19 +18,20 @@ const ProtocolVersion = 1
 const jsonRPC = "2.0"
 
 // JSON-RPC error codes. The -32700/-32600 range is the spec; the -32000
-// range is hint's.
+// range is hint's. A client tells a missing session from a broken server
+// by the code, not by the message text.
 const (
-	codeParse          = -32700
-	codeInvalidRequest = -32600
-	codeMethodNotFound = -32601
-	codeInvalidParams  = -32602
-	codeInternal       = -32603
+	CodeParse          = -32700
+	CodeInvalidRequest = -32600
+	CodeMethodNotFound = -32601
+	CodeInvalidParams  = -32602
+	CodeInternal       = -32603
 
-	codeUnauthorized = -32001
-	codeProtocol     = -32002
-	codeNotReady     = -32003
-	codeBusy         = -32004
-	codeNotFound     = -32005
+	CodeUnauthorized = -32001
+	CodeProtocol     = -32002
+	CodeNotReady     = -32003
+	CodeBusy         = -32004
+	CodeNotFound     = -32005
 )
 
 // request is one line from the client. ID is absent on a notification;
@@ -65,7 +69,7 @@ type response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
 	Result  any             `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	Error   *Error          `json:"error,omitempty"`
 }
 
 // notification is a line with no id: an event, or the end of a turn.
@@ -75,13 +79,17 @@ type notification struct {
 	Params  any    `json:"params"`
 }
 
-type rpcError struct {
+// Error is the error object of a JSON-RPC response. A Client returns it
+// as the error of the call that failed, so a caller can match on Code.
+type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-func errCode(code int, format string, args ...any) *rpcError {
-	return &rpcError{Code: code, Message: fmt.Sprintf(format, args...)}
+func (e *Error) Error() string { return e.Message }
+
+func errCode(code int, format string, args ...any) *Error {
+	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
 // Decisions a client may send to permission.reply.
@@ -104,6 +112,24 @@ type helloResult struct {
 
 type sessionParams struct {
 	ID string `json:"id,omitempty"`
+}
+
+// SessionView is what session.open and session.attach return: enough
+// for a client to announce what it continues and to render the history.
+// Messages is never null on the wire.
+type SessionView struct {
+	ID       string             `json:"id"`
+	Created  time.Time          `json:"created"`
+	Messages []agentapi.Message `json:"messages"`
+	Warnings []string           `json:"warnings,omitempty"`
+}
+
+type listResult struct {
+	Sessions []Info `json:"sessions"`
+}
+
+type okResult struct {
+	OK bool `json:"ok"`
 }
 
 type turnParams struct {

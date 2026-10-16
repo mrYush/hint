@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-11
+> Status: living document · Last updated: 2026-10-16
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -89,7 +89,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - **Active phase:** Phase 1 — core as a service + TUI (`v0.3`).
   Phase 0 shipped as `v0.2.0`.
   WP1.1 and the RPC contract (WP1.2) are in the tree: `hint serve` and `hint --mode rpc`.
-  The CLI and the TUI still call the agent in-process (WP1.3, WP1.4).
+  WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
+  Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
+  The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
+  The TUI (WP1.4) is next.
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
@@ -104,7 +107,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   router; `internal/llm` deleted).
   WP0.4 — agent loop (`internal/agent`: tool-calling `while`, iteration and
   context-window limits, LLM-summary compaction with a drop-thinking
-  shortcut; `cmd/hint` now runs its one-shot turn through `Agent.RunTurn`).
+  shortcut; `cmd/hint` ran its one-shot turn through `Agent.RunTurn` until
+  WP1.3 moved that call behind the RPC engine).
   WP0.5 — built-in tools (`internal/tool`: registry, schema generation,
   timeout/truncation decorator, working-directory root;
   `internal/tool/builtin`: read_file, write_file, edit_file, list_dir,
@@ -187,19 +191,22 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   ([`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md))
   is backlog on the same date. The linux/arm64 record is the Pi 4 bench
   [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
-- Today's `hint` is the Phase 0 CLI surface: bare `hint` opens an
-  interactive session, `hint -p` answers once, both run through the
-  agent loop with every built-in tool registered behind the permission
-  gate (it explores the project itself and can edit it and run commands
-  with confirmation), read the global and the project's `HINT.md`, and
-  record every conversation as a session that `-c`, `-r` or `--session`
-  continues; independent reads in one tool batch run in parallel, and
-  instruction files that outgrow the budget arrive as outlines the
-  `instructions` tool expands, or split into rules that load when the
-  conversation reaches their paths. CI and the release pipeline are in
-  place. Nothing in the Phase 0 scope still blocks `v0.2.0`: the audit
-  fixes and the Pi 5 smoke are backlog (2026-10-11), and criterion 5 is
-  the Pi 4 bench cited above.
+- Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare
+  `hint` opens an interactive session, `hint -p` answers once, and both
+  are JSON-RPC clients of a core served in the same process over a
+  `net.Pipe` — the same bytes `hint serve` speaks, so `hint --connect`
+  points the same shell at a core running in another terminal. The core
+  runs the agent loop with every built-in tool registered behind the
+  permission gate (it explores the project itself and can edit it and run
+  commands with confirmation), reads the global and the project's
+  `HINT.md`, and records every conversation as a session that `-c`, `-r`
+  or `--session` continues; independent reads in one tool batch run in
+  parallel, and instruction files that outgrow the budget arrive as
+  outlines the `instructions` tool expands, or split into rules that load
+  when the conversation reaches their paths. CI and the release pipeline
+  are in place. Nothing in the Phase 0 scope still blocks `v0.2.0`: the
+  audit fixes and the Pi 5 smoke are backlog (2026-10-11), and criterion
+  5 is the Pi 4 bench cited above.
 
 ## Compatibility decision
 
@@ -244,8 +251,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     The cask already covers macOS.
     This does not gate `v0.3`.
     Official catalogs stay a separate parallel path and do not gate either track.
-13. Phase 1 (`v0.3`): `hint serve` and the TUI.
-    It starts without waiting for WP0.14.
+13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
+14. WP1.4: the TUI on Bubble Tea, as a second client of the same protocol.
 
 ## Open questions
 
@@ -277,7 +284,7 @@ pass dated 2026-08-29; re-run before Phase 4/5 decisions (Q2–Q4).
   [`docs/plan/why-hint.md`](docs/plan/why-hint.md); it carries a falsification
   table that is re-checked on the same cadence as the prior-art scan.
 - Files under `docs/plan/` are the **source of truth**; GitHub Issues mirror
-  the near-term work packages (currently Phase 0) for tracking and discussion.
+  the near-term work packages (currently Phase 1) for tracking and discussion.
   See [`docs/plan/README.md`](docs/plan/README.md) for conventions.
 - When scope changes, update the phase file and this roadmap table in the same
   PR as the change (or the decision record).

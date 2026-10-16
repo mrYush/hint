@@ -46,7 +46,9 @@ but breaks `GOOS=linux GOARCH=arm64 go build ./...`, it will not be merged.
 Today's code is small (`cmd/hint`, `internal/config`, `internal/provider`,
 `internal/agent`, `internal/tool`, `internal/permission`, `internal/diff`,
 `internal/session`, `internal/console`, `internal/project`,
-`internal/debuglog`). The target layout is
+`internal/debuglog`, `internal/rpc`). `cmd/hint` is a client of
+`internal/rpc`: only the engine wiring (`rpcengine.go`) may import the agent
+loop, and a test enforces it. The target layout is
 described in
 [docs/plan/architecture.md](docs/plan/architecture.md); new code should move
 toward it, not away from it. Two rules worth calling out now:
@@ -64,7 +66,7 @@ toward it, not away from it. Two rules worth calling out now:
   numbering, status legend, issue mirroring) are in
   [docs/plan/README.md](docs/plan/README.md).
 - GitHub Issues mirror the work packages of the *active* phase (currently
-  Phase 0, issues titled `[Phase 0][WP0.x] …`). Comment on the relevant issue
+  Phase 1, issues titled `[Phase 1][WP1.x] …`). Comment on the relevant issue
   before starting sizeable work so effort isn't duplicated.
 - Scope changes land in the phase file in the same PR as the code (or as a
   docs-only decision PR first). An agreement that exists only in a comment

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -112,6 +113,29 @@ func WriteToken(dir string) (string, error) {
 		return "", fmt.Errorf("rpc: token: %w", err)
 	}
 	return token, nil
+}
+
+// ReadToken returns the token a running server wrote with WriteToken.
+func ReadToken(dir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "auth.token"))
+	if err != nil {
+		return "", fmt.Errorf("rpc: token: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// ReadEndpoint returns what WriteEndpoint recorded: where the server that
+// owns dir listens.
+func ReadEndpoint(dir string) (network, addr string, err error) {
+	data, err := os.ReadFile(filepath.Join(dir, "listen"))
+	if err != nil {
+		return "", "", fmt.Errorf("rpc: endpoint: %w", err)
+	}
+	network, addr, ok := strings.Cut(strings.TrimSpace(string(data)), " ")
+	if !ok || network == "" || addr == "" {
+		return "", "", fmt.Errorf("rpc: endpoint: malformed %s", filepath.Join(dir, "listen"))
+	}
+	return network, addr, nil
 }
 
 // WriteEndpoint records where the server listens, next to the token, so a
