@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -81,16 +83,7 @@ func serveListen(ctx context.Context, opts options, listen string) error {
 	if err != nil {
 		home = ""
 	}
-	dir := rpc.RuntimeDir(home, os.LookupEnv)
-	token, err := rpc.WriteToken(dir)
-	if err != nil {
-		return err
-	}
-	network, addr, err := parseListen(listen, dir)
-	if err != nil {
-		return err
-	}
-	lis, err := rpc.Listen(network, addr)
+	lis, token, err := publish(rpc.RuntimeDir(home, os.LookupEnv), listen, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -98,16 +91,38 @@ func serveListen(ctx context.Context, opts options, listen string) error {
 	if lis.Addr().Network() == "unix" {
 		defer func() { _ = os.Remove(lis.Addr().String()) }()
 	}
-	if err := rpc.WriteEndpoint(dir, lis.Addr().Network(), lis.Addr().String()); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "hint: listening on %s %s\n", lis.Addr().Network(), lis.Addr().String())
-	fmt.Fprintf(os.Stderr, "hint: auth token: %s\n", filepath.Join(dir, "auth.token"))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &rpc.Server{Engine: eng, Token: token, Version: buildVersion(), Stop: cancel}
 	return srv.Serve(ctx, lis)
+}
+
+// publish opens the listener a `hint serve` answers on and leaves under
+// dir what a `hint --connect` needs to find it: a fresh auth.token and
+// the endpoint, written once the port is known. listen is the user's
+// address or "" for the platform default under dir. The caller closes
+// the listener and removes a Unix socket.
+func publish(dir, listen string, stderr io.Writer) (net.Listener, string, error) {
+	token, err := rpc.WriteToken(dir)
+	if err != nil {
+		return nil, "", err
+	}
+	network, addr, err := parseListen(listen, dir)
+	if err != nil {
+		return nil, "", err
+	}
+	lis, err := rpc.Listen(network, addr)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := rpc.WriteEndpoint(dir, lis.Addr().Network(), lis.Addr().String()); err != nil {
+		_ = lis.Close()
+		return nil, "", err
+	}
+	fmt.Fprintf(stderr, "hint: listening on %s %s\n", lis.Addr().Network(), lis.Addr().String())
+	fmt.Fprintf(stderr, "hint: auth token: %s\n", filepath.Join(dir, "auth.token"))
+	return lis, token, nil
 }
 
 // warnYolo is the server's share of warnMode: a server has no stdin of

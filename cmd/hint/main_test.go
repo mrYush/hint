@@ -805,6 +805,117 @@ func TestPermissionOverRPC(t *testing.T) {
 	}
 }
 
+// TestConnect is Phase 1 acceptance criterion 1 as a test: a server
+// published the way `hint serve` publishes it, and two shells that reach
+// it through --connect the way a second terminal does. The first finds
+// the server through the files under the runtime directory and starts a
+// recorded session; the second names the address and continues that
+// session with -c. Then the refusals: a wrong token, no token, no server.
+func TestConnect(t *testing.T) {
+	// connect() resolves the runtime directory from the environment, as
+	// `hint serve` does; pointing both at a temp dir keeps the test off
+	// the user's own socket and token.
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	dir := rpc.RuntimeDir("", os.LookupEnv)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	chat := &fakeChat{reply: func(n int) string { return strings.Repeat("a", n) }}
+	as, _, _, _ := testAssembly(t, chat, "")
+	eng, err := newEngine(ctx, as)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lis, token, err := publish(dir, "tcp:127.0.0.1:0", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := rpc.ReadToken(dir); err != nil || got != token {
+		t.Fatalf("ReadToken = %q, %v; want the published token", got, err)
+	}
+	srv := &rpc.Server{Engine: eng, Token: token, Version: "test"}
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(ctx, lis) }()
+	defer func() {
+		cancel()
+		if err := <-served; err != nil {
+			t.Errorf("Serve: %v", err)
+		}
+	}()
+
+	shell := func(target string, smode sessionMode) (*app, *bytes.Buffer, *bytes.Buffer, error) {
+		var out, stderr bytes.Buffer
+		opts := as.opts
+		opts.connect = target
+		opts.session = smode
+		a, err := connect(ctx, opts, stdio{in: strings.NewReader(""), out: &out, err: &stderr, tty: true})
+		return a, &out, &stderr, err
+	}
+
+	// First terminal: bare --connect, a new recorded session.
+	a, out, stderr, err := shell(connectAuto, sessionNew)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := a.oneShot(ctx, "first"); err != nil {
+		t.Fatalf("oneShot: %v", err)
+	}
+	a.close()
+	if out.String() != "a\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+	if want := "hint: connected to hint serve at tcp " + lis.Addr().String() + " (server test)"; !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr lacks %q:\n%s", want, stderr.String())
+	}
+
+	// Second terminal: the address spelled out, -c continues the session
+	// the first one recorded, so the model sees the whole history.
+	a, out, _, err = shell("tcp:"+lis.Addr().String(), sessionContinue)
+	if err != nil {
+		t.Fatalf("connect by address: %v", err)
+	}
+	if err := a.oneShot(ctx, "second"); err != nil {
+		t.Fatalf("oneShot: %v", err)
+	}
+	a.close()
+	if out.String() != "aa\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+	reqs := chat.seen()
+	if len(reqs) != 2 || len(reqs[1].Messages) != 4 || reqs[1].Messages[2].Text() != "a" || reqs[1].Messages[3].Text() != "second" {
+		t.Fatalf("the second shell did not continue the first one's session: %d requests, last %+v", len(reqs), reqs[len(reqs)-1].Messages)
+	}
+	if infos := sessionsOf(t, as); len(infos) != 1 || infos[0].Messages != 4 {
+		t.Errorf("sessions = %+v; want one with 4 messages", infos)
+	}
+
+	// A wrong token is refused by the server and a dead address by the
+	// dial; a missing token, and a missing server, before either.
+	tokenPath := filepath.Join(dir, "auth.token")
+	if err := os.WriteFile(tokenPath, []byte("nope\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var rpcErr *rpc.Error
+	if _, _, _, err := shell(connectAuto, sessionOff); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeUnauthorized {
+		t.Errorf("wrong token: %v; want %d", err, rpc.CodeUnauthorized)
+	}
+	if _, _, _, err := shell("tcp:127.0.0.1:1", sessionOff); err == nil || !strings.Contains(err.Error(), "connecting to hint serve") {
+		t.Errorf("nothing listening: %v", err)
+	}
+	if err := os.Remove(tokenPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := shell(connectAuto, sessionOff); err == nil || !strings.Contains(err.Error(), "token") {
+		t.Errorf("no token: %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, "listen")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := shell(connectAuto, sessionOff); err == nil || !strings.Contains(err.Error(), "no running hint serve found") {
+		t.Errorf("no server: %v", err)
+	}
+}
+
 // TestShellNeverImportsTheAgent is the dependency rule of WP1.3 as a test:
 // the CLI shell reaches the agent loop only through the core the RPC
 // server serves. The engine wiring is the one file allowed to know the
