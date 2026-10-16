@@ -91,6 +91,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP1.1 and the RPC contract (WP1.2) are in the tree: `hint serve` and `hint --mode rpc`.
   WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
   Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
+  The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
   The TUI (WP1.4) is next.
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
