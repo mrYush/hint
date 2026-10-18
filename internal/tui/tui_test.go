@@ -203,14 +203,16 @@ func (h *harness) run(cmd tea.Cmd) {
 // specialKeys are the keys without a character of their own that the
 // tests press, under the names tea.KeyPressMsg.String gives them.
 var specialKeys = map[string]tea.KeyPressMsg{
-	"enter":     {Code: tea.KeyEnter},
-	"esc":       {Code: tea.KeyEscape},
-	"ctrl+c":    {Code: 'c', Mod: tea.ModCtrl},
-	"ctrl+d":    {Code: 'd', Mod: tea.ModCtrl},
-	"ctrl+y":    {Code: 'y', Mod: tea.ModCtrl},
-	"tab":       {Code: tea.KeyTab},
-	"ctrl+s":    {Code: 's', Mod: tea.ModCtrl},
-	"backspace": {Code: tea.KeyBackspace},
+	"enter":       {Code: tea.KeyEnter},
+	"esc":         {Code: tea.KeyEscape},
+	"ctrl+c":      {Code: 'c', Mod: tea.ModCtrl},
+	"ctrl+d":      {Code: 'd', Mod: tea.ModCtrl},
+	"ctrl+y":      {Code: 'y', Mod: tea.ModCtrl},
+	"tab":         {Code: tea.KeyTab},
+	"ctrl+s":      {Code: 's', Mod: tea.ModCtrl},
+	"backspace":   {Code: tea.KeyBackspace},
+	"shift+enter": {Code: tea.KeyEnter, Mod: tea.ModShift},
+	"alt+enter":   {Code: tea.KeyEnter, Mod: tea.ModAlt},
 }
 
 // keyMsg is the key press for a name: one of specialKeys, or a single
@@ -892,5 +894,28 @@ func TestConfigCommand(t *testing.T) {
 	h.submit("/config keys")
 	if !strings.Contains(h.view(), "providers.<profile>.header_timeout") {
 		t.Errorf("/config keys did not list the keys:\n%s", h.view())
+	}
+}
+
+func TestNewlineKeys(t *testing.T) {
+	eng := &fakeEngine{}
+	h := newHarness(t, eng, Options{})
+	h.typeText("one")
+	h.press("shift+enter")
+	h.typeText("two")
+	h.press("alt+enter")
+	h.typeText("three\\")
+	h.press("enter") // a trailing backslash: a newline, not a send
+	h.typeText("four")
+	if got := h.m.ta.Value(); got != "one\ntwo\nthree\nfour" {
+		t.Fatalf("input = %q", got)
+	}
+	if h.m.busy {
+		t.Fatal("a newline key sent the question")
+	}
+	h.press("enter")
+	h.pump(until[turnDoneMsg])
+	if msgs := eng.sessions[h.m.sessionID].Messages(); len(msgs) == 0 || msgs[0].Text() != "one\ntwo\nthree\nfour" {
+		t.Errorf("the core got %+v", msgs)
 	}
 }

@@ -29,7 +29,7 @@ const (
 	inputLines  = 3
 )
 
-const help = "enter sends · tab completes · ctrl+y copies the answer · /help lists commands · ctrl+d quits"
+const help = "enter sends · shift+enter or \\ enter: newline · tab completes · ctrl+y copies · /help · ctrl+d quits"
 
 // model is the whole shell: the connection, the transcript and the three
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
@@ -84,9 +84,11 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 	ta.CharLimit = 0
 	ta.SetVirtualCursor(false)
 	ta.SetHeight(inputLines)
-	// Enter sends; a newline inside the question is Ctrl-J, so the input
-	// never swallows the key that every chat uses to submit.
-	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"))
+	// Enter sends. A newline is shift+enter where the terminal can tell
+	// it from enter (the kitty keyboard protocol, which Bubble Tea asks
+	// for), alt+enter and ctrl+j everywhere, and a trailing backslash
+	// before enter on any terminal at all — see newlineBeforeEnter.
+	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "alt+enter", "ctrl+j"))
 	ta.Focus()
 	sty := newStyles(dark)
 	// The input is set apart by the rule above it and its prompt, not by
@@ -245,6 +247,9 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+d":
 		return m.quit()
 	case "enter":
+		if m.newlineBeforeEnter() {
+			return m, nil
+		}
 		return m.submit()
 	case "tab":
 		return m.tab(), nil
@@ -592,4 +597,17 @@ func configKeysHelp() string {
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// newlineBeforeEnter turns a backslash right before the cursor into a
+// newline, the way a shell continues a line. It is the one newline that
+// works on every terminal: shift+enter needs a terminal that reports it,
+// and an editor's terminal may keep alt+enter for itself.
+func (m *model) newlineBeforeEnter() bool {
+	v := m.ta.Value()
+	if !strings.HasSuffix(v, "\\") || m.ta.Line() != m.ta.LineCount()-1 {
+		return false
+	}
+	m.ta.SetValue(strings.TrimSuffix(v, "\\") + "\n")
+	return true
 }

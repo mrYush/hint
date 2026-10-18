@@ -140,7 +140,7 @@ func (m model) available() []command {
 // helpText is /help: the keys, then every command that exists.
 func helpText() string {
 	var b strings.Builder
-	b.WriteString("enter sends · ctrl+j newline · tab completes commands · pgup/pgdn scroll · ctrl+y copies the last answer · ctrl+d quits\n")
+	b.WriteString("enter sends · newline: shift+enter (where the terminal reports it), alt+enter, ctrl+j, or \\ at the end of the line then enter · tab completes commands · pgup/pgdn scroll · ctrl+y copies the last answer · ctrl+d quits\n")
 	for _, c := range commands() {
 		fmt.Fprintf(&b, "%-10s %s\n", c.name, c.help)
 	}
