@@ -58,8 +58,15 @@ Both need the protocol and the core before any UI, and WP1.4 does not touch the 
 
 - [ ] `complete` over RPC: given the text typed so far, the core returns a short continuation from a small, fast model; cancelled by the next keystroke, never blocking the input
 - [ ] Ghost text in the TUI input: the suggestion shown dimmed after the cursor, `tab` accepts it, any other key discards it
-- [ ] A profile setting for the completion model and an off switch; off by default until the cost and the latency are measured
+- [ ] A `completion:` block in the config (`enabled`, the profile or model it uses, the latency after which the warning appears) with the usual layering: `~/.config/hint/config.yaml` sets the general value, `.hint/config.yaml` in the repository overrides it, and a key the local file does not mention is inherited.
+      `enabled` is a `*bool` like `instructions.summarize`, so that an explicit `false` in the project file is told apart from silence and wins over a global `true`; off by default until the cost and the latency are measured
+- [ ] A slow or failing completion never gets in the way: the request runs beside the input, not in front of it.
+      Past the configured latency the status line shows a warning that the model is slow.
+      Any edit of the line (a character added or removed) or Esc cancels the request, and an answer that arrives after that is dropped, never shown, even if it is already on the wire; a suggestion belongs to the exact text it was asked for
 - [ ] Command arguments that depend on the configuration (profile names for the WP1.5 switcher, models the profile serves) join the deterministic table in `internal/tui/commands.go`
+
+Rules fixed on 2026-10-18, before any code: the feature is switchable in the layered config, and it must never make typing wait.
+The cancel-on-edit rule needs a request id carried through `complete` and echoed in its reply, so the shell can recognise a late answer for text that is no longer in the input; the same id lets the core cancel the provider call.
 
 Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
 
