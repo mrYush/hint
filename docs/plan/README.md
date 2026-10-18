@@ -40,6 +40,16 @@ Phase files use plain GitHub task lists:
 - `- [x]` — done
 - Append `(blocked: reason)` to a task that cannot proceed.
 
+**Branch per work package.** Every `### WPx.y` heading is followed by a
+``**Branch:** `dev/wpx.y-<short-name>` `` line, assigned when the work package
+is written down, before work starts (naming per CONTRIBUTING "Git workflow").
+The work package's status is read from that branch, not from a separate
+field: no such branch — not started; branch exists — in progress; branch
+merged into `develop` — done (append **done** to the heading with the merge
+date; this may be automated on merge). One work package — one branch; do not
+bundle small packages into a shared branch, merge them quickly instead.
+Checkboxes inside the package remain the step-level view.
+
 Each phase file header carries a status line: `Planned` → `In progress` →
 `Released vX.Y`.
 

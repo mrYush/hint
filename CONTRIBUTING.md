@@ -71,6 +71,10 @@ toward it, not away from it. Two rules worth calling out now:
 - Scope changes land in the phase file in the same PR as the code (or as a
   docs-only decision PR first). An agreement that exists only in a comment
   thread does not exist.
+- Every work package names its branch (`**Branch:** ...` under the `### WPx.y`
+  heading) when it is written down, before work starts; the package's status
+  is read from that branch (absent / exists / merged into `develop`), see the
+  status legend in [docs/plan/README.md](docs/plan/README.md).
 
 ## Git workflow
 
