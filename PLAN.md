@@ -262,7 +262,9 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 16. WP1.6: completion of what the user is typing — a short continuation from a small model over RPC, shown as ghost text in the TUI input, plus configuration-dependent command arguments.
     Switchable in the layered config (the project's `.hint/` value beats the global one, a key it leaves out is inherited), and it never blocks typing: a slow model gets a warning, an edit or Esc cancels the request, and a late answer is dropped.
     The deterministic part (Tab on slash commands and their arguments) is already in WP1.4.
-17. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
+17. WP1.7: secrets out of the agent's reach — keys in the OS secret store, `hint config show-key` as the only way to see one again, tool subprocesses without the key variables, tool results redacted before the model or a session file sees them, the config directory closed to the file tools.
+    Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
+18. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
     Independent of every tag and of Phase 1.
 
 ## Open questions

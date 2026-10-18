@@ -28,6 +28,15 @@ const defaultBaseURL = "https://api-bar.ru/route/openai"
 type setupInfo struct {
 	profile config.Profile
 	locs    config.Locations
+	// firstRun is setup before any session: the start carries on with
+	// what is written instead of asking for a restart.
+	firstRun bool
+}
+
+// needsKey says whether the profile has no key yet, so that an empty
+// answer would leave it unusable. An ollama profile needs none.
+func (s *setupInfo) needsKey() bool {
+	return s.profile.APIKey == "" && s.profile.Kind != config.KindOllama
 }
 
 // newSetupInfo describes the configuration cfg was loaded from. cfg may
@@ -80,7 +89,10 @@ func (s *setupInfo) save(profile, baseURL, model, key string) (string, error) {
 	}); err != nil {
 		return "", err
 	}
-	msg := "saved to " + s.locs.Global + "; restart hint to use it (hint models tries the profile first)"
+	msg := "saved to " + s.locs.Global
+	if !s.firstRun {
+		msg += "; restart hint to use it (hint models tries the profile first)"
+	}
 	if name, ok := envReference(key); ok {
 		if _, set := os.LookupEnv(name); !set {
 			msg += "; " + name + " is not set in this shell: export it before starting hint"
@@ -222,18 +234,9 @@ func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) erro
 	if err != nil {
 		return err
 	}
-	key, ok, err := in.Secret(ctx, "API key (input hidden; ${VARIABLE} to read it from the environment; empty keeps the current one): ")
+	key, err := askKey(ctx, in, out, s.needsKey())
 	if err != nil {
 		return err
-	}
-	if !ok {
-		name, err := ask("environment variable that holds the API key (e.g. API_BAR_KEY; empty keeps the key as it is)", "", "")
-		if err != nil {
-			return err
-		}
-		if name != "" {
-			key = "${" + strings.Trim(name, "${}") + "}"
-		}
 	}
 	msg, err := s.save(profile, baseURL, model, key)
 	if err != nil {
@@ -241,6 +244,41 @@ func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) erro
 	}
 	fmt.Fprintln(out, "hint:", msg)
 	return nil
+}
+
+// keyHelp is what the key question says about the answer it wants.
+const keyHelp = "the provider's API key (for api-bar: the key from your account at https://api-bar.ru), " +
+	"or ${VARIABLE} to read it from the environment at every start"
+
+// askKey asks for the key. Where the input can hide it, the key itself
+// (or ${VAR}) is typed; where it cannot, the name of the variable that
+// holds it. When the profile has no key yet an empty answer is not
+// accepted — it would write a profile that cannot answer — and the
+// question is repeated; Ctrl-C leaves.
+func askKey(ctx context.Context, in setupIO, out io.Writer, required bool) (string, error) {
+	empty := "Enter keeps the current key"
+	if required {
+		empty = "required: this profile has no key yet"
+	}
+	for {
+		key, ok, err := in.Secret(ctx, "API key, input hidden ("+empty+"): ")
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			name, err := in.Line(ctx, "name of the environment variable that holds the API key, e.g. API_BAR_KEY ("+empty+"): ")
+			if err != nil {
+				return "", err
+			}
+			if name != "" {
+				key = "${" + strings.Trim(name, "${}") + "}"
+			}
+		}
+		if key != "" || !required {
+			return key, nil
+		}
+		fmt.Fprintln(out, "hint: a key is needed —", keyHelp+"; Ctrl-C stops the setup")
+	}
 }
 
 // offerSetup runs after a rejected credential in the REPL: it shows
@@ -280,9 +318,11 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 		return false
 	}
 	info := newSetupInfo(nil, cwd)
+	info.firstRun = true
 	if missingKey {
 		info.profile.Name = noKey.Profile
 	}
+	fmt.Fprintln(sio.err, "hint: you will need "+keyHelp+".")
 	fmt.Fprintln(sio.err, "hint:", strings.TrimPrefix(loadErr.Error(), "config: "))
 	fmt.Fprintln(sio.err, info.describe())
 	tty := newTTYIO(in, sio.err)

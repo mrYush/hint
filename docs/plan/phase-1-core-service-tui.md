@@ -71,6 +71,30 @@ The cancel-on-edit rule needs a request id carried through `complete` and echoed
 
 Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
 
+### WP1.7 — Secrets out of the agent's reach
+
+**Branch:** `dev/wp1.7-secrets`
+
+Once entered, an API key must not be readable by the agent: not by its tools, not in what goes to the model, not in a session file.
+Only the user sees it again, through a command that exists for that and is not reachable over RPC or from a tool.
+
+Where it leaks today (2026-10-18):
+the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `API_BAR_KEY`;
+`~/.config/hint/config.yaml` is mode 0600 but owned by the same user, so `cat` reads it;
+the file tools are confined to the project root, which is the home directory when `hint` runs there;
+tool results reach the model and the session file unmasked — only the `--debug` trace is redacted.
+
+- [ ] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
+      A headless Linux box without a Secret Service needs a decided fallback (the 0600 file as today, with a warning), not a silent one
+- [ ] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
+- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`API_BAR_KEY`, `APIBAR_TOKEN`, `OPENAI_API_KEY`, `HINT_API_KEY`)
+- [ ] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — the catch-all for a key that leaked some other way
+- [ ] The file tools refuse the config directory and the session directory even when the project root contains them
+- [ ] Tests that pin each path: `env`, `cat` of the config, `read_file` from a root at `$HOME`, a tool output that contains the key
+
+Limits to state, not to hide: a process running as the same user can ask the secret store itself (`secret-tool lookup`, `security find-generic-password`), and a determined model can transform a value before printing it, which defeats redaction.
+Closing that needs a sandbox for `bash` (bubblewrap or Landlock on Linux, `sandbox-exec` on macOS), which is its own work package; this one removes every accidental path and the easy deliberate ones.
+
 ### WP1.5 — Session and profile operations over RPC
 
 **Branch:** `dev/wp1.5-session-ops`

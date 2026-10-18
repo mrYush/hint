@@ -136,3 +136,31 @@ func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
 		t.Error("offered setup for an error setup cannot fix")
 	}
 }
+
+// secrets is a setupIO whose hidden answers come one per question.
+type secrets struct{ keys []string }
+
+func (s *secrets) Line(context.Context, string) (string, error) { return "", nil }
+
+func (s *secrets) Secret(context.Context, string) (string, bool, error) {
+	k := s.keys[0]
+	s.keys = s.keys[1:]
+	return k, true, nil
+}
+
+func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
+	var out bytes.Buffer
+	in := &secrets{keys: []string{"", "", "sk-third"}}
+	key, err := askKey(context.Background(), in, &out, true)
+	if err != nil || key != "sk-third" {
+		t.Fatalf("askKey = %q, %v", key, err)
+	}
+	if strings.Count(out.String(), "a key is needed") != 2 || !strings.Contains(out.String(), "api-bar.ru") {
+		t.Errorf("the empty answers were not explained:\n%s", out.String())
+	}
+	// With a key already in place, Enter keeps it.
+	key, err = askKey(context.Background(), &secrets{keys: []string{""}}, &out, false)
+	if err != nil || key != "" {
+		t.Errorf("optional key = %q, %v", key, err)
+	}
+}

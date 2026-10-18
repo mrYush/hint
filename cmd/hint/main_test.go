@@ -239,6 +239,13 @@ func TestOpenSession(t *testing.T) {
 	if err := os.Chtimes(first.Path(), later, later); err != nil {
 		t.Fatal(err)
 	}
+	// The fallback above already recorded an empty session of its own;
+	// left at "now" next to second, the two would tie on mtime and the
+	// list order between them would rest on their random ids.
+	sooner := time.Now().Add(30 * time.Minute)
+	if err := os.Chtimes(second.Path(), sooner, sooner); err != nil {
+		t.Fatal(err)
+	}
 
 	stderr.Reset()
 	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr)
