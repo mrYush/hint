@@ -50,6 +50,17 @@ date; this may be automated on merge). One work package — one branch; do not
 bundle small packages into a shared branch, merge them quickly instead.
 Checkboxes inside the package remain the step-level view.
 
+**Exception: scope that grew inside one branch.** A branch that, while in
+progress, came to carry work beyond its package (another feature the
+package turned out to need, or the plans of later packages) may be merged
+as one PR instead of being split after review has started. Three
+conditions: the extra scope is in the host package's checklist, so the
+phase file shows what was delivered where; the PR description has a scope
+note naming the exception and why splitting was not worth it; and the
+phase file records the exception under the package. Later packages still
+get their own branches; the exception is for scope found on the way, not
+a way to plan two packages into one branch.
+
 Each phase file header carries a status line: `Planned` → `In progress` →
 `Released vX.Y`.
 

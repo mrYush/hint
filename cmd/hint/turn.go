@@ -69,6 +69,16 @@ func (a *app) oneShot(ctx context.Context, question string) error {
 	if res.Answer != "" {
 		fmt.Fprintln(a.io.out)
 	}
+	return withAdvice(err)
+}
+
+// withAdvice adds shell.Advice to the error a one-shot exits with, so
+// that main prints what the REPL and the TUI show; %w keeps the error
+// itself for errors.Is and errors.As.
+func withAdvice(err error) error {
+	if advice := shell.Advice(err); advice != "" {
+		return fmt.Errorf("%w\n%s", err, advice)
+	}
 	return err
 }
 
@@ -105,7 +115,7 @@ func (a *app) oneShotJSON(ctx context.Context, question string) error {
 	if encErr := enc.Encode(out); encErr != nil {
 		return fmt.Errorf("writing the answer: %w", encErr)
 	}
-	return err
+	return withAdvice(err)
 }
 
 // asAgentError gives a plain error the wire shape, keeping a classified

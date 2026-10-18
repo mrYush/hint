@@ -137,6 +137,12 @@ func RunTurn(ctx context.Context, cl *rpc.Client, sessionID, text string, sink S
 			case agentapi.FinishLength:
 				sink.Notice("response was truncated by the provider's token limit")
 			case agentapi.FinishError:
+				// The contract sends an error event first; a core that
+				// breaks it must not leave a nil *Error inside a non-nil
+				// error for the shell to dereference.
+				if lastErr == nil {
+					lastErr = agentapi.NewError(agentapi.ErrUnknown, "the turn failed without an error event")
+				}
 				res.Err = lastErr
 				runErr = lastErr
 			}
@@ -193,14 +199,23 @@ func FirstLine(s string) string {
 	return s
 }
 
-// Explain is the text a shell shows for a turn that failed: the error,
-// and for a rejected credential what to do about it, since "auth:
-// Unauthorized" alone does not say whose key or where it comes from.
-func Explain(err error) string {
+// Advice says what to do about a failed turn, empty when the error says
+// enough. A rejected credential gets one, since "auth: Unauthorized"
+// alone does not say whose key or where it comes from.
+func Advice(err error) string {
 	var ae *agentapi.Error
-	if errors.As(err, &ae) && ae.Kind == agentapi.ErrAuth {
-		return err.Error() + "\nthe provider rejected the credentials: check the api_key of the profile in use " +
+	if errors.As(err, &ae) && ae != nil && ae.Kind == agentapi.ErrAuth {
+		return "the provider rejected the credentials: check the api_key of the profile in use " +
 			"(and the environment variable it expands, if any); `hint models` tries the same profile"
+	}
+	return ""
+}
+
+// Explain is the text a shell shows for a turn that failed: the error,
+// then its Advice on the next line.
+func Explain(err error) string {
+	if advice := Advice(err); advice != "" {
+		return err.Error() + "\n" + advice
 	}
 	return err.Error()
 }
