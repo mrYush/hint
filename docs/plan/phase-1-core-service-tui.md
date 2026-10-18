@@ -36,13 +36,52 @@ Reference — [Pi RPC mode](https://github.com/badlogic/pi-mono/blob/main/packag
 
 ### WP1.4 — TUI on Bubble Tea
 
-References — Crush, archived opencode.
+**Branch:** `dev/wp1.4-tui`
 
-- [ ] Streaming chat view with markdown rendering
-- [ ] Diff view for write-permission prompts
-- [ ] Model/profile switcher mid-session
-- [ ] Session tree/list view (resume, branch)
-- [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL
+References — Crush (reading only: its license is FSL-1.1-MIT, so no code is borrowed, per [risks.md](risks.md) R2), archived opencode (MIT).
+
+- [x] `hint --tui`: streaming chat view with markdown rendering (glamour for finished messages; a message still streaming is plain text)
+- [x] Diff view for write-permission prompts; `y` / `n` / `a` answer through `permission.reply`
+- [x] The history of a continued session (`-c`, `--session`) rendered on attach
+- [x] Session list view: list and resume (`-r` opens it)
+- [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
+
+Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
+Both need the protocol and the core before any UI, and WP1.4 does not touch the protocol.
+
+### WP1.5 — Session and profile operations over RPC
+
+**Branch:** `dev/wp1.5-session-ops`
+
+- [ ] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process
+- [ ] `session.fork`: a new session that starts from an existing one's history up to a given message
+- [ ] The TUI exposes both: a profile picker, and a fork action in the session list, which becomes a tree
+
+Additive methods, no `WireVersion` bump expected; the UI half is small once the methods exist.
+
+Decisions (2026-10-17):
+
+- **Bubble Tea v2, through the `charm.land/...` module paths.**
+  v2 is the module's canonical path (its `go.mod` says `module charm.land/bubbletea/v2`; the `github.com/charmbracelet/bubbletea/v2` path refuses to build).
+  `bubbletea/v2`, `bubbles/v2`, `lipgloss/v2` and `glamour/v2` are pinned.
+  v1 is maintenance only and Crush, the reference, is on v2; the price is fewer examples and a different key and view API.
+- **glamour from the first commit, for finished messages only.**
+  A message still streaming is shown as plain text until `turn_end`, then rendered once.
+  Re-rendering the whole message on every delta is the cost Crush had to engineer around (a cached render of a stable prefix); this plan does not pay it until a profile shows the need.
+- **`internal/tui` is a client of the protocol, like the REPL.**
+  It imports `internal/rpc`, `pkg/agentapi` and `internal/permission`, never `internal/agent`; `TestShellNeverImportsTheAgent` covers it.
+- **Events reach the model through `tea.Program.Send`**, from one goroutine per turn, the way Crush and opencode deliver agent events.
+  A `tea.Cmd` that waits on the channel returns one message and has to be re-armed after each; `Send` does not lose messages and keeps the turn's reader where the REPL's is.
+- **One owner for the event semantics: `internal/shell`.**
+  `shell.RunTurn` drives a turn and reports it through a small consumer-side `Sink` interface; the REPL's sink writes to the terminal, the TUI's sends messages to its program.
+  Rules such as "`error` ends the turn only when `turn_end` says so" stay in one place, and so does the fix that `turn.start` runs to its answer even when the user cancels under it — a turn the client gave up on before it knew the id would run on with no owner.
+- **Go 1.26.**
+  `charm.land/bubbletea/v2@v2.1.0` declares `go 1.26.0`, so the module's `go` directive moves from 1.22 to 1.26.0; CI and the release build read the version from `go.mod` and follow.
+  The alternative, an older v2.0.x, buys nothing: the series is weeks old and 1.26 is the current stable Go.
+- **Opt-in before default.**
+  `--tui` until acceptance 3 passes, then one commit flips the default and `--plain` keeps the REPL; that commit is the easy one to revert.
+- **Tests drive the model.**
+  `Update` and `View` are called directly against an `rpc.Server` on a `net.Pipe` with the fake engine already in `internal/rpc`; no `teatest`.
 
 Decisions (2026-10-11):
 
