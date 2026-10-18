@@ -126,7 +126,11 @@ session is kept.
 the conversation scrolls above the input with answers rendered as
 Markdown, a file edit or a command asks for permission in a dialog that
 shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
-this directory's sessions to resume one. The TUI is a client of the same
+this directory's sessions to resume one. Tab completes `/commands` and
+their arguments. Text is selected with the terminal as usual; `ctrl+y`
+(or `/copy [answer|question|code|all]`) copies the last answer, and
+`/mouse` switches to a mode where the wheel scrolls and a click copies the
+block under it. The TUI is a client of the same
 protocol as `hint serve`; the line REPL stays the default until the TUI
 has passed the Phase 0 scenarios.
 
@@ -195,6 +199,16 @@ system prompt is not stored — each run builds it afresh — and neither are
 `a(lways)` answers, so a continued session asks again before running
 commands. When the conversation outgrows the model's context window it is
 summarized, and the summary is what a later run continues from.
+
+### Configuration setup
+
+`hint setup` asks for the profile, base URL, model and the name of the
+environment variable that holds the API key, and writes them to
+`~/.config/hint/config.yaml` (mode 0600, comments kept). When a provider
+rejects the key, `hint` says which config files it is using and offers
+the same questions (in the TUI: `/setup`, with the key masked). A project
+`.hint/config.yaml` is never written, so a key does not end up in git.
+Restart `hint` after saving.
 
 ### Models
 

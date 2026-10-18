@@ -207,6 +207,8 @@ var specialKeys = map[string]tea.KeyPressMsg{
 	"esc":    {Code: tea.KeyEscape},
 	"ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
 	"ctrl+d": {Code: 'd', Mod: tea.ModCtrl},
+	"ctrl+y": {Code: 'y', Mod: tea.ModCtrl},
+	"tab":    {Code: tea.KeyTab},
 }
 
 // keyMsg is the key press for a name: one of specialKeys, or a single
@@ -546,5 +548,254 @@ func TestResizeRedraws(t *testing.T) {
 	}
 	if lines := strings.Count(h.view(), "\n") + 1; lines > height {
 		t.Errorf("screen is %d lines for a %d-line terminal:\n%s", lines, height, h.view())
+	}
+}
+
+// clip records what the shell copied instead of touching the system clipboard.
+func clip(t *testing.T) *[]string {
+	t.Helper()
+	var got []string
+	old := writeClipboard
+	writeClipboard = func(s string) error { got = append(got, s); return nil }
+	t.Cleanup(func() { writeClipboard = old })
+	return &got
+}
+
+// runBatch executes a command and the commands inside a batch.
+func runBatch(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			runBatch(c)
+		}
+	}
+}
+
+func TestTabCompletesCommands(t *testing.T) {
+	// A transcript to copy from, so that /copy is a command that exists.
+	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{agentapi.UserMessage("q")}})
+
+	// A unique prefix completes to the command.
+	h.typeText("/se")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/sessions" {
+		t.Fatalf("/se + tab = %q, want /sessions", got)
+	}
+
+	// Several candidates: the common prefix, the list in the status line, then a cycle.
+	h.m.ta.Reset()
+	h.typeText("/")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/" {
+		t.Fatalf("/ + tab = %q; the common prefix of every command is just /", got)
+	}
+	if st := h.m.statusLine(); !strings.Contains(st, "/copy") || !strings.Contains(st, "/sessions") {
+		t.Errorf("candidates not listed: %q", st)
+	}
+	first := ""
+	for i := 0; i < len(h.m.available()); i++ {
+		h.press("tab")
+		if i == 0 {
+			first = h.m.ta.Value()
+		}
+	}
+	if h.m.ta.Value() != first && !strings.HasPrefix(h.m.ta.Value(), "/") {
+		t.Errorf("cycle left %q", h.m.ta.Value())
+	}
+
+	// Arguments are the command's closed set.
+	h.m.ta.Reset()
+	h.typeText("/copy ")
+	h.press("tab")
+	if st := h.m.statusLine(); !strings.Contains(st, "/copy answer") || !strings.Contains(st, "/copy code") {
+		t.Errorf("arguments not offered: %q", st)
+	}
+	h.m.ta.Reset()
+	h.typeText("/copy co")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/copy code" {
+		t.Errorf("/copy co + tab = %q", got)
+	}
+
+	// A question has no deterministic completion: tab inserts nothing.
+	h.m.ta.Reset()
+	h.typeText("what")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "what" {
+		t.Errorf("tab changed a question: %q", got)
+	}
+}
+
+func TestTabOffersOnlyWhatIsAvailable(t *testing.T) {
+	h := newHarness(t, &fakeEngine{}, Options{})
+	// Nothing in the transcript yet: /copy has nothing to copy.
+	for _, c := range h.m.complete("/") {
+		if c == "/copy" {
+			t.Fatalf("/copy offered with an empty transcript: %v", h.m.complete("/"))
+		}
+	}
+	h.m.busy = true
+	for _, c := range h.m.complete("/") {
+		if c == "/sessions" {
+			t.Fatalf("/sessions offered during a turn: %v", h.m.complete("/"))
+		}
+	}
+}
+
+func TestCopyAnswerQuestionCodeAll(t *testing.T) {
+	got := clip(t)
+	history := []agentapi.Message{
+		agentapi.UserMessage("show me"),
+		agentapi.AssistantMessage("Here:\n```go\nfunc a() {}\n```\nand\n```sh\ngo test\n```\n"),
+	}
+	h := newHarness(t, &fakeEngine{}, Options{History: history})
+
+	h.press("ctrl+y")
+	cmd := h.press("ctrl+y")
+	runBatch(cmd)
+	if len(*got) == 0 || !strings.Contains((*got)[0], "Here:") {
+		t.Fatalf("ctrl+y copied %q", *got)
+	}
+	if !strings.Contains(h.m.statusLine(), "copied answer") {
+		t.Errorf("no confirmation: %q", h.m.statusLine())
+	}
+
+	for _, c := range []struct{ line, want string }{
+		{"/copy question", "show me"},
+		{"/copy code", "go test"},
+		{"/copy all", "you:\nshow me"},
+	} {
+		*got = nil
+		h.typeText(c.line)
+		cmd := h.press("enter")
+		runBatch(cmd)
+		if len(*got) == 0 || !strings.Contains((*got)[0], c.want) {
+			t.Errorf("%s copied %q, want it to contain %q", c.line, *got, c.want)
+		}
+	}
+	h.typeText("/copy bogus")
+	h.press("enter")
+	if !strings.Contains(h.m.statusLine(), "nothing to copy") {
+		t.Errorf("bad argument not reported: %q", h.m.statusLine())
+	}
+}
+
+func TestMouseModeCopiesTheBlockUnderTheClick(t *testing.T) {
+	got := clip(t)
+	history := []agentapi.Message{agentapi.UserMessage("first question"), agentapi.AssistantMessage("first answer")}
+	h := newHarness(t, &fakeEngine{}, Options{History: history})
+
+	if h.m.View().MouseMode != tea.MouseModeNone {
+		t.Fatal("mouse reporting is on by default; the terminal could not select text")
+	}
+	h.typeText("/mouse")
+	h.press("enter")
+	if !h.m.mouse || h.m.View().MouseMode != tea.MouseModeCellMotion {
+		t.Fatal("/mouse did not turn reporting on")
+	}
+	// Row 0 is the header; the question is drawn from row 1 (label), 2 (text).
+	cmd := h.update(tea.MouseClickMsg{X: 3, Y: headerLines + 1, Button: tea.MouseLeft})
+	runBatch(cmd)
+	if len(*got) != 1 || (*got)[0] != "first question" {
+		t.Errorf("click on the question copied %q", *got)
+	}
+	// A click in the blank gap or on the rule copies nothing.
+	*got = nil
+	runBatch(h.update(tea.MouseClickMsg{X: 3, Y: 0, Button: tea.MouseLeft}))
+	if len(*got) != 0 {
+		t.Errorf("click on the header copied %q", *got)
+	}
+	h.typeText("/mouse")
+	h.press("enter")
+	if h.m.mouse {
+		t.Error("/mouse again did not turn it off")
+	}
+}
+
+func TestFailedTurnExplainsAuth(t *testing.T) {
+	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
+		out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.NewError(agentapi.ErrAuth, "Unauthorized")}
+		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
+	}}
+	h := newHarness(t, eng, Options{})
+	h.submit("hi")
+	h.pump(until[turnDoneMsg])
+	if v := h.view(); !strings.Contains(v, "Unauthorized") || !strings.Contains(v, "api_key") {
+		t.Errorf("a rejected key is not explained:\n%s", v)
+	}
+}
+
+func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
+	var saved []string
+	setup := &Setup{
+		Describe: "config in use: /home/u/.config/hint/config.yaml",
+		Profile:  "api-bar", BaseURL: "https://gw.test", Model: "m1",
+		Save: func(profile, baseURL, model, key string) (string, error) {
+			saved = []string{profile, baseURL, model, key}
+			return "saved to /home/u/.config/hint/config.yaml", nil
+		},
+	}
+	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
+		out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.NewError(agentapi.ErrAuth, "Unauthorized")}
+		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
+	}}
+	h := newHarness(t, eng, Options{Setup: setup})
+
+	// The failed turn says where the configuration is and how to fix it.
+	h.submit("hi")
+	h.pump(until[turnDoneMsg])
+	if v := h.view(); !strings.Contains(v, "/home/u/.config/hint/config.yaml") || !strings.Contains(v, "/setup") {
+		t.Fatalf("rejected key not explained with a way out:\n%s", v)
+	}
+
+	h.submit("/setup")
+	if h.m.setupForm == nil {
+		t.Fatal("/setup did not open the form")
+	}
+	if v := h.view(); !strings.Contains(v, "gw.test") || !strings.Contains(v, "m1") {
+		t.Errorf("form does not start from the current values:\n%s", v)
+	}
+	// Three enters move to the key; the key is typed, masked, and saved.
+	h.press("enter", "enter", "enter")
+	h.typeText("sk-secret-123")
+	if v := h.view(); strings.Contains(v, "sk-secret-123") {
+		t.Errorf("the key is shown on screen:\n%s", v)
+	}
+	h.run(h.press("enter"))
+	if h.m.setupForm != nil {
+		t.Fatalf("form still open: %+v", h.m.setupForm.err)
+	}
+	if want := []string{"api-bar", "https://gw.test", "m1", "sk-secret-123"}; strings.Join(saved, "|") != strings.Join(want, "|") {
+		t.Errorf("Save got %v, want %v", saved, want)
+	}
+	if v := h.view(); !strings.Contains(v, "saved to /home/u") || strings.Contains(v, "sk-secret-123") {
+		t.Errorf("confirmation missing or leaking:\n%s", v)
+	}
+}
+
+func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
+	setup := &Setup{Describe: "d", Profile: "p", Save: func(string, string, string, string) (string, error) {
+		return "", errors.New("permission denied")
+	}}
+	h := newHarness(t, &fakeEngine{}, Options{Setup: setup})
+	h.submit("/setup")
+	h.press("enter", "enter", "enter")
+	h.run(h.press("enter"))
+	if h.m.setupForm == nil || !strings.Contains(h.view(), "permission denied") {
+		t.Fatalf("a failed save closed the form or hid the reason:\n%s", h.view())
+	}
+	h.press("esc")
+	if h.m.setupForm != nil {
+		t.Error("esc did not close the form")
+	}
+	// A core in another process offers no form.
+	remote := newHarness(t, &fakeEngine{}, Options{Setup: &Setup{Describe: "elsewhere"}})
+	for _, c := range remote.m.complete("/") {
+		if c == "/setup" {
+			t.Errorf("/setup offered without a way to save: %v", remote.m.complete("/"))
+		}
 	}
 }

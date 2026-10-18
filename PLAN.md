@@ -259,7 +259,9 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Opt-in `--tui` first: streaming chat with markdown, the permission dialog with the diff, the session list.
     It becomes the default on a terminal, with `--plain` for the REPL, once the Phase 0 scenarios pass through it.
 15. WP1.5: session and profile operations over RPC — a profile switch mid-session and a session fork, each a protocol method and core work first; the TUI then shows them.
-16. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
+16. WP1.6: completion of what the user is typing — a short continuation from a small model over RPC, shown as ghost text in the TUI input, plus configuration-dependent command arguments.
+    The deterministic part (Tab on slash commands and their arguments) is already in WP1.4.
+17. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
     Independent of every tag and of Phase 1.
 
 ## Open questions

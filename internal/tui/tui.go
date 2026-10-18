@@ -32,6 +32,9 @@ type Options struct {
 	History []agentapi.Message
 	// PickSession starts in the session list (hint -r).
 	PickSession bool
+	// Setup, when set, lets the user fill in the provider configuration
+	// from the shell; see [Setup].
+	Setup *Setup
 	// ServerVersion is shown in the header.
 	ServerVersion string
 	// Dark picks the markdown palette; nil asks the terminal.

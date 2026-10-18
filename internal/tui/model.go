@@ -28,7 +28,7 @@ const (
 	inputLines  = 3
 )
 
-const help = "enter sends · ctrl+j newline · pgup/pgdn scroll · /sessions · /help · ctrl+d quits"
+const help = "enter sends · tab completes · ctrl+y copies the answer · /help lists commands · ctrl+d quits"
 
 // model is the whole shell: the connection, the transcript and the three
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
@@ -61,6 +61,15 @@ type model struct {
 
 	dialog *dialog
 	picker *picker
+	// setup is the configuration offer, setupForm the form while open.
+	setup     *Setup
+	setupForm *setupForm
+	// comp is a Tab completion in progress.
+	comp *completion
+	// mouse is the terminal's mouse reporting. Off, the terminal's own
+	// selection works and copying text out of the transcript is a drag;
+	// on, the wheel scrolls and a click copies the block under it.
+	mouse bool
 	// status is a one-line remark under the transcript until the next key.
 	status   string
 	quitting bool
@@ -101,6 +110,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		sessionID:     opts.SessionID,
 		recorded:      opts.Recorded,
 		serverVersion: opts.ServerVersion,
+		setup:         opts.Setup,
 		dark:          dark,
 		sty:           sty,
 		vp:            vp,
@@ -137,6 +147,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
+	case tea.MouseClickMsg:
+		return m.click(tea.Mouse(msg))
 	case spinner.TickMsg:
 		if !m.busy {
 			return m, nil
@@ -174,6 +186,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finishTurn(msg)
 		return m, nil
 
+	case setupDoneMsg:
+		return m.setupSaved(msg), nil
 	case sessionsMsg:
 		return m.sessionsLoaded(msg), nil
 	case attachedMsg:
@@ -183,6 +197,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Bracketed paste: the terminal hands pasted text over as one
 		// message, not as key presses, so it is not a question until the
 		// user presses enter. A list or a dialog has nothing to paste into.
+		if m.setupForm != nil {
+			var cmd tea.Cmd
+			m.setupForm.in[m.setupForm.focus], cmd = m.setupForm.in[m.setupForm.focus].Update(msg)
+			return m, cmd
+		}
 		if m.picker != nil || m.dialog != nil {
 			return m, nil
 		}
@@ -201,6 +220,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // otherwise to the shell's own bindings and then to the input.
 func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.status = ""
+	if m.setupForm != nil {
+		return m.setupKey(k)
+	}
 	if m.picker != nil {
 		return m.pickerKey(k)
 	}
@@ -222,6 +244,10 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.quit()
 	case "enter":
 		return m.submit()
+	case "tab":
+		return m.tab(), nil
+	case "ctrl+y":
+		return m.copyLast()
 	case "pgup", "pgdown":
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(k)
@@ -249,21 +275,7 @@ func (m model) submit() (model, tea.Cmd) {
 	}
 	if strings.HasPrefix(text, "/") {
 		m.ta.Reset()
-		switch cmd := strings.Fields(text)[0]; cmd {
-		case "/exit", "/quit":
-			return m.quit()
-		case "/help":
-			m.add(entry{kind: entryNotice, text: help, done: true})
-		case "/sessions":
-			if m.busy {
-				m.status = "wait for the answer before switching sessions"
-				return m, nil
-			}
-			return m.openPicker()
-		default:
-			m.status = fmt.Sprintf("unknown command %s; /help lists them", cmd)
-		}
-		return m, nil
+		return m.runCommand(text)
 	}
 	if m.busy {
 		m.status = "an answer is being written; Ctrl-C stops it"
@@ -305,7 +317,15 @@ func (m *model) finishTurn(msg turnDoneMsg) {
 	case errors.Is(msg.err, shell.ErrInterrupted):
 		m.add(entry{kind: entryNotice, text: "interrupted", done: true})
 	case msg.err != nil:
-		m.add(entry{kind: entryNotice, text: msg.err.Error(), done: true})
+		text := shell.Explain(msg.err)
+		var ae *agentapi.Error
+		if m.setup != nil && errors.As(msg.err, &ae) && ae.Kind == agentapi.ErrAuth {
+			text += "\n" + m.setup.Describe
+			if m.setup.Save != nil {
+				text += "\ntype /setup to fill the configuration in"
+			}
+		}
+		m.add(entry{kind: entryNotice, text: text, done: true})
 	default:
 		m.setContent()
 	}
@@ -373,6 +393,8 @@ func (m model) View() tea.View {
 	}
 	var body string
 	switch {
+	case m.setupForm != nil:
+		body = m.setupForm.view(m.setup.Describe, m.width, m.bodyHeight(), m.sty)
 	case m.picker != nil:
 		body = m.picker.view(m.width, m.bodyHeight(), m.sty)
 	case m.dialog != nil:
@@ -383,8 +405,10 @@ func (m model) View() tea.View {
 	content := strings.Join([]string{m.header(), body, m.statusLine(), m.ta.View()}, "\n")
 	v := tea.NewView(content)
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
-	if m.picker == nil && m.dialog == nil {
+	if m.mouse {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
+	if m.picker == nil && m.dialog == nil && m.setupForm == nil {
 		if c := m.ta.Cursor(); c != nil {
 			c.Y += headerLines + m.bodyHeight() + statusLines
 			v.Cursor = c
@@ -421,4 +445,90 @@ func (m model) statusLine() string {
 		text = m.sty.hint.Render(help)
 	}
 	return rule(text, m.width, m.sty)
+}
+
+// runCommand executes a slash command from the table.
+func (m model) runCommand(line string) (model, tea.Cmd) {
+	fields := strings.Fields(line)
+	name, arg := fields[0], ""
+	if len(fields) > 1 {
+		arg = fields[1]
+	}
+	if name == "/quit" {
+		name = "/exit"
+	}
+	known := false
+	for _, c := range commands() {
+		known = known || c.name == name
+	}
+	enabled := false
+	for _, c := range m.available() {
+		enabled = enabled || c.name == name
+	}
+	switch {
+	case !known:
+		m.status = fmt.Sprintf("unknown command %s; /help lists them", name)
+		return m, nil
+	case !enabled:
+		m.status = name + " is not available right now"
+		return m, nil
+	}
+	switch name {
+	case "/exit":
+		return m.quit()
+	case "/help":
+		m.add(entry{kind: entryNotice, text: helpText(), done: true})
+	case "/sessions":
+		return m.openPicker()
+	case "/setup":
+		return m.openSetup()
+	case "/mouse":
+		m.mouse = !m.mouse
+		if m.mouse {
+			m.status = "mouse on: the wheel scrolls, a click copies a block; /mouse again to select text with the terminal"
+		} else {
+			m.status = "mouse off: select text with the terminal; ctrl+y or /copy copies the last answer"
+		}
+	case "/copy":
+		text, ok := m.copyTarget(arg)
+		if !ok {
+			m.status = "nothing to copy for " + strings.TrimSpace("/copy "+arg)
+			return m, nil
+		}
+		m.status = copied(copyLabel(arg), text)
+		return m, copyCmd(text)
+	}
+	return m, nil
+}
+
+func copyLabel(arg string) string {
+	if arg == "" {
+		return "answer"
+	}
+	return arg
+}
+
+// copyLast is ctrl+y: the last answer, without typing a command.
+func (m model) copyLast() (model, tea.Cmd) {
+	text, ok := m.copyTarget("answer")
+	if !ok {
+		m.status = "no answer to copy yet"
+		return m, nil
+	}
+	m.status = copied("answer", text)
+	return m, copyCmd(text)
+}
+
+// click copies the transcript block under the pointer; it only arrives
+// while mouse mode is on.
+func (m model) click(mouse tea.Mouse) (model, tea.Cmd) {
+	if mouse.Button != tea.MouseLeft || m.picker != nil || m.dialog != nil {
+		return m, nil
+	}
+	i := m.entryAt(mouse.Y)
+	if i < 0 || m.entries[i].text == "" {
+		return m, nil
+	}
+	m.status = copied("block", m.entries[i].text)
+	return m, copyCmd(m.entries[i].text)
 }

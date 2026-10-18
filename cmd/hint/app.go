@@ -78,6 +78,8 @@ type app struct {
 	// another process. cleanup releases the debug log, when there is one.
 	srv     *rpc.Server
 	cleanup func()
+	// setup is the in-process core's configuration, nil with --connect.
+	setup *setupInfo
 	// sessionID names the conversation on the server; recorded says
 	// whether it is written to disk, which is what --output json reports.
 	sessionID string
@@ -120,6 +122,7 @@ func serveInProcess(ctx context.Context, eng *rpcEngine, opts options, sio stdio
 		return nil, err
 	}
 	a.srv = srv
+	a.setup = eng.setup
 	return a, nil
 }
 
