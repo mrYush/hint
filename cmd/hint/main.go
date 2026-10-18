@@ -237,7 +237,7 @@ one-shot for compatibility and prints a note about -p.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags))
 	return rootCmd
 }
 

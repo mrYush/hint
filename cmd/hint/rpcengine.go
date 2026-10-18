@@ -58,6 +58,9 @@ type rpcEngine struct {
 	limits   agent.Limits
 	notices  io.Writer
 	trace    *debuglog.Log
+	// setup describes the configuration the engine was built from, for a
+	// shell that has to say where a rejected key lives.
+	setup *setupInfo
 
 	mu   sync.Mutex
 	live map[string]*rpcSession
@@ -179,6 +182,7 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		limits:   limits,
 		notices:  as.notices,
 		trace:    as.trace,
+		setup:    newSetupInfo(as.cfg, as.cwd),
 	}, nil
 }
 

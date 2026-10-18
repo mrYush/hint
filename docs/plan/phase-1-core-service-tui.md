@@ -44,10 +44,24 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] Diff view for write-permission prompts; `y` / `n` / `a` answer through `permission.reply`
 - [x] The history of a continued session (`-c`, `--session`) rendered on attach
 - [x] Session list view: list and resume (`-r` opens it)
+- [x] Copying text out: the terminal's own selection works (mouse reporting is off by default), `ctrl+y` / `/copy [answer|question|code|all]` copy to the clipboard, and `/mouse` turns on a mode where the wheel scrolls and a click copies the block under it
+- [x] Tab completes slash commands and their arguments from one table that also drives `/help`; a command that cannot be used right now (`/copy` with an empty transcript, `/sessions` during a turn) is neither offered nor run
+- [x] A rejected key names the configuration in use and offers to fill it in: `hint setup` (line-based), a `/setup` form in the TUI (key masked), and an offer after the failed turn in the REPL; `internal/config.WriteProfile` edits the global file in place, keeping comments, mode 0600
 - [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
 Both need the protocol and the core before any UI, and WP1.4 does not touch the protocol.
+
+### WP1.6 — Completion of what the user is typing
+
+**Branch:** `dev/wp1.6-input-completion`
+
+- [ ] `complete` over RPC: given the text typed so far, the core returns a short continuation from a small, fast model; cancelled by the next keystroke, never blocking the input
+- [ ] Ghost text in the TUI input: the suggestion shown dimmed after the cursor, `tab` accepts it, any other key discards it
+- [ ] A profile setting for the completion model and an off switch; off by default until the cost and the latency are measured
+- [ ] Command arguments that depend on the configuration (profile names for the WP1.5 switcher, models the profile serves) join the deterministic table in `internal/tui/commands.go`
+
+Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
 
 ### WP1.5 — Session and profile operations over RPC
 
@@ -78,6 +92,20 @@ Decisions (2026-10-17):
 - **Go 1.26.**
   `charm.land/bubbletea/v2@v2.1.0` declares `go 1.26.0`, so the module's `go` directive moves from 1.22 to 1.26.0; CI and the release build read the version from `go.mod` and follow.
   The alternative, an older v2.0.x, buys nothing: the series is weeks old and 1.26 is the current stable Go.
+- **Selecting text is the terminal's job, copying a block is ours.**
+  Mouse reporting makes the terminal hand the mouse to the program, which disables its text selection; that is why nothing could be copied.
+  It is off by default; `/mouse` turns it on for wheel scrolling and click-to-copy, and `ctrl+y` / `/copy` work either way.
+  A copy goes out two ways because neither reaches everywhere: the terminal's clipboard sequence (OSC 52, works through ssh and tmux, ignored by some terminals such as VTE-based ones) and the system clipboard (`atotto/clipboard`, which needs xclip, xsel or wl-copy on Linux).
+- **One table for commands.**
+  `internal/tui/commands.go` holds name, help, closed argument set and an `enabled` predicate; `/help`, dispatch and Tab all read it.
+  Completion of what is not a command (a continuation of a sentence) is WP1.6.
+- **Setup writes the global config, never the project's.**
+  A key does not belong in a file that sits in a repository, so `WriteProfile` targets `~/.config/hint/config.yaml` (or `$XDG_CONFIG_HOME/hint`), edits it as a YAML document so comments and unknown keys survive, and replaces it atomically with mode 0600.
+  The key is a literal or a `${VAR}` reference; the line-based setup asks only for the variable's name, because stdin is shared with the line reader and cannot be switched to no-echo, while the TUI form masks what is typed.
+  A project file that is read after the global one is named in the result, since it may override what was just written.
+  Not done: applying the new config to the running core.
+  The provider is built at start-up, so setup says "restart hint"; a reload belongs with WP1.5's provider-per-session.
+  With `--connect` the core's configuration is on another machine, and the shell says so instead of offering a form.
 - **Opt-in before default.**
   `--tui` until acceptance 3 passes, then one commit flips the default and `--plain` keeps the REPL; that commit is the easy one to revert.
 - **Tests drive the model.**

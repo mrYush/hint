@@ -88,7 +88,10 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			fmt.Fprintln(a.io.err)
 		}
 		if err != nil {
-			fmt.Fprintln(a.io.err, "hint:", err)
+			fmt.Fprintln(a.io.err, "hint:", shell.Explain(err))
+			if help := a.authHelp(err); help != "" {
+				a.offerSetup(ctx, help)
+			}
 		}
 	}
 }

@@ -181,3 +181,15 @@ func FirstLine(s string) string {
 	}
 	return s
 }
+
+// Explain is the text a shell shows for a turn that failed: the error,
+// and for a rejected credential what to do about it, since "auth:
+// Unauthorized" alone does not say whose key or where it comes from.
+func Explain(err error) string {
+	var ae *agentapi.Error
+	if errors.As(err, &ae) && ae.Kind == agentapi.ErrAuth {
+		return err.Error() + "\nthe provider rejected the credentials: check the api_key of the profile in use " +
+			"(and the environment variable it expands, if any); `hint models` tries the same profile"
+	}
+	return err.Error()
+}

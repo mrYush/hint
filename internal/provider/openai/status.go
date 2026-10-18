@@ -100,6 +100,21 @@ func errorMessage(body []byte) string {
 	if err := json.Unmarshal(body, &env); err == nil && env.Error != nil {
 		return env.Error.describe()
 	}
+	// Gateways in front of the API answer in their own shapes; the common
+	// one is {"error":"Unauthorized"}, a string where OpenAI sends an
+	// object, which would otherwise reach the user as raw JSON.
+	var flat struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &flat); err == nil {
+		if msg := strings.TrimSpace(flat.Error); msg != "" {
+			return msg
+		}
+		if msg := strings.TrimSpace(flat.Message); msg != "" {
+			return msg
+		}
+	}
 	return strings.TrimSpace(string(body))
 }
 

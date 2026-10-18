@@ -19,9 +19,22 @@ func (a *app) tui(ctx context.Context) error {
 		History:       a.history,
 		PickSession:   a.sessionID == "",
 		ServerVersion: a.client.ServerVersion(),
+		Setup:         a.setupForTUI(),
 	})
 	if out.SessionID != "" && out.Recorded {
 		fmt.Fprintf(a.io.err, "hint: session %s is recorded; hint -c continues it\n", out.SessionID)
 	}
 	return err
+}
+
+// setupForTUI is the setup form's data, nil with --connect: the core's
+// configuration is then on another machine.
+func (a *app) setupForTUI() *tui.Setup {
+	if a.setup == nil {
+		if a.opts.connect == "" {
+			return nil
+		}
+		return &tui.Setup{Describe: "this core runs in another process (hint serve); its configuration is on that machine"}
+	}
+	return a.setup.tuiSetup()
 }
