@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,8 +26,8 @@ func testSetup(t *testing.T) (*setupInfo, string) {
 func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
 	t.Setenv("MY_HINT_KEY", "") // set, so no "export it" reminder is expected
 	s, global := testSetup(t)
-	lines := console.NewLineReader(strings.NewReader("\n\nnew-model\nMY_HINT_KEY\n"))
 	var out bytes.Buffer
+	lines := lineIO{lines: console.NewLineReader(strings.NewReader("\n\nnew-model\nMY_HINT_KEY\n")), out: &out}
 	if err := askSetup(context.Background(), lines, &out, s); err != nil {
 		t.Fatal(err)
 	}
@@ -78,5 +79,60 @@ func TestAuthHelp(t *testing.T) {
 	remote := &app{opts: options{connect: connectAuto}}
 	if help := remote.authHelp(auth); !strings.Contains(help, "another process") {
 		t.Errorf("--connect help = %q", help)
+	}
+}
+
+// scripted is a setupIO with a hidden key, for the path a bare terminal takes.
+type scripted struct {
+	answers []string
+	secret  string
+	asked   []string
+}
+
+func (s *scripted) Line(_ context.Context, prompt string) (string, error) {
+	s.asked = append(s.asked, prompt)
+	a := s.answers[0]
+	s.answers = s.answers[1:]
+	return a, nil
+}
+
+func (s *scripted) Secret(_ context.Context, prompt string) (string, bool, error) {
+	s.asked = append(s.asked, prompt)
+	return s.secret, true, nil
+}
+
+func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
+	s, global := testSetup(t)
+	s.profile.Model = ""
+	in := &scripted{answers: []string{"", "", ""}, secret: "sk-typed-123"}
+	var out bytes.Buffer
+	if err := askSetup(context.Background(), in, &out, s); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(global)
+	got := string(data)
+	if !strings.Contains(got, "api_key: sk-typed-123") {
+		t.Errorf("the typed key is not in the config:\n%s", got)
+	}
+	if strings.Contains(got, "model:") {
+		t.Errorf("an unanswered model was written instead of left to the default:\n%s", got)
+	}
+	if strings.Contains(out.String(), "sk-typed-123") {
+		t.Errorf("the key was echoed:\n%s", out.String())
+	}
+	if !strings.Contains(strings.Join(in.asked, "\n"), "built-in default of the kind") {
+		t.Errorf("the model question does not say what an empty answer means: %v", in.asked)
+	}
+}
+
+func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
+	var out bytes.Buffer
+	notATerminal := stdio{in: strings.NewReader(""), out: &out, err: &out}
+	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider) {
+		t.Error("asked questions on input that is not a terminal")
+	}
+	tty := stdio{in: os.Stdin, out: &out, err: &out, tty: true}
+	if firstRunSetup(context.Background(), tty, errors.New("config: parsing x: bad yaml")) {
+		t.Error("offered setup for an error setup cannot fix")
 	}
 }

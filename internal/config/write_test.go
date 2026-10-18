@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
@@ -111,5 +114,57 @@ func TestLocate(t *testing.T) {
 	}
 	if loc := Locate(home, wd, lookup(nil)); len(loc.Read) != 1 || loc.Read[0] != proj {
 		t.Errorf("project file not found: %+v", loc)
+	}
+}
+
+// TestExampleConfigIsCurrent keeps config.example.yaml honest: it must
+// load, and it must mention every key the loader reads, so that a new key
+// cannot be added without being documented.
+func TestExampleConfigIsCurrent(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	global := filepath.Join(home, ".config", "hint")
+	if err := os.MkdirAll(global, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(global, "config.yaml"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFrom(Options{HomeDir: home, WorkingDir: t.TempDir(), LookupEnv: lookup(map[string]string{"API_BAR_KEY": "k"})})
+	if err != nil {
+		t.Fatalf("the example does not load: %v", err)
+	}
+	if cfg.DefaultProvider != "api-bar" || cfg.FallbackProvider != "local" || len(cfg.Providers) != 2 {
+		t.Errorf("the example loads as %+v", cfg)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	documented := map[string]bool{}
+	var walk func(n *yaml.Node)
+	walk = func(n *yaml.Node) {
+		for i, c := range n.Content {
+			if n.Kind == yaml.MappingNode && i%2 == 0 {
+				documented[c.Value] = true
+			}
+			walk(c)
+		}
+	}
+	walk(&doc)
+	for _, typ := range []reflect.Type{reflect.TypeOf(fileConfig{}), reflect.TypeOf(fileProfile{}), reflect.TypeOf(fileInstructions{}), reflect.TypeOf(fileOverview{})} {
+		for i := 0; i < typ.NumField(); i++ {
+			key := typ.Field(i).Tag.Get("yaml")
+			if key == "" || key == "api_url" || (typ == reflect.TypeOf(fileConfig{}) && (key == "api_key" || key == "model")) {
+				continue // the legacy flat schema is deliberately not documented
+			}
+			if !documented[key] {
+				t.Errorf("config key %q (%s) is not in config.example.yaml", key, typ.Name())
+			}
+		}
 	}
 }

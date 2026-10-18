@@ -42,6 +42,9 @@ func run(ctx context.Context, opts options, inv invocation, sio stdio) error {
 		var eng *rpcEngine
 		var cleanup func()
 		eng, cleanup, err = newRPCEngine(ctx, opts, sio.err)
+		if err != nil && firstRunSetup(ctx, sio, err) {
+			eng, cleanup, err = newRPCEngine(ctx, opts, sio.err)
+		}
 		if err != nil {
 			return err
 		}
