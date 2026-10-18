@@ -7,6 +7,7 @@ func TestErrorMessageShapes(t *testing.T) {
 		{"openai object", `{"error":{"message":"bad key","code":"invalid_api_key"}}`, "bad key (invalid_api_key)"},
 		{"gateway string", `{"error": "Unauthorized"}`, "Unauthorized"},
 		{"gateway message", `{"message":"Forbidden"}`, "Forbidden"},
+		{"fastapi detail", `{"detail":"Access denied"}`, "Access denied"},
 		{"plain text", "  upstream timed out \n", "upstream timed out"},
 		{"empty", "", ""},
 	}
