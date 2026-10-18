@@ -87,7 +87,7 @@ go install github.com/mrYush/hint/cmd/hint@latest
 
 ### Building from source
 
-You need Go 1.22 or higher.
+You need Go 1.26 or higher.
 
 ```bash
 git clone https://github.com/mrYush/hint.git
@@ -482,6 +482,11 @@ full audit:
    instead of a truncated list; search a directory or narrow the pattern.
 5. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
+6. Not in `v0.2.0`, on `develop` since WP1.4: a gateway that answers a
+   failed request with both a short `error` and a longer `message` (the
+   NestJS shape, `{"error":"Unauthorized","message":"Invalid API key"}`)
+   is reported by the `error` field alone. `hint --debug` shows the full
+   response body.
 
 ### Debug mode
 

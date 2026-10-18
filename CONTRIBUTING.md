@@ -15,7 +15,8 @@ reworked.
 
 Requirements:
 
-- **Go ≥ 1.22** (raised from 1.20 by WP0.1, the MVP's stated floor)
+- **Go ≥ 1.26** (raised from 1.22 by WP1.4: `charm.land/bubbletea/v2`
+  declares it; `go.mod` is the authority)
 - No cgo — the core must always build with `CGO_ENABLED=0` (cgo-dependent
   features live behind build tags; see `docs/plan/risks.md`, R1)
 - An API key for an OpenAI-compatible service, or a local
@@ -201,8 +202,9 @@ after it is merged into `develop`/`main`.
    CI ([`ci.yml`](.github/workflows/ci.yml)) runs the same with the race
    detector, plus `gofmt -l`, `golangci-lint` with the repository's
    [`.golangci.yml`](.golangci.yml), and a cross-compilation of every
-   release target. To see the lint gate locally install the version CI
-   pins (`golangci-lint` v2.4.0) and run `golangci-lint run ./...`.
+   release target. To see the lint gate locally install the `golangci-lint`
+   version that `ci.yml` pins (the `version:` of the lint step; it is
+   pinned only there) and run `golangci-lint run ./...`.
 5. Open a pull request describing **what** changed and **why**; link the
    issue/work package it implements. Tick the corresponding checkboxes in the
    phase file in the same PR.
