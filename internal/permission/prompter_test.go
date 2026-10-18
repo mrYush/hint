@@ -38,6 +38,12 @@ func TestReaderPrompter_Answers(t *testing.T) {
 		"what?\ny\n": permission.Allow, // re-asked after junk
 		"":           permission.Deny,  // EOF
 		"y":          permission.Allow, // last line without a newline
+		// The same keys in a Cyrillic layout: н is y, т is n, ф is a.
+		"н\n":      permission.Allow,
+		"Нуы\n":    permission.Allow,
+		"т\n":      permission.Deny,
+		"ф\n":      permission.AllowAlways,
+		"фдцфны\n": permission.AllowAlways,
 	}
 	for input, want := range cases {
 		got, out := promptWith(t, input, ask)

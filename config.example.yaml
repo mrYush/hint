@@ -1,0 +1,58 @@
+# hint configuration — every key, with its default.
+#
+# Copy this file to ~/.config/hint/config.yaml (or $XDG_CONFIG_HOME/hint/config.yaml)
+# for settings that apply everywhere, and/or to .hint/config.yaml in a repository
+# for settings that apply to that project only. `hint setup` writes the global file
+# for you and keeps whatever else is in it; `hint config set [--project] <key> <value>`
+# changes one key, checked against its type (`hint config keys` lists them).
+#
+# Layers, most specific first: command-line flags, HINT_* environment variables,
+# the project file, the global file, the built-in defaults. A key a more specific
+# layer does not mention is inherited from the next one. Profiles are matched by
+# `name`, so a project file can override one field (say `model`) of a global profile.
+#
+# Keep the API key out of a project file: it ends up in git. Use ${VAR} there, or
+# put the key in the global file (mode 0600).
+#
+# Only `providers` is needed to start; everything else has a default.
+
+# Provider profiles: named ways to reach a model. At least one is needed.
+providers:
+  - name: api-bar # required, unique; what default_provider / --provider refer to
+    kind: openai # openai (Chat Completions dialect, the default) | ollama
+    base_url: https://api-bar.ru/route/openai # default for openai: the api-bar gateway;
+    #                                           for ollama: http://localhost:11434/v1.
+    #                                           hint appends /chat/completions
+    api_key: ${API_BAR_KEY} # required for openai; $VAR and ${VAR} are expanded from the
+    #                         environment. A literal key works too (global file only)
+    model: gpt-4o # default for openai: gpt-4o. For ollama there is no default: name one
+    context_window: 128000 # tokens; sizes the compaction. Default: unknown, a built-in window
+    header_timeout: 60s # how long to wait for response headers, a Go duration with units.
+    #                     Default 60s; raise it for a local server on a small board
+
+  - name: local
+    kind: ollama # needs no key
+    base_url: http://localhost:11434/v1
+    model: qwen2.5:7b
+    context_window: 8192
+    header_timeout: 15m
+
+# The profile used for a run. Optional when there is exactly one profile.
+# Overridden by HINT_PROVIDER and --provider.
+default_provider: api-bar
+
+# The profile tried when the default one is unreachable (network, timeout, 5xx).
+# Optional; must differ from default_provider. Overridden by HINT_FALLBACK_PROVIDER.
+fallback_provider: local
+
+# How much of the project is put in front of the model at the start.
+instructions:
+  budget: 32768 # bytes all HINT.md / AGENTS.md / CLAUDE.md files may take together.
+  #               HINT_INSTRUCTION_BUDGET, --instruction-budget
+  summarize: false # let the model summarize instruction files that do not fit even
+  #                  as outlines. HINT_INSTRUCTIONS_SUMMARIZE, --summarize-instructions
+
+overview:
+  depth: 2 # directory levels listed in the system prompt; 0 for none.
+  #          HINT_OVERVIEW_DEPTH, --overview-depth
+  max_entries: 100 # cap on the entries listed. HINT_OVERVIEW_ENTRIES, --overview-entries

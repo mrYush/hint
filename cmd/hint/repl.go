@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mrYush/hint/internal/console"
+	"github.com/mrYush/hint/internal/shell"
 )
 
 // replHelp is what /help prints.
@@ -80,14 +81,17 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 		}()
 		res, err := a.turn(turnCtx, line, a.io.out)
 		cancel()
-		if res.answer != "" {
+		if res.Answer != "" {
 			fmt.Fprintln(a.io.out)
-		} else if errors.Is(err, errInterrupted) {
+		} else if errors.Is(err, shell.ErrInterrupted) {
 			// The terminal echoed ^C on the question's line.
 			fmt.Fprintln(a.io.err)
 		}
 		if err != nil {
-			fmt.Fprintln(a.io.err, "hint:", err)
+			fmt.Fprintln(a.io.err, "hint:", shell.Explain(err))
+			if help := a.authHelp(err); help != "" {
+				a.offerSetup(ctx, help)
+			}
 		}
 	}
 }
@@ -95,7 +99,7 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 // errPromptInterrupted reports Ctrl-C while the prompt was waiting.
 var errPromptInterrupted = errors.New("interrupted at the prompt")
 
-// readLine reads the next line, giving up with errInterrupted when a
+// readLine reads the next line, giving up with errPromptInterrupted when a
 // signal arrives first. The line reader is left parked on the next line,
 // as its contract promises; the half-typed line itself is discarded by
 // the terminal, which flushes its input on Ctrl-C.

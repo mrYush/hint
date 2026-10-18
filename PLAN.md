@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-16
+> Status: living document · Last updated: 2026-10-17
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -92,7 +92,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
   Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
   The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
-  The TUI (WP1.4) is next.
+  WP1.4, the TUI, is in progress behind `--tui`; it becomes the default on a terminal once the Phase 0 scenarios pass through it.
+  Profile switching and session branching moved to WP1.5, since both need the protocol and the core before any UI.
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
@@ -248,11 +249,23 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     The tag needed `HOMEBREW_TAP_TOKEN`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented, awaiting the signing key, Pages and a final tag; Scoop: not started.
+    Before the next final tag: generate the apt signing key, set `APT_SIGNING_KEY` (and `APT_SIGNING_PASSPHRASE` if it has one) and enable Pages for `gh-pages`, or the tag fails at the apt step after the Release is already out.
+    Then the Scoop bucket, the cask's `postflight_steps`, and the deprecated `homebrew_casks.binary` key that `goreleaser check` flags.
     The cask already covers macOS.
     This does not gate `v0.3`.
     Official catalogs stay a separate parallel path and do not gate either track.
 13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
-14. WP1.4: the TUI on Bubble Tea, as a second client of the same protocol.
+14. WP1.4: the TUI on Bubble Tea v2, as a second client of the same protocol.
+    Opt-in `--tui` first: streaming chat with markdown, the permission dialog with the diff, the session list.
+    It becomes the default on a terminal, with `--plain` for the REPL, once the Phase 0 scenarios pass through it.
+15. WP1.5: session and profile operations over RPC — a profile switch mid-session and a session fork, each a protocol method and core work first; the TUI then shows them.
+16. WP1.6: completion of what the user is typing — a short continuation from a small model over RPC, shown as ghost text in the TUI input, plus configuration-dependent command arguments.
+    Switchable in the layered config (the project's `.hint/` value beats the global one, a key it leaves out is inherited), and it never blocks typing: a slow model gets a warning, an edit or Esc cancels the request, and a late answer is dropped.
+    The deterministic part (Tab on slash commands and their arguments) is already in WP1.4.
+17. WP1.7: secrets out of the agent's reach — keys in the OS secret store, `hint config show-key` as the only way to see one again, tool subprocesses without the key variables, tool results redacted before the model or a session file sees them, the config directory closed to the file tools.
+    Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
+18. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
+    Independent of every tag and of Phase 1.
 
 ## Open questions
 

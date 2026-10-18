@@ -8,11 +8,14 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"maps"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -237,6 +240,13 @@ func TestOpenSession(t *testing.T) {
 	_ = second.Close()
 	later := time.Now().Add(time.Hour)
 	if err := os.Chtimes(first.Path(), later, later); err != nil {
+		t.Fatal(err)
+	}
+	// The fallback above already recorded an empty session of its own;
+	// left at "now" next to second, the two would tie on mtime and the
+	// list order between them would rest on their random ids.
+	sooner := time.Now().Add(30 * time.Minute)
+	if err := os.Chtimes(second.Path(), sooner, sooner); err != nil {
 		t.Fatal(err)
 	}
 
@@ -494,6 +504,9 @@ func TestOneShotJSON(t *testing.T) {
 	var e *agentapi.Error
 	if !errors.As(err, &e) || e.Kind != agentapi.ErrAuth {
 		t.Fatalf("oneShot with a failing provider: %v", err)
+	}
+	if !strings.Contains(err.Error(), "check the api_key") {
+		t.Errorf("a rejected key exits without the advice the REPL gives: %v", err)
 	}
 	got = jsonAnswer{}
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
@@ -920,7 +933,27 @@ func TestConnect(t *testing.T) {
 // the CLI shell reaches the agent loop only through the core the RPC
 // server serves. The engine wiring is the one file allowed to know the
 // agent exists; everything else in cmd/hint is a client.
+//
+// The rule is checked on the package graph, not on import lines: a shell
+// package that reaches the agent through a third package breaks it just
+// the same. `go list` gives every root its transitive dependencies. The
+// roots are internal/shell and internal/tui with their subpackages, and
+// what each shell file of cmd/hint imports — cmd/hint itself cannot be a
+// root, since its engine wiring lives in the same package.
 func TestShellNeverImportsTheAgent(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("needs the go command to read the package graph")
+	}
+	forbidden := map[string]bool{
+		"github.com/mrYush/hint/internal/agent":        true,
+		"github.com/mrYush/hint/internal/tool/builtin": true,
+		"github.com/mrYush/hint/internal/project":      true,
+	}
+	const module = "github.com/mrYush/hint/"
+
+	// importedBy names the cmd/hint file behind each package it imports,
+	// for the report.
+	importedBy := map[string]string{}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -928,6 +961,7 @@ func TestShellNeverImportsTheAgent(t *testing.T) {
 	fset := token.NewFileSet()
 	for _, file := range files {
 		if strings.HasSuffix(file, "_test.go") || file == "rpcengine.go" || file == "rules.go" {
+			// rules.go and rpcengine.go are the engine side of cmd/hint.
 			continue
 		}
 		f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)
@@ -935,9 +969,36 @@ func TestShellNeverImportsTheAgent(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, imp := range f.Imports {
-			switch path := strings.Trim(imp.Path.Value, `"`); path {
-			case "github.com/mrYush/hint/internal/agent", "github.com/mrYush/hint/internal/tool/builtin", "github.com/mrYush/hint/internal/project":
-				t.Errorf("%s imports %s; the shell talks to the core over RPC only", file, path)
+			if path := strings.Trim(imp.Path.Value, `"`); strings.HasPrefix(path, module) {
+				importedBy[path] = "cmd/hint/" + file
+			}
+		}
+	}
+
+	args := []string{"list", "-f", `{{.ImportPath}} {{join .Deps " "}}`, module + "internal/shell/...", module + "internal/tui/..."}
+	args = append(args, slices.Sorted(maps.Keys(importedBy))...)
+	out, err := exec.Command("go", args...).Output()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			t.Fatalf("go list: %v\n%s", err, exit.Stderr)
+		}
+		t.Fatalf("go list: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		pkgs := strings.Fields(line)
+		if len(pkgs) == 0 {
+			continue
+		}
+		// A package of internal/shell or internal/tui names itself; one
+		// a cmd/hint file imports names the file too.
+		where := pkgs[0]
+		if from := importedBy[where]; from != "" {
+			where = from + " → " + where
+		}
+		for _, dep := range pkgs {
+			if forbidden[dep] {
+				t.Errorf("%s depends on %s; the shell talks to the core over RPC only", where, dep)
 			}
 		}
 	}
