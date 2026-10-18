@@ -169,8 +169,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.sessionsLoaded(msg), nil
 	case attachedMsg:
 		return m.attached(msg), nil
+
+	case tea.PasteMsg:
+		// Bracketed paste: the terminal hands pasted text over as one
+		// message, not as key presses, so it is not a question until the
+		// user presses enter. A list or a dialog has nothing to paste into.
+		if m.picker != nil || m.dialog != nil {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.ta, cmd = m.ta.Update(msg)
+		return m, cmd
 	}
-	return m, nil
+	// Whatever else arrives is for the input: the clipboard read behind
+	// its ctrl+v comes back as a message of its own, for instance.
+	var cmd tea.Cmd
+	m.ta, cmd = m.ta.Update(msg)
+	return m, cmd
 }
 
 // key routes a key press: to the list or the dialog while one is open,

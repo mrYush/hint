@@ -373,6 +373,31 @@ func TestStartsInThePickerWithoutASession(t *testing.T) {
 	}
 }
 
+func TestPasteGoesToTheInput(t *testing.T) {
+	h := newHarness(t, &fakeEngine{}, Options{})
+	h.update(tea.PasteMsg{Content: "line one\nline two"})
+	if got := h.m.ta.Value(); got != "line one\nline two" {
+		t.Fatalf("input after paste = %q", got)
+	}
+	// Pasted newlines do not send; enter does, as one question.
+	if h.m.busy {
+		t.Fatal("a paste started a turn")
+	}
+	h.press("enter")
+	h.pump(untilDone)
+	sess := h.eng.sessions[h.m.sessionID]
+	if len(sess.msgs) != 1 || sess.msgs[0].Text() != "line one\nline two" {
+		t.Errorf("the core got %+v", sess.msgs)
+	}
+
+	// Nothing to paste into while a list is open.
+	h.run(h.press("/", "s", "e", "s", "s", "i", "o", "n", "s", "enter"))
+	h.update(tea.PasteMsg{Content: "stray"})
+	if h.m.ta.Value() != "" {
+		t.Errorf("a paste reached the input behind the list: %q", h.m.ta.Value())
+	}
+}
+
 func TestResizeRedraws(t *testing.T) {
 	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{agentapi.UserMessage(strings.Repeat("word ", 40))}})
 	before := h.m.vp.TotalLineCount()
