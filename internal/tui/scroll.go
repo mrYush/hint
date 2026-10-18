@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -83,9 +82,11 @@ func (m model) browseKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = copied("block", e.text)
 		return m, copyCmd(e.text)
 	case "f":
-		// The fork itself is a core operation (session.fork, WP1.5): a new
-		// session holding the turns up to and including this one.
-		m.status = fmt.Sprintf("fork from turn %d needs session.fork, which comes with WP1.5", m.entries[m.sel].turn)
+		// A new session holding the turns up to and including this one;
+		// the shell moves to it.
+		turn := m.entries[m.sel].turn
+		m.endBrowse()
+		return m.fork(m.sessionID, turn)
 	case "esc", "q", "ctrl+c", "i":
 		m.endBrowse()
 	case "ctrl+d":

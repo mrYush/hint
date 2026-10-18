@@ -12,7 +12,7 @@ import (
 
 func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hint", "config.yaml")
-	err := WriteProfile(path, "api-bar", map[string]string{"base_url": "https://example.test/v1", "api_key": "${API_BAR_KEY}", "model": "m"})
+	err := WriteProfile(path, "api-bar", map[string]string{"base_url": "https://example.test/v1", "api_key": "${APIBAR_KEY}", "model": "m"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
 	// What was written loads back as the profile, with the default set.
 	cfg, err := LoadFrom(Options{
 		HomeDir:   filepath.Dir(filepath.Dir(path)),
-		LookupEnv: lookup(map[string]string{"XDG_CONFIG_HOME": filepath.Dir(filepath.Dir(path)), "API_BAR_KEY": "sk-from-env"}),
+		LookupEnv: lookup(map[string]string{"XDG_CONFIG_HOME": filepath.Dir(filepath.Dir(path)), "APIBAR_KEY": "sk-from-env"}),
 	})
 	if err != nil {
 		t.Fatalf("written config does not load: %v", err)
@@ -133,11 +133,11 @@ func TestExampleConfigIsCurrent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(global, "config.yaml"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := LoadFrom(Options{HomeDir: home, WorkingDir: t.TempDir(), LookupEnv: lookup(map[string]string{"API_BAR_KEY": "k"})})
+	cfg, err := LoadFrom(Options{HomeDir: home, WorkingDir: t.TempDir(), LookupEnv: lookup(map[string]string{"VLLM_API_KEY": "k"})})
 	if err != nil {
 		t.Fatalf("the example does not load: %v", err)
 	}
-	if cfg.DefaultProvider != "api-bar" || cfg.FallbackProvider != "local" || len(cfg.Providers) != 2 {
+	if cfg.DefaultProvider != "vllm" || cfg.FallbackProvider != "local" || len(cfg.Providers) != 2 {
 		t.Errorf("the example loads as %+v", cfg)
 	}
 

@@ -239,6 +239,12 @@ func (c *conn) dispatch(req request) {
 		c.sessionOpen(req)
 	case "session.attach":
 		c.sessionAttach(req)
+	case "session.profile":
+		c.sessionProfile(req)
+	case "session.fork":
+		c.sessionFork(req)
+	case "profile.list":
+		c.profileList(req)
 	case "turn.start":
 		c.turnStart(req)
 	case "permission.reply":
@@ -321,7 +327,85 @@ func sessionView(sess Session) SessionView {
 	if messages == nil {
 		messages = []agentapi.Message{}
 	}
-	return SessionView{ID: sess.ID(), Created: sess.Created(), Messages: messages, Warnings: sess.Warnings()}
+	ref := sess.Profile()
+	view := SessionView{ID: sess.ID(), Created: sess.Created(), Messages: messages, Warnings: sess.Warnings(), Profile: ref.Profile, Model: ref.Model}
+	if parent, ok := sess.Parent(); ok {
+		view.Parent = &parent
+	}
+	return view
+}
+
+// sessionProfile switches a held session's provider profile. A session
+// with a turn in flight is busy: the agent of that turn is already
+// talking to a provider, and the switch waits for turn.done.
+func (c *conn) sessionProfile(req request) {
+	var p profileParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.SessionID == "" || p.Profile == "" {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "session_id and profile are required"))
+		return
+	}
+	sess := c.srv.lookup(p.SessionID)
+	if sess == nil {
+		_ = c.writeError(req.ID, errCode(CodeNotFound, "session %q is not open on this server; attach it first", p.SessionID))
+		return
+	}
+	if c.srv.busy(p.SessionID) {
+		_ = c.writeError(req.ID, errCode(CodeBusy, "session %s has a turn in flight; switch after turn.done", p.SessionID))
+		return
+	}
+	ref, err := sess.SetProfile(c.ctx, ProfileRef{Profile: p.Profile, Model: p.Model})
+	if err != nil {
+		_ = c.writeError(req.ID, engineError(err))
+		return
+	}
+	_ = c.writeResult(req.ID, ref)
+}
+
+// sessionFork starts a new session from a cut of another's history. The
+// source is read as it stands, so one with a turn in flight is busy:
+// the cut would hold half an answer.
+func (c *conn) sessionFork(req request) {
+	var opts ForkOptions
+	if err := unmarshalParams(req.Params, &opts); err != nil || opts.ID == "" || opts.Turn < 0 {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "id is required; turn is counted from 1, or 0 for the whole conversation"))
+		return
+	}
+	if c.srv.busy(opts.ID) {
+		_ = c.writeError(req.ID, errCode(CodeBusy, "session %s has a turn in flight; fork after turn.done", opts.ID))
+		return
+	}
+	sess, err := c.srv.Engine.Fork(c.ctx, opts)
+	if err != nil {
+		_ = c.writeError(req.ID, engineError(err))
+		return
+	}
+	sess = c.srv.hold(sess)
+	_ = c.writeResult(req.ID, sessionView(sess))
+}
+
+func (c *conn) profileList(req request) {
+	infos, err := c.srv.Engine.Profiles(c.ctx)
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
+		return
+	}
+	if infos == nil {
+		infos = []ProfileInfo{}
+	}
+	_ = c.writeResult(req.ID, profilesResult{Profiles: infos})
+}
+
+// engineError maps what an Engine reports to a JSON-RPC error: a thing
+// that does not exist, a request that cannot be honoured, or a failure.
+func engineError(err error) *Error {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return errCode(CodeNotFound, "%v", err)
+	case errors.Is(err, ErrInvalid):
+		return errCode(CodeInvalidParams, "%v", err)
+	default:
+		return errCode(CodeInternal, "%v", err)
+	}
 }
 
 func (c *conn) turnStart(req request) {
@@ -491,6 +575,15 @@ func (s *Server) hold(sess Session) Session {
 	}
 	s.sessions[sess.ID()] = &held{session: sess}
 	return sess
+}
+
+// busy reports whether the held session id has a turn in flight. An id
+// the server does not hold is not busy: nothing of it is running here.
+func (s *Server) busy(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h := s.sessions[id]
+	return h != nil && h.turnID != ""
 }
 
 func (s *Server) lookup(id string) Session {

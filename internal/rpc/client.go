@@ -113,6 +113,30 @@ func (c *Client) AttachSession(ctx context.Context, id string) (SessionView, err
 	return res, err
 }
 
+// SetProfile is session.profile: it switches sessionID to ref and returns
+// what is in effect.
+func (c *Client) SetProfile(ctx context.Context, sessionID string, ref ProfileRef) (ProfileRef, error) {
+	var res ProfileRef
+	err := c.call(ctx, "session.profile", profileParams{SessionID: sessionID, Profile: ref.Profile, Model: ref.Model}, &res)
+	return res, err
+}
+
+// ForkSession is session.fork.
+func (c *Client) ForkSession(ctx context.Context, opts ForkOptions) (SessionView, error) {
+	var res SessionView
+	err := c.call(ctx, "session.fork", opts, &res)
+	return res, err
+}
+
+// Profiles is profile.list.
+func (c *Client) Profiles(ctx context.Context) ([]ProfileInfo, error) {
+	var res profilesResult
+	if err := c.call(ctx, "profile.list", nil, &res); err != nil {
+		return nil, err
+	}
+	return res.Profiles, nil
+}
+
 // Shutdown asks the server to stop.
 func (c *Client) Shutdown(ctx context.Context) error {
 	var res okResult

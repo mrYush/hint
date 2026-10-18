@@ -30,6 +30,8 @@ type Options struct {
 	Recorded bool
 	// History is the conversation so far, shown before the first prompt.
 	History []agentapi.Message
+	// Profile is what the session answers with, for the header.
+	Profile rpc.ProfileRef
 	// PickSession starts in the session list (hint -r).
 	PickSession bool
 	// Setup, when set, lets the user fill in the provider configuration

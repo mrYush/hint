@@ -45,6 +45,9 @@ type Key struct {
 	// Default is the value that applies when no layer sets the key, as
 	// the user would write it; empty when there is none.
 	Default string
+	// Required marks a profile field a profile cannot be used without
+	// and that has no default: the setup form refuses to save it empty.
+	Required bool
 	// Env and Flag are the overlays that beat the files, when there are.
 	Env, Flag string
 	Help      string
@@ -64,12 +67,12 @@ func (k Key) Profile() (field string, ok bool) {
 var keys = []Key{
 	{Path: "providers.*.kind", Type: TypeEnum, Enum: []string{string(KindOpenAI), string(KindOllama)}, Default: string(KindOpenAI),
 		Help: "API dialect: openai (Chat Completions) or ollama (no key needed)"},
-	{Path: "providers.*.base_url", Type: TypeString, Default: defaultAPIBarBaseURL, Env: "HINT_API_URL", Flag: "--api-url",
-		Help: "endpoint; hint appends /chat/completions. Default for ollama: " + defaultOllamaBaseURL},
+	{Path: "providers.*.base_url", Type: TypeString, Default: defaultVLLMBaseURL, Env: "HINT_API_URL", Flag: "--api-url",
+		Help: "endpoint; hint appends /chat/completions. Default: a vLLM-style server on this machine; for ollama " + defaultOllamaBaseURL},
 	{Path: "providers.*.api_key", Type: TypeSecret, Env: "HINT_API_KEY", Flag: "--api-key",
 		Help: "the provider's key, or ${VAR} to read it from the environment; required for openai"},
-	{Path: "providers.*.model", Type: TypeString, Default: defaultOpenAIModel, Env: "HINT_MODEL", Flag: "--model",
-		Help: "model name; ollama has no default"},
+	{Path: "providers.*.model", Type: TypeString, Required: true, Env: "HINT_MODEL", Flag: "--model",
+		Help: "model name, required: a server serves what was loaded into it (hint models lists them)"},
 	{Path: "providers.*.context_window", Type: TypeInt, Min: 1, Env: "HINT_CONTEXT_WINDOW", Flag: "--context-window",
 		Help: "the model's context size in tokens; sizes the compaction"},
 	{Path: "providers.*.header_timeout", Type: TypeDuration, Default: "60s",

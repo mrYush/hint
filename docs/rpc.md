@@ -47,7 +47,52 @@ Both return the session:
 ```
 
 `messages` is the conversation so far, as `pkg/agentapi` messages; `warnings` is what loading the file had to repair, usually absent.
-`session.list` returns `{id, cwd, messages, created, modified, first_prompt}` rows, most recently modified first; `messages` there is a count.
+`profile` and `model` say what the session answers with (see below); `parent` is present on a fork: `{"id": "<source>", "turn": N}`.
+`session.list` returns `{id, cwd, messages, created, modified, first_prompt, parent}` rows, most recently modified first; `messages` there is a count and `parent` is set on forks, so a client can draw the tree.
+
+### Profiles
+
+A session answers with one provider profile at a time: the configured default until it is switched.
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"profile.list"}
+```
+
+```json
+{"jsonrpc":"2.0","id":5,"result":{"profiles":[{"name":"vllm","kind":"openai","model":"Qwen/Qwen2.5-Coder-32B-Instruct","default":true,"usable":true},{"name":"local","kind":"ollama","model":"qwen2.5:7b","fallback":true,"usable":true},{"name":"cloud","kind":"openai","usable":false,"problem":"selected profile \"cloud\" needs an API key: ..."}]}}
+```
+
+The list is read from the configuration files as they stand now, not as they were when the server started.
+
+```json
+{"jsonrpc":"2.0","id":6,"method":"session.profile","params":{"session_id":"<id>","profile":"local","model":"qwen2.5:14b"}}
+```
+
+`model` is optional and overrides the profile's own for this session.
+The core re-reads the configuration first, so a key written by `hint setup` since the start is in force without a restart.
+The result is what is in effect, the model filled in from the profile when it was not given:
+
+```json
+{"jsonrpc":"2.0","id":6,"result":{"profile":"local","model":"qwen2.5:14b"}}
+```
+
+The switch is recorded in the session file, so a later `session.attach` answers with the same profile; a profile the configuration no longer has, or that cannot be used, falls back to the default and says so in `warnings`.
+An unknown profile is `-32005 not found`; one that exists but cannot be used (an openai profile without a key, an ollama profile without a model) is `-32602 invalid params` with the reason; a session with a turn in flight is `-32004 busy` — switch after `turn.done`.
+
+### Forks
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"session.fork","params":{"id":"<source>","turn":3}}
+```
+
+`session.fork` starts a new session whose conversation is the source's through the end of user turn `turn`, counted from 1: everything before the question that opens turn `turn + 1`.
+A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them.
+`turn` omitted or 0 means the whole conversation.
+`{"ephemeral": true}` keeps the fork off the disk, as for `session.open`.
+The fork answers with the source's profile, is open on the server like a session just opened, and its file names the source in its header; the result is the same view `session.open` returns, with `parent` set.
+A source with a turn in flight is `-32004 busy`; a turn the source does not have, or an empty source, is `-32602 invalid params`; an unknown source is `-32005 not found`.
+
+Both methods and `profile.list` were added for `v0.3` without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
 
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.

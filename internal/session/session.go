@@ -29,6 +29,10 @@ type Session struct {
 	id      string
 	cwd     string
 	created time.Time
+	// parent is set for a fork; profile is the last profile record, or
+	// the zero value for "the configured default".
+	parent  *Parent
+	profile ProfileRef
 
 	messages []agentapi.Message
 	// warnings collects what load skipped or repaired, for the CLI to show.
@@ -57,6 +61,19 @@ func (s *Session) Cwd() string { return s.cwd }
 
 // Created returns when the session was started.
 func (s *Session) Created() time.Time { return s.created }
+
+// Parent returns where a fork's history came from, and false for a
+// session that was started from nothing.
+func (s *Session) Parent() (Parent, bool) {
+	if s.parent == nil {
+		return Parent{}, false
+	}
+	return *s.parent, true
+}
+
+// Profile returns the provider profile the session last switched to. The
+// zero value means none was recorded: the run's default applies.
+func (s *Session) Profile() ProfileRef { return s.profile }
 
 // Warnings returns what loading the file skipped or repaired, one line
 // each; empty for a clean file.
@@ -102,6 +119,18 @@ func (s *Session) AppendCompaction(c agentapi.Compaction) error {
 	if c.History != nil {
 		s.messages = append([]agentapi.Message(nil), c.History...)
 	}
+	return nil
+}
+
+// AppendProfile records that ref answers from here on.
+func (s *Session) AppendProfile(ref ProfileRef) error {
+	if ref.Name == "" {
+		return fmt.Errorf("session: append profile: no profile name")
+	}
+	if err := s.write(Record{Kind: KindProfile, At: s.now().UTC(), Profile: &ref}); err != nil {
+		return err
+	}
+	s.profile = ref
 	return nil
 }
 
@@ -199,7 +228,7 @@ func load(path string) (*Session, error) {
 			if rec.Version > FormatVersion {
 				return nil, fmt.Errorf("session: %s uses format version %d, this build reads up to %d", path, rec.Version, FormatVersion)
 			}
-			sess.id, sess.cwd, sess.created = rec.ID, rec.Cwd, rec.At
+			sess.id, sess.cwd, sess.created, sess.parent = rec.ID, rec.Cwd, rec.At, rec.Parent
 		} else {
 			sess.apply(rec)
 		}
@@ -222,6 +251,8 @@ func (s *Session) apply(rec Record) {
 		if rec.Compaction.History != nil {
 			s.messages = append([]agentapi.Message(nil), rec.Compaction.History...)
 		}
+	case KindProfile:
+		s.profile = *rec.Profile
 	case KindSession:
 		// A second header is a file that was concatenated by hand; the
 		// conversation simply continues.
