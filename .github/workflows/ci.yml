@@ -34,8 +34,10 @@ jobs:
           fi
       - uses: golangci/golangci-lint-action@v8
         with:
-          # Keep in step with the version used locally; .golangci.yml is a v2 config.
-          version: v2.4.0
+          # The one place the lint version is pinned (CONTRIBUTING points here).
+          # It must be built with a Go at least as new as go.mod's; .golangci.yml
+          # is a v2 config.
+          version: v2.13.2
 
   test:
     name: Test

@@ -25,6 +25,11 @@ var ErrInterrupted = errors.New("interrupted")
 // ended: that context is gone, and the server may already be too.
 const cancelWait = 5 * time.Second
 
+// startWait bounds turn.start, which outlives the user's cancel: a core
+// that took the request and never answers must not hold the shell
+// forever. A variable so that tests can shorten it.
+var startWait = 30 * time.Second
+
 // Sink is what a shell shows of a turn while it runs. The methods are
 // called in event order from the goroutine that runs the turn; a Sink
 // that hands them to another goroutine (a UI loop) does its own
@@ -69,8 +74,14 @@ func RunTurn(ctx context.Context, cl *rpc.Client, sessionID, text string, sink S
 	// once turn.start is on the wire the server may well begin the turn,
 	// and only a client that knows the turn id can cancel it. Giving up
 	// on the response would leave the turn running with no owner. A dead
-	// connection still ends the call through the client's own error.
-	t, err := cl.StartTurn(context.WithoutCancel(ctx), sessionID, text)
+	// connection still ends the call through the client's own error, and
+	// a live one that never answers through startWait.
+	startCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), startWait)
+	t, err := cl.StartTurn(startCtx, sessionID, text)
+	stop()
+	if errors.Is(err, context.DeadlineExceeded) {
+		return Result{}, fmt.Errorf("the core did not answer turn.start within %s", startWait)
+	}
 	if err != nil {
 		return Result{}, err
 	}

@@ -11,7 +11,9 @@ interactive TUI.
 
 ## Work packages
 
-### WP1.1 — RPC server: `hint serve` and `hint --mode rpc`
+### WP1.1 — RPC server: `hint serve` and `hint --mode rpc` — **done** (2026-10-16)
+
+**Branch:** `dev/wp1.1-rpc`
 
 Reference — [Pi RPC mode](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/rpc.md).
 
@@ -21,18 +23,62 @@ Reference — [Pi RPC mode](https://github.com/badlogic/pi-mono/blob/main/packag
 - [x] Concurrent sessions: one server, many client connections, session ownership rules
 - [x] Graceful shutdown; in-flight turn cancellation
 
-### WP1.2 — Event model as contract v1
+### WP1.2 — Event model as contract v1 — **done** (2026-10-16)
+
+**Branch:** `dev/wp1.1-rpc` (shipped with WP1.1 in one commit, before the one-branch rule)
 
 - [x] Stabilize `pkg/agentapi` events: `turn_start` / `text_delta` / `tool_start` / `permission` / `turn_end` (the names already on the v0.2.0 wire; see the decision below)
 - [x] Permission requests flow over RPC and block on the client's answer (with timeout + default-deny)
 - [x] Versioned protocol handshake (`protocol_version` in hello)
 - [x] Golden tests for the wire format; document the protocol in `docs/rpc.md`
 
-### WP1.3 — CLI/REPL on top of the RPC API — **done**
+### WP1.3 — CLI/REPL on top of the RPC API — **done** (2026-10-17)
+
+**Branch:** `dev/wp1.3-cli-client`
 
 - [x] REPL and one-shot modes become RPC clients of an in-process (or spawned) core (`internal/rpc.Client` over a `net.Pipe` to the same `rpc.Server` that `hint serve` runs; `hint --connect` points the same shell at a running server)
 - [x] No behavior change for users; acceptance scenarios from Phase 0 re-run green (`cmd/hint` tests unchanged in what they assert; `TestPermissionOverRPC` drives a permission question and its answer across the wire)
 - [x] Delete any direct agent-loop calls from `cmd/hint` — the API is the only path (`TestShellNeverImportsTheAgent` pins it: only the engine wiring imports `internal/agent`)
+
+Decisions for WP1.1–WP1.3 (2026-10-11):
+
+- **JSON-RPC 2.0, one object per line.**
+  Pi's RPC mode is the reference for the two entry points (`serve` and `--mode rpc`), not for the bytes.
+  A standard envelope gives every request an id, so a permission reply and a cancel name the turn they belong to.
+  Events are notifications (`event`, then `turn.done`); `turn.start` returns the turn id before the turn finishes.
+- **Event names stay as v0.2.0 shipped them.**
+  `turn_start`, `text_delta`, `tool_start`, `tool_end`, `permission`, `turn_end`.
+  Renaming to the sketch in the checklist (`turn_started`, `permission_request`, …) would break session files and every in-process consumer for no new information.
+  The sketch names are not a second vocabulary.
+- **One in-flight turn per session, owned by the connection that started it.**
+  Any authenticated client may `session.attach` and, once the turn ends, start the next one.
+  A second `turn.start` while a turn is running is an error.
+  The connection that owns the turn is the only one that may `permission.reply` or `turn.cancel`.
+  Grants from "always" stay inside that session's gate.
+- **Socket auth is a token file, mode 0600. Stdio has no token.**
+  Holding the pipes is the credential for `--mode rpc`.
+  TCP listen is rejected unless the address is loopback.
+  The wait for a permission answer is 2 minutes; expiry denies.
+- **The CLI is a real client, not a shortcut (2026-10-12).**
+  Bare `hint` serves the engine on one end of a `net.Pipe` and dials the other with the same `rpc.Client` an external Go program would use; the messages are marshalled and parsed, not passed as Go values.
+  The price is one JSON round trip per event inside one process, which is nothing at terminal speed; the gain is that every bug in the wire format is hit by the daily CLI, not first by Phase 4's shells.
+  Calling `rpc.Engine` directly would have kept the agent loop reachable from the shell and left the protocol exercised only by its own tests.
+- **Permission labels travel with the request (2026-10-12).**
+  `agentapi.PermissionRequest.Always` carries what an "always" answer would remember.
+  The gate computes it; the client shows it.
+  The alternative, the client recomputing `permission.CommandScope`, would have put policy in every client and let them drift from the core.
+  Additive, `omitempty`, no `WireVersion` bump.
+- **`--no-session` is an ephemeral session on the server (2026-10-12).**
+  `session.open {"ephemeral":true}`: an id with no file.
+  Turns need a session id, and the alternative — dropping `--no-session` — was a behavior change WP1.3 rules out.
+- **Engine notices stay on the server's stderr (2026-10-12).**
+  Project-context warnings, a session file that stops being writable and the `--debug` trace belong to the core; in-process they are the same stderr the shell uses, with `--connect` they appear where the server runs.
+  A `notice` notification can be added when a client needs them; nothing today does.
+- **gRPC waits for a non-Go client of `hint serve`.**
+  Phase 4's native shells (Swift, and WinUI if that spike wins) are the trigger: a second adapter on the same `Engine` and the same `pkg/agentapi` events, with generated stubs and a server stream.
+  JSON-RPC stays for `--mode rpc` and for the Go TUI.
+  The Phase 5 mobile core is in-process via gomobile, so it is not this trigger.
+  `v0.3` does not grow a `.proto`.
 
 ### WP1.4 — TUI on Bubble Tea
 
@@ -56,59 +102,6 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
 Both need the protocol and the core before any UI, and WP1.4 does not touch the protocol.
-
-### WP1.6 — Completion of what the user is typing
-
-**Branch:** `dev/wp1.6-input-completion`
-
-- [ ] `complete` over RPC: given the text typed so far, the core returns a short continuation from a small, fast model; cancelled by the next keystroke, never blocking the input
-- [ ] Ghost text in the TUI input: the suggestion shown dimmed after the cursor, `tab` accepts it, any other key discards it
-- [ ] A `completion:` block in the config (`enabled`, the profile or model it uses, the latency after which the warning appears) with the usual layering: `~/.config/hint/config.yaml` sets the general value, `.hint/config.yaml` in the repository overrides it, and a key the local file does not mention is inherited.
-      `enabled` is a `*bool` like `instructions.summarize`, so that an explicit `false` in the project file is told apart from silence and wins over a global `true`; off by default until the cost and the latency are measured
-- [ ] A slow or failing completion never gets in the way: the request runs beside the input, not in front of it.
-      Past the configured latency the status line shows a warning that the model is slow.
-      Any edit of the line (a character added or removed) or Esc cancels the request, and an answer that arrives after that is dropped, never shown, even if it is already on the wire; a suggestion belongs to the exact text it was asked for
-- [ ] Command arguments that depend on the configuration (profile names for the WP1.5 switcher, models the profile serves) join the deterministic table in `internal/tui/commands.go`
-
-Rules fixed on 2026-10-18, before any code: the feature is switchable in the layered config, and it must never make typing wait.
-The cancel-on-edit rule needs a request id carried through `complete` and echoed in its reply, so the shell can recognise a late answer for text that is no longer in the input; the same id lets the core cancel the provider call.
-
-Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
-
-### WP1.7 — Secrets out of the agent's reach
-
-**Branch:** `dev/wp1.7-secrets`
-
-Once entered, an API key must not be readable by the agent: not by its tools, not in what goes to the model, not in a session file.
-Only the user sees it again, through a command that exists for that and is not reachable over RPC or from a tool.
-
-Where it leaks today (2026-10-18):
-the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `API_BAR_KEY`;
-`~/.config/hint/config.yaml` is mode 0600 but owned by the same user, so `cat` reads it;
-the file tools are confined to the project root, which is the home directory when `hint` runs there;
-tool results reach the model and the session file unmasked — only the `--debug` trace is redacted.
-
-- [ ] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
-      A headless Linux box without a Secret Service needs a decided fallback (the 0600 file as today, with a warning), not a silent one
-- [ ] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
-- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`API_BAR_KEY`, `APIBAR_TOKEN`, `OPENAI_API_KEY`, `HINT_API_KEY`)
-- [ ] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — the catch-all for a key that leaked some other way
-- [ ] The file tools refuse the config directory and the session directory even when the project root contains them
-- [ ] Tests that pin each path: `env`, `cat` of the config, `read_file` from a root at `$HOME`, a tool output that contains the key
-
-Limits to state, not to hide: a process running as the same user can ask the secret store itself (`secret-tool lookup`, `security find-generic-password`), and a determined model can transform a value before printing it, which defeats redaction.
-Closing that needs a sandbox for `bash` (bubblewrap or Landlock on Linux, `sandbox-exec` on macOS), which is its own work package; this one removes every accidental path and the easy deliberate ones.
-
-### WP1.5 — Session and profile operations over RPC
-
-**Branch:** `dev/wp1.5-session-ops`
-
-- [ ] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process
-- [ ] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1).
-      A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them; the TUI's entries already carry their turn, and the message browser's `f` calls it
-- [ ] The TUI exposes both: a profile picker, and a fork action in the session list, which becomes a tree
-
-Additive methods, no `WireVersion` bump expected; the UI half is small once the methods exist.
 
 Decisions (2026-10-17):
 
@@ -148,45 +141,59 @@ Decisions (2026-10-17):
 - **Tests drive the model.**
   `Update` and `View` are called directly against an `rpc.Server` on a `net.Pipe` with the fake engine already in `internal/rpc`; no `teatest`.
 
-Decisions (2026-10-11):
+### WP1.5 — Session and profile operations over RPC
 
-- **JSON-RPC 2.0, one object per line.**
-  Pi's RPC mode is the reference for the two entry points (`serve` and `--mode rpc`), not for the bytes.
-  A standard envelope gives every request an id, so a permission reply and a cancel name the turn they belong to.
-  Events are notifications (`event`, then `turn.done`); `turn.start` returns the turn id before the turn finishes.
-- **Event names stay as v0.2.0 shipped them.**
-  `turn_start`, `text_delta`, `tool_start`, `tool_end`, `permission`, `turn_end`.
-  Renaming to the sketch in the checklist (`turn_started`, `permission_request`, …) would break session files and every in-process consumer for no new information.
-  The sketch names are not a second vocabulary.
-- **One in-flight turn per session, owned by the connection that started it.**
-  Any authenticated client may `session.attach` and, once the turn ends, start the next one.
-  A second `turn.start` while a turn is running is an error.
-  The connection that owns the turn is the only one that may `permission.reply` or `turn.cancel`.
-  Grants from "always" stay inside that session's gate.
-- **Socket auth is a token file, mode 0600. Stdio has no token.**
-  Holding the pipes is the credential for `--mode rpc`.
-  TCP listen is rejected unless the address is loopback.
-  The wait for a permission answer is 2 minutes; expiry denies.
-- **The CLI is a real client, not a shortcut (2026-10-12).**
-  Bare `hint` serves the engine on one end of a `net.Pipe` and dials the other with the same `rpc.Client` an external Go program would use; the messages are marshalled and parsed, not passed as Go values.
-  The price is one JSON round trip per event inside one process, which is nothing at terminal speed; the gain is that every bug in the wire format is hit by the daily CLI, not first by Phase 4's shells.
-  Calling `rpc.Engine` directly would have kept the agent loop reachable from the shell and left the protocol exercised only by its own tests.
-- **Permission labels travel with the request (2026-10-12).**
-  `agentapi.PermissionRequest.Always` carries what an "always" answer would remember.
-  The gate computes it; the client shows it.
-  The alternative, the client recomputing `permission.CommandScope`, would have put policy in every client and let them drift from the core.
-  Additive, `omitempty`, no `WireVersion` bump.
-- **`--no-session` is an ephemeral session on the server (2026-10-12).**
-  `session.open {"ephemeral":true}`: an id with no file.
-  Turns need a session id, and the alternative — dropping `--no-session` — was a behavior change WP1.3 rules out.
-- **Engine notices stay on the server's stderr (2026-10-12).**
-  Project-context warnings, a session file that stops being writable and the `--debug` trace belong to the core; in-process they are the same stderr the shell uses, with `--connect` they appear where the server runs.
-  A `notice` notification can be added when a client needs them; nothing today does.
-- **gRPC waits for a non-Go client of `hint serve`.**
-  Phase 4's native shells (Swift, and WinUI if that spike wins) are the trigger: a second adapter on the same `Engine` and the same `pkg/agentapi` events, with generated stubs and a server stream.
-  JSON-RPC stays for `--mode rpc` and for the Go TUI.
-  The Phase 5 mobile core is in-process via gomobile, so it is not this trigger.
-  `v0.3` does not grow a `.proto`.
+**Branch:** `dev/wp1.5-session-ops`
+
+- [ ] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process
+- [ ] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1).
+      A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them; the TUI's entries already carry their turn, and the message browser's `f` calls it
+- [ ] The TUI exposes both: a profile picker, and a fork action in the session list, which becomes a tree
+
+Additive methods, no `WireVersion` bump expected; the UI half is small once the methods exist.
+
+### WP1.6 — Completion of what the user is typing
+
+**Branch:** `dev/wp1.6-input-completion`
+
+- [ ] `complete` over RPC: given the text typed so far, the core returns a short continuation from a small, fast model; cancelled by the next keystroke, never blocking the input
+- [ ] Ghost text in the TUI input: the suggestion shown dimmed after the cursor, `tab` accepts it, any other key discards it
+- [ ] A `completion:` block in the config (`enabled`, the profile or model it uses, the latency after which the warning appears) with the usual layering: `~/.config/hint/config.yaml` sets the general value, `.hint/config.yaml` in the repository overrides it, and a key the local file does not mention is inherited.
+      `enabled` is a `*bool` like `instructions.summarize`, so that an explicit `false` in the project file is told apart from silence and wins over a global `true`; off by default until the cost and the latency are measured
+- [ ] A slow or failing completion never gets in the way: the request runs beside the input, not in front of it.
+      Past the configured latency the status line shows a warning that the model is slow.
+      Any edit of the line (a character added or removed) or Esc cancels the request, and an answer that arrives after that is dropped, never shown, even if it is already on the wire; a suggestion belongs to the exact text it was asked for
+- [ ] Command arguments that depend on the configuration (profile names for the WP1.5 switcher, models the profile serves) join the deterministic table in `internal/tui/commands.go`
+
+Rules fixed on 2026-10-18, before any code: the feature is switchable in the layered config, and it must never make typing wait.
+The cancel-on-edit rule needs a request id carried through `complete` and echoed in its reply, so the shell can recognise a late answer for text that is no longer in the input; the same id lets the core cancel the provider call.
+
+Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
+
+### WP1.7 — Secrets out of the agent's reach
+
+**Branch:** `dev/wp1.7-secrets`
+
+Once entered, an API key must not be readable by the agent: not by its tools, not in what goes to the model, not in a session file.
+Only the user sees it again, through a command that exists for that and is not reachable over RPC or from a tool.
+
+Where it leaks today (2026-10-18):
+the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `API_BAR_KEY`;
+`~/.config/hint/config.yaml` is mode 0600 but owned by the same user, so `cat` reads it;
+the file tools are confined to the project root, which is the home directory when `hint` runs there;
+tool results reach the model and the session file unmasked — only the `--debug` trace is redacted.
+
+- [ ] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
+      A headless Linux box without a Secret Service needs a decided fallback (the 0600 file as today, with a warning), not a silent one
+- [ ] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
+- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`API_BAR_KEY`, `APIBAR_TOKEN`, `OPENAI_API_KEY`, `HINT_API_KEY`)
+- [ ] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — the catch-all for a key that leaked some other way
+- [ ] The file tools refuse the config directory and the session directory even when the project root contains them
+- [ ] `tool.Root` opens files through `os.Root` (Go 1.24; the floor is 1.26 since WP1.4), which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
+- [ ] Tests that pin each path: `env`, `cat` of the config, `read_file` from a root at `$HOME`, a tool output that contains the key
+
+Limits to state, not to hide: a process running as the same user can ask the secret store itself (`secret-tool lookup`, `security find-generic-password`), and a determined model can transform a value before printing it, which defeats redaction.
+Closing that needs a sandbox for `bash` (bubblewrap or Landlock on Linux, `sandbox-exec` on macOS), which is its own work package; this one removes every accidental path and the easy deliberate ones.
 
 ## Acceptance criteria
 
