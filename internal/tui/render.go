@@ -33,12 +33,19 @@ type entry struct {
 	// name is the tool of an entryTool; failed marks its error result.
 	name   string
 	failed bool
+	// turn is the user turn the entry belongs to, counting from 1: the
+	// question opens it, the answer and the tools it ran are part of it.
+	// A fork from an entry is "the turns up to this one" (WP1.5), which a
+	// client can count; an index into the session's messages it cannot,
+	// since the tools add messages it never sees.
+	turn int
 }
 
 // styles are the colors of the shell, chosen once for a dark or a light
 // terminal.
 type styles struct {
 	header, you, assistant, tool, toolErr, notice, status, hint, rule lipgloss.Style
+	selected                                                          lipgloss.Style
 	dialogBox, dialogTitle, dialogKey                                 lipgloss.Style
 	diffAdd, diffDel, diffHunk, diffHead                              lipgloss.Style
 	pickerCursor, pickerDim                                           lipgloss.Style
@@ -49,10 +56,14 @@ func newStyles(dark bool) styles {
 	accent := ld(lipgloss.Color("62"), lipgloss.Color("69"))
 	dim := ld(lipgloss.Color("245"), lipgloss.Color("240"))
 	return styles{
-		header:       lipgloss.NewStyle().Foreground(accent).Bold(true),
-		you:          lipgloss.NewStyle().Foreground(ld(lipgloss.Color("36"), lipgloss.Color("43"))).Bold(true),
-		assistant:    lipgloss.NewStyle().Foreground(accent).Bold(true),
-		rule:         lipgloss.NewStyle().Foreground(ld(lipgloss.Color("250"), lipgloss.Color("238"))),
+		header:    lipgloss.NewStyle().Foreground(accent).Bold(true),
+		you:       lipgloss.NewStyle().Foreground(ld(lipgloss.Color("36"), lipgloss.Color("43"))).Bold(true),
+		assistant: lipgloss.NewStyle().Foreground(accent).Bold(true),
+		rule:      lipgloss.NewStyle().Foreground(ld(lipgloss.Color("250"), lipgloss.Color("238"))),
+		// A bar down the left side, no fill: the selection is told apart
+		// like every other zone, by a line and a color.
+		selected: lipgloss.NewStyle().Border(lipgloss.ThickBorder(), false, false, false, true).
+			BorderForeground(accent).PaddingLeft(1),
 		tool:         lipgloss.NewStyle().Foreground(dim),
 		toolErr:      lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		notice:       lipgloss.NewStyle().Foreground(dim).Italic(true),
@@ -103,18 +114,25 @@ func wrap(text string, w int) string {
 	return lipgloss.NewStyle().Width(w).Render(text)
 }
 
-// markdown renders a finished message. The renderer is built per width
-// and kept until the window changes; a render failure falls back to the
-// plain text rather than hiding the answer.
+// markdown renders a finished message. A renderer is built once per
+// width and kept until the window changes: a selected block is drawn
+// narrower than the others, and moving the selection must not rebuild a
+// renderer on every key. A render failure falls back to the plain text
+// rather than hiding the answer.
 func (m *model) markdown(text string, w int) (string, bool) {
-	if m.md == nil || m.mdWidth != w {
-		r, err := glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(m.dark)), glamour.WithWordWrap(w))
+	r, ok := m.md[w]
+	if !ok {
+		var err error
+		r, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(m.dark)), glamour.WithWordWrap(w))
 		if err != nil {
 			return "", false
 		}
-		m.md, m.mdWidth = r, w
+		if m.md == nil {
+			m.md = map[int]*glamour.TermRenderer{}
+		}
+		m.md[w] = r
 	}
-	s, err := m.md.Render(text)
+	s, err := r.Render(text)
 	if err != nil {
 		return "", false
 	}
@@ -174,18 +192,20 @@ func colorDiff(detail string, sty styles) string {
 // when the conversation happened either.
 func fromHistory(msgs []agentapi.Message) []entry {
 	var entries []entry
+	turn := 0
 	for _, msg := range msgs {
 		switch msg.Role {
 		case agentapi.RoleUser:
+			turn++
 			if text := msg.Text(); text != "" {
-				entries = append(entries, entry{kind: entryUser, text: text, done: true})
+				entries = append(entries, entry{kind: entryUser, text: text, done: true, turn: turn})
 			}
 		case agentapi.RoleAssistant:
 			if text := msg.Text(); text != "" {
-				entries = append(entries, entry{kind: entryAssistant, text: text, done: true})
+				entries = append(entries, entry{kind: entryAssistant, text: text, done: true, turn: turn})
 			}
 			for _, call := range msg.ToolCalls {
-				entries = append(entries, entry{kind: entryTool, name: call.Name, text: shell.SummarizeArgs(call.Arguments), done: true})
+				entries = append(entries, entry{kind: entryTool, name: call.Name, text: shell.SummarizeArgs(call.Arguments), done: true, turn: turn})
 			}
 		case agentapi.RoleSystem, agentapi.RoleTool:
 			// Not shown: the prompt is the core's, a tool result was never
@@ -201,4 +221,12 @@ func short(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// turnsOf is the number of user turns in a transcript.
+func turnsOf(entries []entry) int {
+	if n := len(entries); n > 0 {
+		return entries[n-1].turn
+	}
+	return 0
 }

@@ -114,6 +114,7 @@ func (m model) attached(msg attachedMsg) model {
 	m.sessionID = msg.view.ID
 	m.recorded = true
 	m.entries = fromHistory(msg.view.Messages)
+	m.turns, m.sel = turnsOf(m.entries), noSelection
 	for _, w := range msg.view.Warnings {
 		m.entries = append(m.entries, entry{kind: entryNotice, text: w, done: true})
 	}

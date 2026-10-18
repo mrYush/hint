@@ -49,6 +49,8 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] A rejected key names the configuration in use and offers to fill it in: `hint setup` (line-based), a `/setup` form in the TUI (key masked), and an offer after the failed turn in the REPL; `internal/config.WriteProfile` edits the global file in place, keeping comments, mode 0600
 - [x] First run without any configuration: on a terminal `hint` offers the setup questions (defaults for everything but the key, which is typed with echo off) and carries on with the file it wrote; `config.example.yaml` documents every key and a test keeps it current
 - [x] Every config key editable without an editor: `internal/config/schema.go` is the one table of keys (type, allowed values, default, overlays, help) that the setup form, `hint config set|unset|show|keys`, `/config` with Tab completion and the example test all read; `config.Edit` checks a value against its key and the result against the loader before one atomic write
+- [x] Scrolling without the mouse: ↑ on the input's first line and ↓ on its last move the transcript (so does a wheel, which a terminal without mouse reporting sends as arrows), shift+↑↓ by line, pgup/pgdn by page, ctrl+home/end to the ends, and the header says how many lines are below
+- [x] A message browser: esc in an empty input (or ctrl+↑) selects a block, marked by a bar and not a fill; ↑↓/j/k move, `y` copies, `f` is the hook for the fork, esc returns; every transcript entry knows its turn
 - [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
@@ -101,7 +103,8 @@ Closing that needs a sandbox for `bash` (bubblewrap or Landlock on Linux, `sandb
 **Branch:** `dev/wp1.5-session-ops`
 
 - [ ] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process
-- [ ] `session.fork`: a new session that starts from an existing one's history up to a given message
+- [ ] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1).
+      A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them; the TUI's entries already carry their turn, and the message browser's `f` calls it
 - [ ] The TUI exposes both: a profile picker, and a fork action in the session list, which becomes a tree
 
 Additive methods, no `WireVersion` bump expected; the UI half is small once the methods exist.

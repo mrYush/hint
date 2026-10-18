@@ -213,6 +213,15 @@ var specialKeys = map[string]tea.KeyPressMsg{
 	"backspace":   {Code: tea.KeyBackspace},
 	"shift+enter": {Code: tea.KeyEnter, Mod: tea.ModShift},
 	"alt+enter":   {Code: tea.KeyEnter, Mod: tea.ModAlt},
+	"up":          {Code: tea.KeyUp},
+	"down":        {Code: tea.KeyDown},
+	"shift+up":    {Code: tea.KeyUp, Mod: tea.ModShift},
+	"shift+down":  {Code: tea.KeyDown, Mod: tea.ModShift},
+	"ctrl+up":     {Code: tea.KeyUp, Mod: tea.ModCtrl},
+	"pgup":        {Code: tea.KeyPgUp},
+	"pgdown":      {Code: tea.KeyPgDown},
+	"ctrl+home":   {Code: tea.KeyHome, Mod: tea.ModCtrl},
+	"ctrl+end":    {Code: tea.KeyEnd, Mod: tea.ModCtrl},
 }
 
 // keyMsg is the key press for a name: one of specialKeys, or a single
@@ -917,5 +926,141 @@ func TestNewlineKeys(t *testing.T) {
 	h.pump(until[turnDoneMsg])
 	if msgs := eng.sessions[h.m.sessionID].Messages(); len(msgs) == 0 || msgs[0].Text() != "one\ntwo\nthree\nfour" {
 		t.Errorf("the core got %+v", msgs)
+	}
+}
+
+// longHistory is n turns of a question and a one-line answer.
+func longHistory(n int) []agentapi.Message {
+	var msgs []agentapi.Message
+	for i := 1; i <= n; i++ {
+		msgs = append(msgs, agentapi.UserMessage(fmt.Sprintf("question %d", i)), agentapi.AssistantMessage(fmt.Sprintf("answer %d", i)))
+	}
+	return msgs
+}
+
+func TestScrollKeys(t *testing.T) {
+	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(20)})
+	if !h.m.vp.AtBottom() || strings.Contains(h.view(), "more lines") {
+		t.Fatalf("a continued session does not open at its end:\n%s", h.view())
+	}
+	bottom := h.m.vp.YOffset()
+
+	// ↑ on the input's only line scrolls the transcript, and the header
+	// says how far from the end the view is.
+	h.press("up", "up", "up")
+	if got := h.m.vp.YOffset(); got != bottom-3 {
+		t.Fatalf("three ↑ moved the view to %d, want %d", got, bottom-3)
+	}
+	if !strings.Contains(h.view(), "↓ 3 more lines") {
+		t.Errorf("no word on the lines below:\n%s", h.view())
+	}
+	h.press("down")
+	if got := h.m.vp.YOffset(); got != bottom-2 {
+		t.Errorf("↓ moved the view to %d, want %d", got, bottom-2)
+	}
+	h.press("pgup")
+	if got := h.m.vp.YOffset(); got != bottom-2-h.m.vp.Height() {
+		t.Errorf("pgup moved the view to %d", got)
+	}
+	h.press("ctrl+home")
+	if h.m.vp.YOffset() != 0 {
+		t.Errorf("ctrl+home left the view at %d", h.m.vp.YOffset())
+	}
+	h.press("ctrl+end")
+	if !h.m.vp.AtBottom() || strings.Contains(h.view(), "more lines") {
+		t.Errorf("ctrl+end did not return to the end:\n%s", h.view())
+	}
+
+	// In a two-line question the arrows first move inside it: ↑ on its
+	// second line is the input's, ↑ on its first the transcript's.
+	h.typeText("first")
+	h.press("shift+enter")
+	h.typeText("second")
+	h.press("up")
+	if h.m.vp.YOffset() != bottom || h.m.ta.Line() != 0 {
+		t.Fatalf("↑ on the second line scrolled (offset %d, line %d)", h.m.vp.YOffset(), h.m.ta.Line())
+	}
+	h.press("up")
+	if h.m.vp.YOffset() != bottom-1 {
+		t.Errorf("↑ on the first line did not scroll")
+	}
+	// shift+↑↓ scroll whatever line the cursor is on.
+	h.press("shift+down")
+	if h.m.vp.YOffset() != bottom {
+		t.Errorf("shift+↓ did not scroll")
+	}
+	if h.m.ta.Value() != "first\nsecond" {
+		t.Errorf("scrolling changed the question: %q", h.m.ta.Value())
+	}
+}
+
+func TestMessageBrowser(t *testing.T) {
+	got := clip(t)
+	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(12)})
+
+	// esc in an empty input selects the newest block.
+	h.press("esc")
+	n := len(h.m.entries)
+	if h.m.sel != n-1 {
+		t.Fatalf("esc selected %d, want %d", h.m.sel, n-1)
+	}
+	if v := h.view(); !strings.Contains(v, "┃") || !strings.Contains(v, "turn 12") {
+		t.Errorf("the selection is not marked or not described:\n%s", v)
+	}
+	if raw := h.m.View().Content; regexp.MustCompile(`\x1b\[(4[0-7]|48;)`).MatchString(raw) {
+		t.Error("the selection paints a background")
+	}
+	if h.m.View().Cursor != nil {
+		t.Error("the input's cursor is shown while a block is selected")
+	}
+
+	// ↑ and k move up a block; keys that are not the browser's do not
+	// reach the input.
+	h.press("up", "k", "x")
+	if h.m.sel != n-3 || h.m.ta.Value() != "" {
+		t.Fatalf("sel = %d, input %q", h.m.sel, h.m.ta.Value())
+	}
+	runBatch(h.press("y"))
+	if len(*got) != 1 || (*got)[0] != "answer 11" {
+		t.Errorf("y copied %q", *got)
+	}
+
+	// g goes to the first block and the view follows it.
+	h.press("g")
+	if h.m.sel != 0 || h.m.vp.YOffset() != 0 || !strings.Contains(h.view(), "question 1") {
+		t.Errorf("g: sel %d, offset %d", h.m.sel, h.m.vp.YOffset())
+	}
+	h.press("f")
+	if st := h.m.statusLine(); !strings.Contains(st, "turn 1") || !strings.Contains(st, "WP1.5") {
+		t.Errorf("fork does not say what it needs: %q", st)
+	}
+
+	// esc gives the focus back to the input, at the end of the conversation.
+	h.press("esc")
+	if h.m.sel != noSelection || !h.m.vp.AtBottom() || strings.Contains(h.view(), "┃") {
+		t.Errorf("esc did not leave the browser: sel %d, at bottom %v", h.m.sel, h.m.vp.AtBottom())
+	}
+	// With text in the input, esc keeps it and ctrl+↑ enters the browser.
+	h.typeText("draft")
+	h.press("esc")
+	if h.m.sel != noSelection {
+		t.Error("esc with a draft entered the browser")
+	}
+	h.press("ctrl+up")
+	if h.m.sel != n-1 || h.m.ta.Value() != "draft" {
+		t.Errorf("ctrl+↑: sel %d, draft %q", h.m.sel, h.m.ta.Value())
+	}
+}
+
+func TestEntriesKnowTheirTurn(t *testing.T) {
+	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(2)})
+	h.submit("third")
+	h.pump(until[turnDoneMsg])
+	var turns []int
+	for _, e := range h.m.entries {
+		turns = append(turns, e.turn)
+	}
+	if fmt.Sprint(turns) != "[1 1 2 2 3 3]" {
+		t.Errorf("turns = %v", turns)
 	}
 }

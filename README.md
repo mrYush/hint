@@ -129,7 +129,12 @@ shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
 this directory's sessions to resume one. Enter sends; a newline is
 Shift+Enter where the terminal reports it (kitty, WezTerm, Ghostty, iTerm2),
 Alt+Enter or Ctrl+J, and on any terminal a `\` at the end of the line
-before Enter. Tab completes `/commands` and
+before Enter. The conversation scrolls with ↑ on the input's first line
+and ↓ on its last (a mouse wheel works the same way), Shift+↑/↓ by line,
+PgUp/PgDn by page and Ctrl+Home/End to its ends; the header says how many
+lines are below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓
+move between messages, `y` copies the one picked, Esc returns to the
+input. Tab completes `/commands` and
 their arguments. Text is selected with the terminal as usual; `ctrl+y`
 (or `/copy [answer|question|code|all]`) copies the last answer, and
 `/mouse` switches to a mode where the wheel scrolls and a click copies the

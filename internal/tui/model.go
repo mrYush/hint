@@ -29,7 +29,7 @@ const (
 	inputLines  = 3
 )
 
-const help = "enter sends · shift+enter or \\ enter: newline · tab completes · ctrl+y copies · /help · ctrl+d quits"
+const help = "enter sends · shift+enter newline · ↑↓ pgup/pgdn scroll · esc picks a message · tab completes · /help"
 
 // model is the whole shell: the connection, the transcript and the three
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
@@ -48,13 +48,17 @@ type model struct {
 	vp            viewport.Model
 	ta            textarea.Model
 	spin          spinner.Model
-	md            *glamour.TermRenderer
-	mdWidth       int
+	// md holds a markdown renderer per width in use.
+	md map[int]*glamour.TermRenderer
 
 	// entries is the transcript; rendered caches each entry's drawing at
 	// the current width.
 	entries  []entry
 	rendered []string
+	// turns counts the user turns so far; sel is the block the message
+	// browser has selected, noSelection while the input has the focus.
+	turns int
+	sel   int
 
 	// busy is a turn in flight; cancelTurn ends it.
 	busy       bool
@@ -120,7 +124,9 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		ta:            ta,
 		spin:          spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(sty.status)),
 		entries:       fromHistory(opts.History),
+		sel:           noSelection,
 	}
+	m.turns = turnsOf(m.entries)
 	if opts.PickSession {
 		m.picker = &picker{loading: true}
 	}
@@ -236,7 +242,19 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.sel != noSelection {
+		return m.browseKey(k)
+	}
+	if m.scrollKey(k) {
+		return m, nil
+	}
 	switch k.String() {
+	case "esc", "ctrl+up":
+		// esc in an empty input, or ctrl+↑ from anywhere, hands the arrows
+		// to the transcript's blocks.
+		if (k.String() == "ctrl+up" || m.ta.Value() == "") && m.startBrowse() {
+			return m, nil
+		}
 	case "ctrl+c":
 		if m.busy {
 			m.cancelTurn()
@@ -255,10 +273,6 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.tab(), nil
 	case "ctrl+y":
 		return m.copyLast()
-	case "pgup", "pgdown":
-		var cmd tea.Cmd
-		m.vp, cmd = m.vp.Update(k)
-		return m, cmd
 	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(k)
@@ -317,7 +331,7 @@ func (m *model) finishTurn(msg turnDoneMsg) {
 			m.rendered = m.rendered[:n-1]
 		} else {
 			m.entries[n-1].done = true
-			m.rendered[n-1] = m.renderEntry(m.entries[n-1], m.vp.Width())
+			m.rendered[n-1] = m.draw(n - 1)
 		}
 	}
 	switch {
@@ -347,22 +361,27 @@ func (m *model) appendText(delta string) {
 		return
 	}
 	m.entries[n-1].text += delta
-	m.rendered[n-1] = m.renderEntry(m.entries[n-1], m.vp.Width())
+	m.rendered[n-1] = m.draw(n - 1)
 	m.setContent()
 }
 
-// add appends an entry and draws it.
+// add appends an entry to the current turn and draws it; a question
+// opens the next turn.
 func (m *model) add(e entry) {
+	if e.kind == entryUser {
+		m.turns++
+	}
+	e.turn = m.turns
 	m.entries = append(m.entries, e)
-	m.rendered = append(m.rendered, m.renderEntry(e, m.vp.Width()))
+	m.rendered = append(m.rendered, m.draw(len(m.entries)-1))
 	m.setContent()
 }
 
 // rerender redraws every entry, after a resize or a new history.
 func (m *model) rerender() {
 	m.rendered = make([]string, len(m.entries))
-	for i, e := range m.entries {
-		m.rendered[i] = m.renderEntry(e, m.vp.Width())
+	for i := range m.entries {
+		m.rendered[i] = m.draw(i)
 	}
 	m.setContent()
 }
@@ -382,7 +401,7 @@ func (m *model) resize(w, h int) {
 	m.ta.SetWidth(w)
 	m.vp.SetWidth(w)
 	m.vp.SetHeight(m.bodyHeight())
-	m.md = nil
+	m.md = nil // every renderer was for the old width
 	m.rerender()
 	if m.dialog != nil {
 		m.dialog = newDialog(m.dialog.req, m.dialog.reply, w, m.bodyHeight(), m.sty)
@@ -418,7 +437,7 @@ func (m model) View() tea.View {
 	if m.mouse {
 		v.MouseMode = tea.MouseModeCellMotion
 	}
-	if m.picker == nil && m.dialog == nil && m.setupForm == nil {
+	if m.picker == nil && m.dialog == nil && m.setupForm == nil && m.sel == noSelection {
 		if c := m.ta.Cursor(); c != nil {
 			c.Y += headerLines + m.bodyHeight() + statusLines
 			v.Cursor = c
@@ -439,6 +458,10 @@ func (m model) header() string {
 	if m.serverVersion != "" {
 		meta += " · core " + m.serverVersion
 	}
+	// Scrolled away from the end, the header says how far.
+	if n := m.below(); n > 0 && m.picker == nil && m.dialog == nil && m.setupForm == nil {
+		meta += fmt.Sprintf(" · ↓ %d more lines, ctrl+end", n)
+	}
 	return rule(m.sty.header.Render("hint")+m.sty.hint.Render(meta), m.width, m.sty)
 }
 
@@ -449,6 +472,8 @@ func (m model) statusLine() string {
 	switch {
 	case m.status != "":
 		text = m.sty.status.Render(m.status)
+	case m.sel != noSelection:
+		text = m.sty.hint.Render(fmt.Sprintf("turn %d · ↑↓ move · y copy · f fork · g/G first/last · esc back to the input", m.entries[m.sel].turn))
 	case m.busy:
 		text = m.spin.View() + m.sty.status.Render(" thinking… ctrl+c stops")
 	default:
