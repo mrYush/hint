@@ -37,7 +37,7 @@ func newDialog(req agentapi.PermissionRequest, reply chan<- permission.Decision,
 // key handles one key press in the dialog. It reports whether the
 // dialog answered and is done.
 func (d *dialog) key(k tea.KeyPressMsg) bool {
-	switch k.String() {
+	switch keyName(k) {
 	case "y", "Y":
 		d.answer(permission.Allow)
 		return true

@@ -51,6 +51,7 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] Every config key editable without an editor: `internal/config/schema.go` is the one table of keys (type, allowed values, default, overlays, help) that the setup form, `hint config set|unset|show|keys`, `/config` with Tab completion and the example test all read; `config.Edit` checks a value against its key and the result against the loader before one atomic write
 - [x] Scrolling without the mouse: ↑ on the input's first line and ↓ on its last move the transcript (so does a wheel, which a terminal without mouse reporting sends as arrows), shift+↑↓ by line, pgup/pgdn by page, ctrl+home/end to the ends, and the header says how many lines are below
 - [x] A message browser: esc in an empty input (or ctrl+↑) selects a block, marked by a bar and not a fill; ↑↓/j/k move, `y` copies, `f` is the hook for the fork, esc returns; every transcript entry knows its turn
+- [x] One-letter answers and commands work in any layout: the TUI takes the US key the kitty protocol reports (`BaseCode`), and a table of the Cyrillic layouts (`internal/console.QWERTY`) covers terminals without it and the line prompts; text typed into the input is never rewritten
 - [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.

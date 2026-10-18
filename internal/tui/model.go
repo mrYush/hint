@@ -434,6 +434,9 @@ func (m model) View() tea.View {
 	content := strings.Join([]string{m.header(), body, m.statusLine(), m.ta.View()}, "\n")
 	v := tea.NewView(content)
 	v.AltScreen = true
+	// Ask for the US key behind a press (BaseCode), so that one-letter
+	// commands work in any layout where the terminal can tell.
+	v.KeyboardEnhancements.ReportAlternateKeys = true
 	if m.mouse {
 		v.MouseMode = tea.MouseModeCellMotion
 	}

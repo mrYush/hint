@@ -2,9 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/mrYush/hint/internal/console"
 )
 
 // noSelection is the value of model.sel outside the message browser.
@@ -59,7 +62,7 @@ func (m *model) startBrowse() bool {
 // or leave. Keys it does not know are ignored rather than typed, since
 // the input is not focused.
 func (m model) browseKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
+	switch keyName(k) {
 	case "up", "k", "shift+tab":
 		m.selectEntry(max(m.sel-1, 0))
 	case "down", "j", "tab":
@@ -174,4 +177,29 @@ func (m *model) draw(i int) string {
 	}
 	body := m.renderEntry(m.entries[i], max(w-selectedGutter, 1))
 	return m.sty.selected.Render(body)
+}
+
+// keyName is the name of a pressed key for the one-letter commands of a
+// dialog, the session list and the message browser, whatever the layout:
+// "н" pressed on the key of "y" in a Cyrillic layout is "y". A terminal
+// that speaks the kitty keyboard protocol says which US key it was
+// (BaseCode), which covers every layout; without it a table of the
+// Cyrillic layouts does. Named keys and chords are left as they are, and
+// text typed into the input never goes through here.
+func keyName(k tea.KeyPressMsg) string {
+	s := k.String()
+	r := []rune(s)
+	if len(r) != 1 {
+		return s
+	}
+	if q := console.QWERTYRune(r[0]); q != r[0] {
+		return string(q)
+	}
+	if b := k.BaseCode; b > 0 && b < unicode.MaxASCII && r[0] > unicode.MaxASCII {
+		if unicode.IsUpper(r[0]) {
+			b = unicode.ToUpper(b)
+		}
+		return string(b)
+	}
+	return s
 }

@@ -1064,3 +1064,59 @@ func TestEntriesKnowTheirTurn(t *testing.T) {
 		t.Errorf("turns = %v", turns)
 	}
 }
+
+func TestOneLetterKeysInAnyLayout(t *testing.T) {
+	// The dialog: "ф" is the a key in a Cyrillic layout.
+	var decision permission.Decision
+	eng := &fakeEngine{script: func(ctx context.Context, _ string, ask permission.Prompter, out chan<- agentapi.Event) {
+		req := agentapi.PermissionRequest{CallID: "c", Tool: "bash", Class: agentapi.ClassExecute, Summary: "run go test", Always: `commands starting with "go test"`}
+		out <- agentapi.Event{Kind: agentapi.EventPermission, Permission: &req}
+		decision, _ = ask.Prompt(ctx, permission.Ask{Request: req})
+		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishStop}
+	}}
+	h := newHarness(t, eng, Options{})
+	h.submit("test it")
+	h.pump(until[permissionMsg])
+	h.press("ф")
+	h.pump(until[turnDoneMsg])
+	if decision != permission.AllowAlways {
+		t.Errorf("ф in the dialog gave %v, want AllowAlways", decision)
+	}
+
+	// A terminal with the kitty protocol says which US key it was: a Greek
+	// υ on the y key allows.
+	for _, c := range []struct {
+		key  tea.KeyPressMsg
+		want string
+	}{
+		{tea.KeyPressMsg{Code: 'н', Text: "н"}, "y"},
+		{tea.KeyPressMsg{Code: 'П', Text: "П"}, "G"},
+		{tea.KeyPressMsg{Code: 'υ', Text: "υ", BaseCode: 'y'}, "y"},
+		{tea.KeyPressMsg{Code: 'Υ', Text: "Υ", BaseCode: 'y'}, "Y"},
+		{tea.KeyPressMsg{Code: 'y', Text: "y"}, "y"},
+		{tea.KeyPressMsg{Code: tea.KeyEnter}, "enter"},
+		{tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, "ctrl+c"},
+	} {
+		if got := keyName(c.key); got != c.want {
+			t.Errorf("keyName(%q) = %q, want %q", c.key.String(), got, c.want)
+		}
+	}
+
+	// The browser: л is k, п is g.
+	b := newHarness(t, &fakeEngine{}, Options{History: longHistory(3)})
+	b.press("esc", "л", "л")
+	if n := len(b.m.entries); b.m.sel != n-3 {
+		t.Errorf("л moved the selection to %d, want %d", b.m.sel, n-3)
+	}
+	b.press("п")
+	if b.m.sel != 0 {
+		t.Errorf("п did not go to the first block: %d", b.m.sel)
+	}
+
+	// Text typed into the input stays as typed.
+	b.press("esc")
+	b.typeText("привет")
+	if b.m.ta.Value() != "привет" {
+		t.Errorf("the input got %q", b.m.ta.Value())
+	}
+}
