@@ -34,7 +34,7 @@ func (m model) openPicker() (model, tea.Cmd) {
 // session, or into a fresh one when the shell has none yet.
 func (m model) pickerKey(k tea.KeyPressMsg) (model, tea.Cmd) {
 	p := m.picker
-	switch k.String() {
+	switch keyName(k) {
 	case "ctrl+c", "ctrl+d":
 		return m.quit()
 	case "up", "k":

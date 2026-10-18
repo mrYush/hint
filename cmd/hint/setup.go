@@ -295,7 +295,7 @@ func (a *app) offerSetup(ctx context.Context, help string) {
 	}
 	fmt.Fprint(a.io.err, "Fill the configuration in now? [y/N]: ")
 	line, err := a.lines.ReadLine(ctx)
-	if err != nil || !strings.EqualFold(strings.TrimSpace(line), "y") {
+	if err != nil || console.Answer(line) != "y" {
 		return
 	}
 	if err := askSetup(ctx, lineIO{lines: a.lines, out: a.io.err}, a.io.err, a.setup); err != nil && ctx.Err() == nil {
@@ -332,7 +332,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 	fmt.Fprintln(sio.err, info.describe())
 	tty := newTTYIO(in, sio.err)
 	answer, err := tty.Line(ctx, "Set it up now? [Y/n]: ")
-	if err != nil || strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
+	if a := console.Answer(answer); err != nil || a == "n" || a == "no" {
 		return false
 	}
 	if err := askSetup(ctx, tty, sio.err, info); err != nil {

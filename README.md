@@ -134,7 +134,8 @@ and ↓ on its last (a mouse wheel works the same way), Shift+↑/↓ by line,
 PgUp/PgDn by page and Ctrl+Home/End to its ends; the header says how many
 lines are below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓
 move between messages, `y` copies the one picked, Esc returns to the
-input. Tab completes `/commands` and
+input. One-letter answers and commands (`y`/`n`/`a`, `j`/`k`) work in a
+Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`. Tab completes `/commands` and
 their arguments. Text is selected with the terminal as usual; `ctrl+y`
 (or `/copy [answer|question|code|all]`) copies the last answer, and
 `/mouse` switches to a mode where the wheel scrolls and a click copies the
