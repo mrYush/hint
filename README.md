@@ -126,7 +126,10 @@ session is kept.
 the conversation scrolls above the input with answers rendered as
 Markdown, a file edit or a command asks for permission in a dialog that
 shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
-this directory's sessions to resume one. Tab completes `/commands` and
+this directory's sessions to resume one. Enter sends; a newline is
+Shift+Enter where the terminal reports it (kitty, WezTerm, Ghostty, iTerm2),
+Alt+Enter or Ctrl+J, and on any terminal a `\` at the end of the line
+before Enter. Tab completes `/commands` and
 their arguments. Text is selected with the terminal as usual; `ctrl+y`
 (or `/copy [answer|question|code|all]`) copies the last answer, and
 `/mouse` switches to a mode where the wheel scrolls and a click copies the
