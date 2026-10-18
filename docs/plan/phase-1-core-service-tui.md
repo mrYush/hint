@@ -47,6 +47,7 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] Copying text out: the terminal's own selection works (mouse reporting is off by default), `ctrl+y` / `/copy [answer|question|code|all]` copy to the clipboard, and `/mouse` turns on a mode where the wheel scrolls and a click copies the block under it
 - [x] Tab completes slash commands and their arguments from one table that also drives `/help`; a command that cannot be used right now (`/copy` with an empty transcript, `/sessions` during a turn) is neither offered nor run
 - [x] A rejected key names the configuration in use and offers to fill it in: `hint setup` (line-based), a `/setup` form in the TUI (key masked), and an offer after the failed turn in the REPL; `internal/config.WriteProfile` edits the global file in place, keeping comments, mode 0600
+- [x] First run without any configuration: on a terminal `hint` offers the setup questions (defaults for everything but the key, which is typed with echo off) and carries on with the file it wrote; `config.example.yaml` documents every key and a test keeps it current
 - [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.

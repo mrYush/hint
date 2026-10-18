@@ -628,7 +628,7 @@ func applyKindDefaults(cfg *Config) {
 // not prevent the run from starting; it fails when selected.
 func (l *loader) validate(cfg *Config) error {
 	if len(cfg.Providers) == 0 {
-		return errors.New("config: no provider configured: set API_BAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml")
+		return ErrNoProvider
 	}
 	for _, p := range cfg.Providers {
 		switch p.Kind {
@@ -674,7 +674,7 @@ func (l *loader) validateUsable(cfg *Config, name, role string) error {
 	switch p.Kind {
 	case KindOpenAI:
 		if p.APIKey == "" {
-			return fmt.Errorf("config: %s profile %q needs an API key: set api_key (e.g. ${API_BAR_KEY}), HINT_API_KEY, or --api-key", role, p.Name)
+			return &NoKeyError{Role: role, Profile: p.Name}
 		}
 	case KindOllama:
 		if p.Model == "" {

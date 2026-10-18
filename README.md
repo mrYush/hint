@@ -310,6 +310,22 @@ pair. Sources, highest priority first:
 3. Project file `./.hint/config.yaml`
 4. Global file `~/.config/hint/config.yaml` (respects `$XDG_CONFIG_HOME`)
 
+### First run
+
+With no configuration at all, `hint` on a terminal says so and asks
+whether to set it up now: the profile name, base URL and model (each has
+a default, Enter accepts it) and the API key, typed with the echo off.
+The answers go to `~/.config/hint/config.yaml` (mode 0600) and the start
+continues. `hint setup` asks the same questions at any time and edits the
+file in place, keeping its comments. In a script or a pipe nothing is
+asked: the error names `hint setup` and the other ways below.
+
+[`config.example.yaml`](config.example.yaml) in the repository root lists
+**every key with its default and what it does**; copy it to the global
+path for settings that apply everywhere, or to `.hint/config.yaml` in a
+repository for that project only. A test keeps it in step with the code:
+it must load, and it must mention every key the loader reads.
+
 ### Quick start (zero config)
 
 Without any config file, `hint` talks to the [api-bar](https://api-bar.ru)
@@ -345,7 +361,9 @@ fallback_provider: local
 
 The project file overlays the global one profile-by-profile (matched by
 `name`, non-empty fields win), so a project can override just the model or
-key of a globally defined profile.
+key of a globally defined profile. A key the more local file does not
+mention is inherited from the more general one. Do not put a literal API
+key in the project file, it ends up in git: use `${VAR}` there.
 
 `header_timeout` bounds how long hint waits for the response headers of a
 chat request; a Go duration such as `90s` or `15m`, units required.

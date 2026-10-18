@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/mrYush/hint/internal/config"
@@ -126,45 +128,112 @@ func (a *app) authHelp(err error) string {
 	return a.setup.describe()
 }
 
-// askSetup is the line-based setup: it asks for the four values with the
-// current ones as defaults and writes them. The key is never typed here —
-// stdin is shared with the line reader and cannot be switched to
-// no-echo — so it is the name of the environment variable that holds it.
-func askSetup(ctx context.Context, lines *console.LineReader, out io.Writer, s *setupInfo) error {
-	ask := func(prompt, def string) (string, error) {
-		if def != "" {
-			fmt.Fprintf(out, "%s [%s]: ", prompt, def)
-		} else {
-			fmt.Fprintf(out, "%s: ", prompt)
+// setupIO is where setup asks its questions. Two implementations: the
+// REPL's line reader, which cannot hide what is typed, and the bare
+// terminal before a session starts, which can.
+type setupIO interface {
+	// Line asks one question and returns the trimmed answer.
+	Line(ctx context.Context, prompt string) (string, error)
+	// Secret asks for something that must not be shown. ok is false when
+	// this input cannot hide it; the caller then asks for something that
+	// is not secret instead.
+	Secret(ctx context.Context, prompt string) (value string, ok bool, err error)
+}
+
+// lineIO asks through the shared line reader of a running session.
+// Stdin belongs to that reader's goroutine, so echo cannot be switched
+// off: Secret declines.
+type lineIO struct {
+	lines *console.LineReader
+	out   io.Writer
+}
+
+func (l lineIO) Line(ctx context.Context, prompt string) (string, error) {
+	fmt.Fprint(l.out, prompt)
+	line, err := l.lines.ReadLine(ctx)
+	return strings.TrimSpace(line), err
+}
+
+func (l lineIO) Secret(context.Context, string) (string, bool, error) { return "", false, nil }
+
+// ttyIO asks on the bare terminal, before any line reader exists to own
+// stdin, so the key can be read with echo off.
+type ttyIO struct {
+	in  *os.File
+	r   *bufio.Reader
+	out io.Writer
+}
+
+func newTTYIO(in *os.File, out io.Writer) *ttyIO {
+	return &ttyIO{in: in, r: bufio.NewReader(in), out: out}
+}
+
+func (t *ttyIO) Line(_ context.Context, prompt string) (string, error) {
+	fmt.Fprint(t.out, prompt)
+	line, err := t.r.ReadString('\n')
+	if err != nil && line == "" {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func (t *ttyIO) Secret(_ context.Context, prompt string) (string, bool, error) {
+	fmt.Fprint(t.out, prompt)
+	b, err := term.ReadPassword(t.in.Fd())
+	fmt.Fprintln(t.out)
+	if err != nil {
+		return "", false, err
+	}
+	return strings.TrimSpace(string(b)), true, nil
+}
+
+// askSetup asks for the profile, the base URL, the model and the key,
+// with what is known as the default of each, and writes the answers. A
+// model left empty stays out of the file, so the built-in default for the
+// kind applies. Where the input can hide what is typed the key is typed
+// (or given as ${VAR}); where it cannot, the question is the name of the
+// environment variable that holds it.
+func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) error {
+	ask := func(prompt, def, empty string) (string, error) {
+		switch {
+		case def != "":
+			prompt += " [" + def + "]"
+		case empty != "":
+			prompt += " [" + empty + "]"
 		}
-		line, err := lines.ReadLine(ctx)
+		line, err := in.Line(ctx, prompt+": ")
 		if err != nil {
 			return "", err
 		}
-		if line = strings.TrimSpace(line); line != "" {
+		if line != "" {
 			return line, nil
 		}
 		return def, nil
 	}
-	profile, err := ask("profile name", s.profile.Name)
+	profile, err := ask("profile name", s.profile.Name, "")
 	if err != nil {
 		return err
 	}
-	baseURL, err := ask("base URL", s.profile.BaseURL)
+	baseURL, err := ask("base URL", s.profile.BaseURL, "")
 	if err != nil {
 		return err
 	}
-	model, err := ask("model", s.profile.Model)
+	model, err := ask("model", s.profile.Model, "the built-in default of the kind")
 	if err != nil {
 		return err
 	}
-	name, err := ask("environment variable that holds the API key (e.g. API_BAR_KEY; empty keeps the key as it is)", "")
+	key, ok, err := in.Secret(ctx, "API key (input hidden; ${VARIABLE} to read it from the environment; empty keeps the current one): ")
 	if err != nil {
 		return err
 	}
-	key := ""
-	if name != "" {
-		key = "${" + strings.Trim(name, "${}") + "}"
+	if !ok {
+		name, err := ask("environment variable that holds the API key (e.g. API_BAR_KEY; empty keeps the key as it is)", "", "")
+		if err != nil {
+			return err
+		}
+		if name != "" {
+			key = "${" + strings.Trim(name, "${}") + "}"
+		}
 	}
 	msg, err := s.save(profile, baseURL, model, key)
 	if err != nil {
@@ -186,9 +255,46 @@ func (a *app) offerSetup(ctx context.Context, help string) {
 	if err != nil || !strings.EqualFold(strings.TrimSpace(line), "y") {
 		return
 	}
-	if err := askSetup(ctx, a.lines, a.io.err, a.setup); err != nil && ctx.Err() == nil {
+	if err := askSetup(ctx, lineIO{lines: a.lines, out: a.io.err}, a.io.err, a.setup); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(a.io.err, "hint: setup failed:", err)
 	}
+}
+
+// firstRunSetup is the answer to a start that failed for want of a
+// provider or a key: on a terminal, say so, offer the questions, and
+// report whether the configuration was written and loading should be
+// tried again. Anywhere else the original error stands, and it already
+// names `hint setup`.
+func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
+	var noKey *config.NoKeyError
+	missingKey := errors.As(loadErr, &noKey)
+	if !missingKey && !errors.Is(loadErr, config.ErrNoProvider) {
+		return false
+	}
+	in, ok := sio.in.(*os.File)
+	if !sio.tty || !ok {
+		return false
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	info := newSetupInfo(nil, cwd)
+	if missingKey {
+		info.profile.Name = noKey.Profile
+	}
+	fmt.Fprintln(sio.err, "hint:", strings.TrimPrefix(loadErr.Error(), "config: "))
+	fmt.Fprintln(sio.err, info.describe())
+	tty := newTTYIO(in, sio.err)
+	answer, err := tty.Line(ctx, "Set it up now? [Y/n]: ")
+	if err != nil || strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
+		return false
+	}
+	if err := askSetup(ctx, tty, sio.err, info); err != nil {
+		fmt.Fprintln(sio.err, "hint: setup failed:", err)
+		return false
+	}
+	return true
 }
 
 // newSetupCommand is `hint setup`: the same questions without a session,
@@ -217,7 +323,7 @@ in a repository.`,
 			cfg, _ := config.Load(*flags)
 			info := newSetupInfo(cfg, cwd)
 			fmt.Fprintln(os.Stderr, info.describe())
-			return askSetup(cmd.Context(), console.NewLineReader(os.Stdin), os.Stderr, info)
+			return askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
 		},
 	}
 }
