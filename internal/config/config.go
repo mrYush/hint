@@ -8,6 +8,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -172,4 +173,21 @@ func (c *Config) Secrets() []string {
 		out = append(out, p.APIKey)
 	}
 	return out
+}
+
+// ErrNoProvider is what loading returns when nothing says which provider
+// to use: no file, no key in the environment, no flag. A shell that can
+// ask questions answers it with the interactive setup.
+var ErrNoProvider = errors.New("config: no provider configured: run `hint setup`, set API_BAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
+
+// NoKeyError is a profile the run needs that has no API key — none in
+// the file, or a ${VAR} that expands to nothing.
+type NoKeyError struct {
+	// Role is "default" or "fallback".
+	Role    string
+	Profile string
+}
+
+func (e *NoKeyError) Error() string {
+	return fmt.Sprintf("config: %s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${API_BAR_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
 }

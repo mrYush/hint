@@ -87,7 +87,7 @@ go install github.com/mrYush/hint/cmd/hint@latest
 
 ### Building from source
 
-You need Go 1.22 or higher.
+You need Go 1.26 or higher.
 
 ```bash
 git clone https://github.com/mrYush/hint.git
@@ -121,6 +121,27 @@ Each line is one question; the conversation carries over from one to the
 next. `/help` lists the commands, `/exit` (or Ctrl-D) leaves. Ctrl-C while
 an answer is being written stops that answer and returns to the prompt; the
 session is kept.
+
+`hint --tui` runs the same session as a full-screen TUI (experimental):
+the conversation scrolls above the input with answers rendered as
+Markdown, a file edit or a command asks for permission in a dialog that
+shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
+this directory's sessions to resume one. Enter sends; a newline is
+Shift+Enter where the terminal reports it (kitty, WezTerm, Ghostty, iTerm2),
+Alt+Enter or Ctrl+J, and on any terminal a `\` at the end of the line
+before Enter. The conversation scrolls with ↑ on the input's first line
+and ↓ on its last (a mouse wheel works the same way), Shift+↑/↓ by line,
+PgUp/PgDn by page and Ctrl+Home/End to its ends; the header says how many
+lines are below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓
+move between messages, `y` copies the one picked, Esc returns to the
+input. One-letter answers and commands (`y`/`n`/`a`, `j`/`k`) work in a
+Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`. Tab completes `/commands` and
+their arguments. Text is selected with the terminal as usual; `ctrl+y`
+(or `/copy [answer|question|code|all]`) copies the last answer, and
+`/mouse` switches to a mode where the wheel scrolls and a click copies the
+block under it. The TUI is a client of the same
+protocol as `hint serve`; the line REPL stays the default until the TUI
+has passed the Phase 0 scenarios.
 
 ### One question
 
@@ -187,6 +208,34 @@ system prompt is not stored — each run builds it afresh — and neither are
 `a(lways)` answers, so a continued session asks again before running
 commands. When the conversation outgrows the model's context window it is
 summarized, and the summary is what a later run continues from.
+
+### Configuration setup
+
+`hint setup` asks for the profile, base URL, model and the name of the
+environment variable that holds the API key, and writes them to
+`~/.config/hint/config.yaml` (mode 0600, comments kept). When a provider
+rejects the key, `hint` says which config files it is using and offers
+the same questions (in the TUI: `/setup`, with the key masked). A project
+`.hint/config.yaml` is never written, so a key does not end up in git.
+Restart `hint` after saving.
+
+`hint config` changes one key at a time without an editor; every value
+is checked against the key's type before anything is written, and the
+file keeps its comments:
+
+```bash
+hint config                                     # what the next start uses, keys masked
+hint config keys                                # every key, default, HINT_* variable, flag
+hint config set overview.depth 3                # the global file
+hint config set --project providers.api-bar.model gpt-4o-mini   # this repository only
+hint config unset --project overview.depth      # back to the global value
+```
+
+In the TUI the same is `/config show | keys | set | unset`, with Tab
+completing the subcommand, the key and, where there is a closed set, the
+value; `/setup` edits every field of a provider profile in one form. An
+API key is set through `/setup` or `hint setup` only, where it is masked,
+and never as a literal into the project file.
 
 ### Models
 
@@ -288,6 +337,22 @@ pair. Sources, highest priority first:
 3. Project file `./.hint/config.yaml`
 4. Global file `~/.config/hint/config.yaml` (respects `$XDG_CONFIG_HOME`)
 
+### First run
+
+With no configuration at all, `hint` on a terminal says so and asks
+whether to set it up now: the profile name, base URL and model (each has
+a default, Enter accepts it) and the API key, typed with the echo off.
+The answers go to `~/.config/hint/config.yaml` (mode 0600) and the start
+continues. `hint setup` asks the same questions at any time and edits the
+file in place, keeping its comments. In a script or a pipe nothing is
+asked: the error names `hint setup` and the other ways below.
+
+[`config.example.yaml`](config.example.yaml) in the repository root lists
+**every key with its default and what it does**; copy it to the global
+path for settings that apply everywhere, or to `.hint/config.yaml` in a
+repository for that project only. A test keeps it in step with the code:
+it must load, and it must mention every key the loader reads.
+
 ### Quick start (zero config)
 
 Without any config file, `hint` talks to the [api-bar](https://api-bar.ru)
@@ -323,7 +388,9 @@ fallback_provider: local
 
 The project file overlays the global one profile-by-profile (matched by
 `name`, non-empty fields win), so a project can override just the model or
-key of a globally defined profile.
+key of a globally defined profile. A key the more local file does not
+mention is inherited from the more general one. Do not put a literal API
+key in the project file, it ends up in git: use `${VAR}` there.
 
 `header_timeout` bounds how long hint waits for the response headers of a
 chat request; a Go duration such as `90s` or `15m`, units required.
@@ -415,6 +482,11 @@ full audit:
    instead of a truncated list; search a directory or narrow the pattern.
 5. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
+6. Not in `v0.2.0`, on `develop` since WP1.4: a gateway that answers a
+   failed request with both a short `error` and a longer `message` (the
+   NestJS shape, `{"error":"Unauthorized","message":"Invalid API key"}`)
+   is reported by the `error` field alone. `hint --debug` shows the full
+   response body.
 
 ### Debug mode
 

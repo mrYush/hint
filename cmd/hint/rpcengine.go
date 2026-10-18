@@ -19,6 +19,7 @@ import (
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
+	"github.com/mrYush/hint/internal/shell"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -57,6 +58,9 @@ type rpcEngine struct {
 	limits   agent.Limits
 	notices  io.Writer
 	trace    *debuglog.Log
+	// setup describes the configuration the engine was built from, for a
+	// shell that has to say where a rejected key lives.
+	setup *setupInfo
 
 	mu   sync.Mutex
 	live map[string]*rpcSession
@@ -178,6 +182,7 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		limits:   limits,
 		notices:  as.notices,
 		trace:    as.trace,
+		setup:    newSetupInfo(as.cfg, as.cwd, as.opts.flags),
 	}, nil
 }
 
@@ -391,7 +396,7 @@ func (s *rpcSession) traceEvent(ev agentapi.Event) {
 	case agentapi.EventToolStart:
 		s.trace.Printf("tool %s start %s: %s", ev.Call.Name, ev.Call.ID, ev.Call.Arguments)
 	case agentapi.EventToolEnd:
-		s.trace.Printf("tool %s end %s: error=%v %d bytes: %s", ev.Result.Name, ev.Result.CallID, ev.Result.IsError, len(ev.Result.Text()), firstLine(ev.Result.Text()))
+		s.trace.Printf("tool %s end %s: error=%v %d bytes: %s", ev.Result.Name, ev.Result.CallID, ev.Result.IsError, len(ev.Result.Text()), shell.FirstLine(ev.Result.Text()))
 	case agentapi.EventPermission:
 		s.trace.Printf("permission asked: %s", ev.Permission.Summary)
 	case agentapi.EventCompaction:

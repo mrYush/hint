@@ -109,7 +109,8 @@ func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) 
 			fmt.Fprintf(p.out, "\nhint: no answer (%v); denied\n", err)
 			return Deny, nil
 		}
-		switch strings.ToLower(strings.TrimSpace(text)) {
+		// "н" is "y" typed in a Cyrillic layout; it means the same.
+		switch console.Answer(text) {
 		case "y", "yes":
 			return Allow, nil
 		case "n", "no", "":

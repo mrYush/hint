@@ -100,6 +100,9 @@ type options struct {
 	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
 	// runs the core in this process.
 	connect string
+	// tui runs the interactive session as the full-screen shell instead
+	// of the line REPL.
+	tui bool
 }
 
 // newRootCommand builds the command tree. Flags are bound to locals and
@@ -110,7 +113,7 @@ func newRootCommand() *cobra.Command {
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
 	var sessionID, prompt, output, rpcMode, connect string
-	var debug bool
+	var debug, tuiMode bool
 
 	rootCmd := &cobra.Command{
 		Use:     "hint [flags] [-p \"question\"]",
@@ -147,6 +150,7 @@ one-shot for compatibility and prints a note about -p.`,
 				sessionID: sessionID,
 				debug:     debug,
 				connect:   connect,
+				tui:       tuiMode,
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
 				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
@@ -165,6 +169,9 @@ one-shot for compatibility and prints a note about -p.`,
 			inv, err := dispatch(prompt, args, opts.output, os.Stdin)
 			if err != nil {
 				return err
+			}
+			if opts.tui && !inv.interactive {
+				return errors.New("--tui is the interactive session; it takes no -p or question")
 			}
 			if inv.note != "" {
 				fmt.Fprintln(os.Stderr, "hint:", inv.note)
@@ -192,6 +199,7 @@ one-shot for compatibility and prints a note about -p.`,
 	// the files hint serve wrote; a value names the address outright.
 	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:127.0.0.1:port")
 	rootCmd.Flags().Lookup("connect").NoOptDefVal = connectAuto
+	rootCmd.Flags().BoolVar(&tuiMode, "tui", false, "Run the interactive session as a full-screen TUI (experimental; the line REPL stays the default)")
 	rootCmd.MarkFlagsMutuallyExclusive("connect", "mode")
 
 	// Run modes are a policy of this run, not part of a provider profile,
@@ -229,7 +237,7 @@ one-shot for compatibility and prints a note about -p.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags), newConfigCommand(&flags))
 	return rootCmd
 }
 
