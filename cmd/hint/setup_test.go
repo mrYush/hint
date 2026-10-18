@@ -28,8 +28,8 @@ func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
 	s, global := testSetup(t)
 	var out bytes.Buffer
 	lines := lineIO{lines: console.NewLineReader(strings.NewReader("\n\nnew-model\nMY_HINT_KEY\n")), out: &out}
-	if err := askSetup(context.Background(), lines, &out, s); err != nil {
-		t.Fatal(err)
+	if profile, err := askSetup(context.Background(), lines, &out, s); err != nil || profile != "api-bar" {
+		t.Fatalf("askSetup = %q, %v", profile, err)
 	}
 	data, err := os.ReadFile(global)
 	if err != nil {
@@ -104,24 +104,24 @@ func (s *scripted) Secret(_ context.Context, prompt string) (string, bool, error
 func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
 	s, global := testSetup(t)
 	s.profile.Model = ""
-	in := &scripted{answers: []string{"", "", ""}, secret: "sk-typed-123"}
+	// profile, base URL, then the model: empty is asked again, since the
+	// profile has none.
+	in := &scripted{answers: []string{"", "", "", "picked-model"}, secret: "sk-typed-123"}
 	var out bytes.Buffer
-	if err := askSetup(context.Background(), in, &out, s); err != nil {
+	if _, err := askSetup(context.Background(), in, &out, s); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(global)
 	got := string(data)
-	if !strings.Contains(got, "api_key: sk-typed-123") {
-		t.Errorf("the typed key is not in the config:\n%s", got)
-	}
-	if strings.Contains(got, "model:") {
-		t.Errorf("an unanswered model was written instead of left to the default:\n%s", got)
+	if !strings.Contains(got, "api_key: sk-typed-123") || !strings.Contains(got, "model: picked-model") {
+		t.Errorf("the typed key or the model is not in the config:\n%s", got)
 	}
 	if strings.Contains(out.String(), "sk-typed-123") {
 		t.Errorf("the key was echoed:\n%s", out.String())
 	}
-	if !strings.Contains(strings.Join(in.asked, "\n"), "built-in default of the kind") {
-		t.Errorf("the model question does not say what an empty answer means: %v", in.asked)
+	asked := strings.Join(in.asked, "\n")
+	if strings.Count(asked, "model [") != 2 || !strings.Contains(asked, "required") || !strings.Contains(out.String(), "a model is needed") {
+		t.Errorf("an empty model was not asked again as required: %v\n%s", in.asked, out.String())
 	}
 }
 
@@ -155,7 +155,7 @@ func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
 	if err != nil || key != "sk-third" {
 		t.Fatalf("askKey = %q, %v", key, err)
 	}
-	if strings.Count(out.String(), "a key is needed") != 2 || !strings.Contains(out.String(), "api-bar.ru") {
+	if strings.Count(out.String(), "a key is needed") != 2 || !strings.Contains(out.String(), "API key") {
 		t.Errorf("the empty answers were not explained:\n%s", out.String())
 	}
 	// With a key already in place, Enter keeps it.
@@ -168,7 +168,7 @@ func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
 func TestConfigSetUnsetShow(t *testing.T) {
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("API_BAR_KEY", "sk-from-env-1234567890")
+	t.Setenv("APIBAR_KEY", "sk-from-env-1234567890")
 	t.Setenv("HOME", home)
 	s := newSetupInfo(nil, cwd, config.Flags{})
 	s.cwd = cwd
@@ -176,7 +176,10 @@ func TestConfigSetUnsetShow(t *testing.T) {
 	if _, err := s.set("overview.depth", "-3", false); err == nil {
 		t.Error("a negative depth was written")
 	}
-	if _, err := s.set("providers.api-bar.api_key", "${API_BAR_KEY}", false); err != nil {
+	if _, err := s.set("providers.api-bar.api_key", "${APIBAR_KEY}", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.set("providers.api-bar.model", "m", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.set("overview.depth", "4", true); err != nil {

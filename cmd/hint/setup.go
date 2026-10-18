@@ -14,13 +14,14 @@ import (
 
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/console"
+	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/tui"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
-// defaultBaseURL is offered for a profile that has none: the gateway the
-// built-in defaults point at.
-const defaultBaseURL = "https://api-bar.ru/route/openai"
+// defaultBaseURL is offered for a profile that has none: the kind default,
+// a vLLM-style server on this machine.
+const defaultBaseURL = "http://localhost:8000/v1"
 
 // setupInfo is what the shell knows about the configuration this run
 // uses, for the moment a credential is rejected: which profile, which
@@ -32,9 +33,6 @@ type setupInfo struct {
 	// the effective configuration resolves the same layers.
 	cwd   string
 	flags config.Flags
-	// firstRun is setup before any session: the start carries on with
-	// what is written instead of asking for a restart.
-	firstRun bool
 }
 
 // needsKey says whether the profile has no key yet, so that an empty
@@ -57,7 +55,7 @@ func newSetupInfo(cfg *config.Config, cwd string, flags config.Flags) *setupInfo
 		}
 	}
 	if s.profile.Name == "" {
-		s.profile.Name = "api-bar"
+		s.profile.Name = "vllm"
 	}
 	if s.profile.BaseURL == "" {
 		s.profile.BaseURL = defaultBaseURL
@@ -83,7 +81,9 @@ func (s *setupInfo) describe() string {
 
 // save writes the answers to the global config and says what the user has
 // to do next. The key is written as given: a literal, or ${VAR} to be
-// read from the environment.
+// read from the environment. Putting the profile to use is the shell's
+// job: a running session switches to it, which makes the core re-read
+// the file.
 func (s *setupInfo) save(profile string, values map[string]string) (string, error) {
 	if s.locs.Global == "" {
 		return "", errNowhere
@@ -93,9 +93,6 @@ func (s *setupInfo) save(profile string, values map[string]string) (string, erro
 	}
 	key := values["api_key"]
 	msg := "saved to " + s.locs.Global
-	if !s.firstRun {
-		msg += "; restart hint to use it (hint models tries the profile first)"
-	}
 	if name, ok := envReference(key); ok {
 		if _, set := os.LookupEnv(name); !set {
 			msg += "; " + name + " is not set in this shell: export it before starting hint"
@@ -205,12 +202,13 @@ func (t *ttyIO) Secret(_ context.Context, prompt string) (string, bool, error) {
 }
 
 // askSetup asks for the profile, the base URL, the model and the key,
-// with what is known as the default of each, and writes the answers. A
-// model left empty stays out of the file, so the built-in default for the
-// kind applies. Where the input can hide what is typed the key is typed
-// (or given as ${VAR}); where it cannot, the question is the name of the
-// environment variable that holds it.
-func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) error {
+// with what is known as the default of each, writes the answers and
+// returns the profile's name. The model is required — a server serves
+// what was loaded into it, so there is nothing to default to — and an
+// empty answer is asked again. Where the input can hide what is typed the
+// key is typed (or given as ${VAR}); where it cannot, the question is the
+// name of the environment variable that holds it.
+func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) (string, error) {
 	ask := func(prompt, def, empty string) (string, error) {
 		switch {
 		case def != "":
@@ -229,31 +227,37 @@ func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) erro
 	}
 	profile, err := ask("profile name", s.profile.Name, "")
 	if err != nil {
-		return err
+		return "", err
 	}
 	baseURL, err := ask("base URL", s.profile.BaseURL, "")
 	if err != nil {
-		return err
+		return "", err
 	}
-	model, err := ask("model", s.profile.Model, "the built-in default of the kind")
+	// A model is required: a server serves what was loaded into it, and
+	// the loader guesses none, so an empty answer is asked again.
+	model, err := ask("model", s.profile.Model, "required; hint models lists what the server serves")
+	for err == nil && model == "" {
+		fmt.Fprintln(out, "hint: a model is needed — the name of one the server serves (hint models lists them); Ctrl-C stops the setup")
+		model, err = ask("model", "", "required")
+	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	key, err := askKey(ctx, in, out, s.needsKey())
 	if err != nil {
-		return err
+		return "", err
 	}
 	msg, err := s.save(profile, map[string]string{"base_url": baseURL, "model": model, "api_key": key})
 	if err != nil {
-		return err
+		return "", err
 	}
 	fmt.Fprintln(out, "hint:", msg)
-	return nil
+	return profile, nil
 }
 
 // keyHelp is what the key question says about the answer it wants.
-const keyHelp = "the provider's API key (for api-bar: the key from your account at https://api-bar.ru), " +
-	"or ${VARIABLE} to read it from the environment at every start"
+const keyHelp = "the provider's API key (what your vLLM or llama-server was started with, or the key from " +
+	"your account at an aggregator such as OpenRouter or api-bar.ru), or ${VARIABLE} to read it from the environment at every start"
 
 // askKey asks for the key. Where the input can hide it, the key itself
 // (or ${VAR}) is typed; where it cannot, the name of the variable that
@@ -271,7 +275,7 @@ func askKey(ctx context.Context, in setupIO, out io.Writer, required bool) (stri
 			return "", err
 		}
 		if !ok {
-			name, err := in.Line(ctx, "name of the environment variable that holds the API key, e.g. API_BAR_KEY ("+empty+"): ")
+			name, err := in.Line(ctx, "name of the environment variable that holds the API key, e.g. VLLM_API_KEY ("+empty+"): ")
 			if err != nil {
 				return "", err
 			}
@@ -287,7 +291,9 @@ func askKey(ctx context.Context, in setupIO, out io.Writer, required bool) (stri
 }
 
 // offerSetup runs after a rejected credential in the REPL: it shows
-// where the configuration is and asks whether to fill it in now.
+// where the configuration is, asks whether to fill it in now, and puts
+// the written profile to use in the session so the next question goes
+// out with the new key.
 func (a *app) offerSetup(ctx context.Context, help string) {
 	fmt.Fprintln(a.io.err, "hint:", help)
 	if a.setup == nil || !a.io.tty {
@@ -298,9 +304,14 @@ func (a *app) offerSetup(ctx context.Context, help string) {
 	if err != nil || console.Answer(line) != "y" {
 		return
 	}
-	if err := askSetup(ctx, lineIO{lines: a.lines, out: a.io.err}, a.io.err, a.setup); err != nil && ctx.Err() == nil {
-		fmt.Fprintln(a.io.err, "hint: setup failed:", err)
+	profile, err := askSetup(ctx, lineIO{lines: a.lines, out: a.io.err}, a.io.err, a.setup)
+	if err != nil {
+		if ctx.Err() == nil {
+			fmt.Fprintln(a.io.err, "hint: setup failed:", err)
+		}
+		return
 	}
+	a.useProfile(ctx, rpc.ProfileRef{Profile: profile})
 }
 
 // firstRunSetup is the answer to a start that failed for want of a
@@ -323,7 +334,6 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 		return false
 	}
 	info := newSetupInfo(nil, cwd, config.Flags{})
-	info.firstRun = true
 	if missingKey {
 		info.profile.Name = noKey.Profile
 	}
@@ -335,7 +345,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 	if a := console.Answer(answer); err != nil || a == "n" || a == "no" {
 		return false
 	}
-	if err := askSetup(ctx, tty, sio.err, info); err != nil {
+	if _, err := askSetup(ctx, tty, sio.err, info); err != nil {
 		fmt.Fprintln(sio.err, "hint: setup failed:", err)
 		return false
 	}
@@ -368,7 +378,8 @@ in a repository.`,
 			cfg, _ := config.Load(*flags)
 			info := newSetupInfo(cfg, cwd, *flags)
 			fmt.Fprintln(os.Stderr, info.describe())
-			return askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
+			_, err = askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
+			return err
 		},
 	}
 }

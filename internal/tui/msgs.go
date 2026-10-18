@@ -32,11 +32,22 @@ type (
 		infos []rpc.Info
 		err   error
 	}
-	// attachedMsg is the session the picker chose, or a fresh one when
-	// there was nothing to choose from.
+	// attachedMsg is the session the picker chose, a fresh one when
+	// there was nothing to choose from, or a fork just taken (forked).
 	attachedMsg struct {
-		view rpc.SessionView
-		err  error
+		view   rpc.SessionView
+		err    error
+		forked bool
+	}
+	// profilesMsg is the answer to profile.list.
+	profilesMsg struct {
+		infos []rpc.ProfileInfo
+		err   error
+	}
+	// profileMsg is the answer to session.profile.
+	profileMsg struct {
+		ref rpc.ProfileRef
+		err error
 	}
 )
 

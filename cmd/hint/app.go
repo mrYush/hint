@@ -89,6 +89,8 @@ type app struct {
 	recorded  bool
 	// history is the conversation so far, for a shell that redraws it.
 	history []agentapi.Message
+	// profile is what the session answers with, for the TUI's header.
+	profile rpc.ProfileRef
 	// prompter answers permission events on the terminal. It is the only
 	// permission UI: the core never asks on its own stdin.
 	prompter permission.Prompter
@@ -191,6 +193,7 @@ func newApp(ctx context.Context, cl *rpc.Client, opts options, sio stdio) (*app,
 			return nil, err
 		}
 		a.sessionID, a.recorded, a.history = view.ID, recorded, view.Messages
+		a.profile = rpc.ProfileRef{Profile: view.Profile, Model: view.Model}
 	}
 	warnMode(sio.err, opts.mode, sio.tty)
 	return a, nil
@@ -284,14 +287,18 @@ func announce(stderr io.Writer, view rpc.SessionView) {
 func sessionInfos(infos []rpc.Info) []session.Info {
 	out := make([]session.Info, 0, len(infos))
 	for _, info := range infos {
-		out = append(out, session.Info{
+		row := session.Info{
 			ID:          info.ID,
 			Cwd:         info.Cwd,
 			Created:     info.Created,
 			Modified:    info.Modified,
 			Messages:    info.Messages,
 			FirstPrompt: info.FirstPrompt,
-		})
+		}
+		if info.Parent != nil {
+			row.Parent = &session.Parent{ID: info.Parent.ID, Turn: info.Parent.Turn}
+		}
+		out = append(out, row)
 	}
 	return out
 }

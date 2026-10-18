@@ -11,13 +11,16 @@ import (
 	"sync/atomic"
 
 	"github.com/mrYush/hint/internal/console"
+	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/shell"
 )
 
 // replHelp is what /help prints.
 const replHelp = `Commands:
-  /help         show this help
-  /exit, /quit  leave (Ctrl-D does too)
+  /help                    show this help
+  /profile                 list the provider profiles; the one in use is marked
+  /profile <name> [model]  answer with that profile (and model) from now on
+  /exit, /quit             leave (Ctrl-D does too)
 Anything else is a question for the assistant; each line is one question.
 Ctrl-C stops an answer that is being written and returns to the prompt.`
 
@@ -60,11 +63,14 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			continue
 		}
 		if strings.HasPrefix(line, "/") {
-			switch cmd := strings.Fields(line)[0]; cmd {
+			fields := strings.Fields(line)
+			switch cmd := fields[0]; cmd {
 			case "/exit", "/quit":
 				return nil
 			case "/help":
 				fmt.Fprintln(a.io.err, replHelp)
+			case "/profile":
+				a.profileCommand(ctx, fields[1:])
 			default:
 				fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
 			}
@@ -94,6 +100,56 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			}
 		}
 	}
+}
+
+// profileCommand is /profile: alone it lists the profiles the core has,
+// with a name (and a model) it switches the session.
+func (a *app) profileCommand(ctx context.Context, args []string) {
+	if len(args) == 0 {
+		infos, err := a.client.Profiles(ctx)
+		if err != nil {
+			fmt.Fprintln(a.io.err, "hint:", err)
+			return
+		}
+		for _, p := range infos {
+			var marks []string
+			if p.Name == a.profile.Profile {
+				marks = append(marks, "in use")
+			}
+			if p.Default {
+				marks = append(marks, "default")
+			}
+			if p.Fallback {
+				marks = append(marks, "fallback")
+			}
+			line := fmt.Sprintf("  %-12s  %-7s  %s", p.Name, p.Kind, p.Model)
+			if len(marks) > 0 {
+				line += "  (" + strings.Join(marks, ", ") + ")"
+			}
+			if !p.Usable {
+				line += "  ✗ " + p.Problem
+			}
+			fmt.Fprintln(a.io.err, line)
+		}
+		return
+	}
+	ref := rpc.ProfileRef{Profile: args[0]}
+	if len(args) > 1 {
+		ref.Model = args[1]
+	}
+	a.useProfile(ctx, ref)
+}
+
+// useProfile switches the session to ref and says what is in effect, or
+// why nothing changed.
+func (a *app) useProfile(ctx context.Context, ref rpc.ProfileRef) {
+	got, err := a.client.SetProfile(ctx, a.sessionID, ref)
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", strings.TrimPrefix(err.Error(), "config: "))
+		return
+	}
+	a.profile = got
+	fmt.Fprintf(a.io.err, "hint: answering with %s/%s from now on\n", got.Profile, got.Model)
 }
 
 // errPromptInterrupted reports Ctrl-C while the prompt was waiting.

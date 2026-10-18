@@ -46,14 +46,19 @@ type fakeEngine struct {
 	sessions map[string]*fakeSession
 	script   script
 	infos    []rpc.Info
+	// profiles is what profile.list answers; every name in it is one
+	// SetProfile accepts, unless the row says it is not usable.
+	profiles []rpc.ProfileInfo
 }
 
 // fakeSession is one session of a fakeEngine: its id and the questions
 // its turns were given, in order.
 type fakeSession struct {
-	id   string
-	eng  *fakeEngine
-	msgs []agentapi.Message
+	id      string
+	eng     *fakeEngine
+	msgs    []agentapi.Message
+	profile rpc.ProfileRef
+	parent  *rpc.Parent
 }
 
 func (e *fakeEngine) List(context.Context) ([]rpc.Info, error) { return e.infos, nil }
@@ -75,6 +80,43 @@ func (e *fakeEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
 	return nil, errors.New("no such session")
 }
 
+func (e *fakeEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.profiles, nil
+}
+
+// Fork copies the source's questions through turn opts.Turn into a new
+// session named after the source.
+func (e *fakeEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	src := e.sessions[opts.ID]
+	if src == nil {
+		return nil, fmt.Errorf("%w: session %q", rpc.ErrNotFound, opts.ID)
+	}
+	var cut []agentapi.Message
+	turns := 0
+	for _, m := range src.msgs {
+		if m.Role == agentapi.RoleUser {
+			turns++
+			if opts.Turn > 0 && turns > opts.Turn {
+				break
+			}
+		}
+		cut = append(cut, m)
+	}
+	if opts.Turn == 0 {
+		opts.Turn = turns
+	}
+	if turns < opts.Turn || opts.Turn == 0 {
+		return nil, fmt.Errorf("%w: the conversation has %d turns, not %d", rpc.ErrInvalid, turns, opts.Turn)
+	}
+	s := &fakeSession{id: src.id + "-fork", eng: e, msgs: cut, profile: src.profile, parent: &rpc.Parent{ID: src.id, Turn: opts.Turn}}
+	e.sessions[s.id] = s
+	return s, nil
+}
+
 // add records a session the engine did not open itself, the way a
 // session recorded by an earlier run would already be on disk.
 func (e *fakeEngine) add(s *fakeSession) {
@@ -87,6 +129,40 @@ func (s *fakeSession) ID() string         { return s.id }
 func (s *fakeSession) Created() time.Time { return time.Unix(0, 0) }
 func (s *fakeSession) Warnings() []string { return nil }
 func (s *fakeSession) Close() error       { return nil }
+
+func (s *fakeSession) Profile() rpc.ProfileRef {
+	s.eng.mu.Lock()
+	defer s.eng.mu.Unlock()
+	return s.profile
+}
+
+func (s *fakeSession) Parent() (rpc.Parent, bool) {
+	if s.parent == nil {
+		return rpc.Parent{}, false
+	}
+	return *s.parent, true
+}
+
+// SetProfile accepts a profile the engine lists as usable and fills the
+// model in from the row.
+func (s *fakeSession) SetProfile(_ context.Context, ref rpc.ProfileRef) (rpc.ProfileRef, error) {
+	s.eng.mu.Lock()
+	defer s.eng.mu.Unlock()
+	for _, p := range s.eng.profiles {
+		if p.Name != ref.Profile {
+			continue
+		}
+		if !p.Usable {
+			return rpc.ProfileRef{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, p.Problem)
+		}
+		if ref.Model == "" {
+			ref.Model = p.Model
+		}
+		s.profile = ref
+		return ref, nil
+	}
+	return rpc.ProfileRef{}, fmt.Errorf("%w: unknown provider profile %q", rpc.ErrNotFound, ref.Profile)
+}
 
 // Messages is the session's history: the questions RunTurn recorded.
 func (s *fakeSession) Messages() []agentapi.Message {
@@ -829,6 +905,13 @@ func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
 	}}
 	h := newHarness(t, &fakeEngine{}, Options{Setup: setup})
 	h.submit("/setup")
+	// A profile without a model is not saved: the form says so on the
+	// model's field and asks nothing of Save.
+	h.press("ctrl+s")
+	if h.m.setupForm == nil || !strings.Contains(h.view(), "needs a model") || h.m.setupForm.fields[h.m.setupForm.focus].label != "model" {
+		t.Fatalf("an empty model was not refused on its field:\n%s", h.view())
+	}
+	h.typeText("m1")
 	h.run(h.press("ctrl+s"))
 	if h.m.setupForm == nil || !strings.Contains(h.view(), "permission denied") {
 		t.Fatalf("a failed save closed the form or hid the reason:\n%s", h.view())
@@ -1045,11 +1128,6 @@ func TestMessageBrowser(t *testing.T) {
 	if h.m.sel != 0 || h.m.vp.YOffset() != 0 || !strings.Contains(h.view(), "question 1") {
 		t.Errorf("g: sel %d, offset %d", h.m.sel, h.m.vp.YOffset())
 	}
-	h.press("f")
-	if st := h.m.statusLine(); !strings.Contains(st, "turn 1") || !strings.Contains(st, "WP1.5") {
-		t.Errorf("fork does not say what it needs: %q", st)
-	}
-
 	// esc gives the focus back to the input, at the end of the conversation.
 	h.press("esc")
 	if h.m.sel != noSelection || !h.m.vp.AtBottom() || strings.Contains(h.view(), "┃") {

@@ -960,8 +960,9 @@ func TestShellNeverImportsTheAgent(t *testing.T) {
 	}
 	fset := token.NewFileSet()
 	for _, file := range files {
-		if strings.HasSuffix(file, "_test.go") || file == "rpcengine.go" || file == "rules.go" {
-			// rules.go and rpcengine.go are the engine side of cmd/hint.
+		if strings.HasSuffix(file, "_test.go") || file == "rpcengine.go" || file == "rpcprofiles.go" || file == "rules.go" {
+			// rules.go, rpcengine.go and rpcprofiles.go are the engine
+			// side of cmd/hint.
 			continue
 		}
 		f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)

@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/mrYush/hint/internal/config"
+	"github.com/mrYush/hint/internal/rpc"
 )
 
 // Setup is what the shell may do with the configuration of the core it
@@ -33,10 +34,11 @@ type Setup struct {
 	Show func() (string, error)
 }
 
-// setupDoneMsg is the answer of Save.
+// setupDoneMsg is the answer of Save, with the profile it wrote.
 type setupDoneMsg struct {
-	msg string
-	err error
+	profile string
+	msg     string
+	err     error
 }
 
 // formField is one input of the setup form: the profile name, or a field
@@ -97,6 +99,8 @@ func placeholder(k config.Key) string {
 	switch {
 	case k.Type == config.TypeSecret:
 		return "paste the key, or ${VARIABLE}; empty keeps the current one"
+	case k.Required:
+		return "required"
 	case len(k.Enum) > 0:
 		return strings.Join(k.Enum, " | ")
 	case k.Default != "":
@@ -126,6 +130,13 @@ func (f *setupForm) values() (string, map[string]string, error) {
 	for i, fl := range f.fields[1:] {
 		v := strings.TrimSpace(fl.in.Value())
 		if v == "" {
+			if fl.key.Required {
+				f.fields[f.focus].in.Blur()
+				f.focus = i + 1
+				f.fields[f.focus].in.Focus()
+				field, _ := fl.key.Profile()
+				return "", nil, fmt.Errorf("a profile needs a %s", strings.ReplaceAll(field, "_", " "))
+			}
 			continue
 		}
 		nv, err := fl.key.Normalize(v)
@@ -176,7 +187,7 @@ func (m model) setupKey(k tea.KeyPressMsg) (model, tea.Cmd) {
 		save := m.setup.Save
 		return m, func() tea.Msg {
 			msg, err := save(name, values)
-			return setupDoneMsg{msg: msg, err: err}
+			return setupDoneMsg{profile: name, msg: msg, err: err}
 		}
 	}
 	var cmd tea.Cmd
@@ -185,19 +196,26 @@ func (m model) setupKey(k tea.KeyPressMsg) (model, tea.Cmd) {
 }
 
 // setupSaved closes the form on success and keeps it open, with the
-// reason, on failure.
-func (m model) setupSaved(msg setupDoneMsg) model {
+// reason, on failure. A saved profile is put to use at once: the session
+// switches to it, which makes the core re-read the file, so a key typed
+// after a rejection is in force without a restart.
+func (m model) setupSaved(msg setupDoneMsg) (model, tea.Cmd) {
 	if m.setupForm == nil {
-		return m
+		return m, nil
 	}
 	if msg.err != nil {
 		m.setupForm.saving = false
 		m.setupForm.err = strings.TrimPrefix(msg.err.Error(), "config: ")
-		return m
+		return m, nil
 	}
 	m.setupForm = nil
 	m.add(entry{kind: entryNotice, text: msg.msg, done: true})
-	return m
+	if m.sessionID == "" || m.busy {
+		return m, m.loadProfiles()
+	}
+	var cmd tea.Cmd
+	m, cmd = m.switchProfile(rpc.ProfileRef{Profile: msg.profile})
+	return m, tea.Batch(cmd, m.loadProfiles())
 }
 
 // view draws the form in a w×h box: the inputs, and under them the help

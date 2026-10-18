@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -335,9 +336,31 @@ func mustRecv(t *testing.T, dec *json.Decoder) map[string]any {
 
 type fakeEngine struct {
 	sessions map[string]*fakeSession
+	// profiles is what profile.list answers; "local" and "cloud" are
+	// the two SetProfile accepts, "cloud" needing a key it has not got.
+	profiles []ProfileInfo
 }
 
 func (e *fakeEngine) List(context.Context) ([]Info, error) { return nil, nil }
+
+func (e *fakeEngine) Profiles(context.Context) ([]ProfileInfo, error) { return e.profiles, nil }
+
+func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {
+	src := e.sessions[opts.ID]
+	if src == nil {
+		return nil, fmt.Errorf("%w: session %q", ErrNotFound, opts.ID)
+	}
+	if opts.Turn == 0 {
+		opts.Turn = src.turns
+	}
+	if opts.Turn > src.turns || opts.Turn == 0 {
+		return nil, fmt.Errorf("%w: the conversation has %d turns, not %d", ErrInvalid, src.turns, opts.Turn)
+	}
+	s := &fakeSession{id: fmt.Sprintf("fork-%d", len(e.sessions)), ephemeral: opts.Ephemeral, turns: opts.Turn,
+		profile: src.profile, parent: &Parent{ID: src.id, Turn: opts.Turn}}
+	e.sessions[s.id] = s
+	return s, nil
+}
 
 func (e *fakeEngine) Open(_ context.Context, opts OpenOptions) (Session, error) {
 	s := &fakeSession{id: "sess-1", ephemeral: opts.Ephemeral}
@@ -356,6 +379,10 @@ type fakeSession struct {
 	id        string
 	ephemeral bool
 	allowed   bool
+	// turns is how many user turns the session claims to have, for Fork.
+	turns   int
+	profile ProfileRef
+	parent  *Parent
 }
 
 func (s *fakeSession) ID() string                   { return s.id }
@@ -363,8 +390,32 @@ func (s *fakeSession) Created() time.Time           { return time.Date(2026, 10,
 func (s *fakeSession) Messages() []agentapi.Message { return nil }
 func (s *fakeSession) Warnings() []string           { return nil }
 func (s *fakeSession) Close() error                 { return nil }
+func (s *fakeSession) Profile() ProfileRef          { return s.profile }
+
+func (s *fakeSession) Parent() (Parent, bool) {
+	if s.parent == nil {
+		return Parent{}, false
+	}
+	return *s.parent, true
+}
+
+func (s *fakeSession) SetProfile(_ context.Context, ref ProfileRef) (ProfileRef, error) {
+	switch ref.Profile {
+	case "local":
+		if ref.Model == "" {
+			ref.Model = "qwen"
+		}
+		s.profile = ref
+		return ref, nil
+	case "cloud":
+		return ProfileRef{}, fmt.Errorf("%w: profile %q needs an API key", ErrInvalid, ref.Profile)
+	default:
+		return ProfileRef{}, fmt.Errorf("%w: unknown profile %q", ErrNotFound, ref.Profile)
+	}
+}
 
 func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
+	s.turns++
 	ch := make(chan agentapi.Event)
 	go func() {
 		defer close(ch)

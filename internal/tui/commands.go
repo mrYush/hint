@@ -45,9 +45,9 @@ func fixed(args ...string) func(model, []string) argSpec {
 	}
 }
 
-// commands is the table. It is a function so that a later source of
-// commands (a profile list from the core, WP1.5) can depend on the
-// session the shell is attached to.
+// commands is the table. It is a function because what a command offers
+// can depend on the shell's state: /profile completes the names the core
+// listed.
 func commands() []command {
 	return []command{
 		{name: "/copy", help: "copy the last answer to the clipboard (or: question, code, all)",
@@ -57,7 +57,9 @@ func commands() []command {
 			enabled: func(m model) bool { return m.setup != nil && m.setup.Save != nil && !m.busy }},
 		{name: "/config", help: "show | keys | set [--project] <key> <value> | unset [--project] <key>: any config key, checked before it is written",
 			next: configArgs, enabled: func(m model) bool { return m.setup != nil && m.setup.Set != nil }},
-		{name: "/sessions", help: "list this directory's sessions and resume one", enabled: func(m model) bool { return !m.busy }},
+		{name: "/sessions", help: "list this directory's sessions as a tree and resume one; f forks the row", enabled: func(m model) bool { return !m.busy }},
+		{name: "/profile", help: "<name> [model]: answer with another provider profile from now on; alone, pick from the list",
+			next: profileArgs, enabled: func(m model) bool { return m.sessionID != "" && !m.busy }},
 		{name: "/help", help: "show this list"},
 		{name: "/exit", help: "leave (ctrl+d does too); /quit is the same"},
 	}
