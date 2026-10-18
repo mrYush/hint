@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -24,6 +25,12 @@ func TestExplain(t *testing.T) {
 	}
 	if got := Explain(errors.New("plain")); got != "plain" {
 		t.Errorf("Explain(plain) = %q", got)
+	}
+	if got := Advice(fmt.Errorf("one-shot: %w", auth)); !strings.Contains(got, "api_key") {
+		t.Errorf("Advice(wrapped auth) = %q; want what to check", got)
+	}
+	if got := Advice(other); got != "" {
+		t.Errorf("Advice(network) = %q; want none", got)
 	}
 }
 

@@ -100,6 +100,9 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] One-letter answers and commands work in any layout: the TUI takes the US key the kitty protocol reports (`BaseCode`), and a table of the Cyrillic layouts (`internal/console.QWERTY`) covers terminals without it and the line prompts; text typed into the input is never rewritten
 - [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
 
+Merged under the scope exception of [README.md](README.md) ("Branch per work package"), 2026-10-18: interactive configuration (`hint setup`, `hint config`, `/config`, `internal/config` schema and in-place writes) grew inside this branch because a rejected key in the TUI needed it, and the branch also wrote down WP1.6 and WP1.7.
+Splitting it after review had started would have cost a rebase of reviewed commits for no gain in what `develop` receives.
+
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
 Both need the protocol and the core before any UI, and WP1.4 does not touch the protocol.
 

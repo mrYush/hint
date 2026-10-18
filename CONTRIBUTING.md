@@ -194,7 +194,8 @@ after it is merged into `develop`/`main`.
    `develop` as described above. Pull requests target `develop` (only
    `release/*` and `hotfix/*` PRs target `main`).
 2. Keep PRs focused: one work package, one fix, or one document per PR where
-   practical.
+   practical. Scope that grew inside a branch follows the exception in
+   [docs/plan/README.md](docs/plan/README.md) ("Branch per work package").
 3. Write tests with the change, not after it. Phase 0 targets ≥ 70% coverage
    on the agent loop, tools, and permission logic, and golden tests guard the
    session wire format — a PR that lowers these gates needs a stated reason.

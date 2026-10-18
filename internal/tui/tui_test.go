@@ -741,6 +741,21 @@ func TestFailedTurnExplainsAuth(t *testing.T) {
 	}
 }
 
+// TestFailedTurnWithoutAnErrorEvent: a core that ends a turn with
+// FinishError and sends no error event first breaks the contract; the
+// TUI reports the failure instead of dereferencing a nil error.
+func TestFailedTurnWithoutAnErrorEvent(t *testing.T) {
+	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
+		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
+	}}
+	h := newHarness(t, eng, Options{})
+	h.submit("hi")
+	h.pump(until[turnDoneMsg])
+	if v := h.view(); !strings.Contains(v, "without an error event") {
+		t.Errorf("a failure with no error event is not reported:\n%s", v)
+	}
+}
+
 func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
 	var savedName string
 	var saved map[string]string
