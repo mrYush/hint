@@ -53,14 +53,14 @@ func TestSaveRemindsAboutAnUnsetVariableAndAnOverridingFile(t *testing.T) {
 	s, _ := testSetup(t)
 	project := filepath.Join(t.TempDir(), ".hint", "config.yaml")
 	s.locs.Read = []string{project}
-	msg, err := s.save("api-bar", "", "", "${HINT_TEST_SURELY_UNSET}")
+	msg, err := s.save("api-bar", map[string]string{"api_key": "${HINT_TEST_SURELY_UNSET}"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(msg, "HINT_TEST_SURELY_UNSET is not set in this shell") || !strings.Contains(msg, project+" is read after the global file") {
 		t.Errorf("message = %q", msg)
 	}
-	if _, err := (&setupInfo{}).save("a", "", "", ""); err == nil {
+	if _, err := (&setupInfo{}).save("a", nil); err == nil {
 		t.Error("saved without anywhere to write")
 	}
 }
@@ -162,5 +162,61 @@ func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
 	key, err = askKey(context.Background(), &secrets{keys: []string{""}}, &out, false)
 	if err != nil || key != "" {
 		t.Errorf("optional key = %q, %v", key, err)
+	}
+}
+
+func TestConfigSetUnsetShow(t *testing.T) {
+	home, cwd := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("API_BAR_KEY", "sk-from-env-1234567890")
+	t.Setenv("HOME", home)
+	s := newSetupInfo(nil, cwd, config.Flags{})
+	s.cwd = cwd
+
+	if _, err := s.set("overview.depth", "-3", false); err == nil {
+		t.Error("a negative depth was written")
+	}
+	if _, err := s.set("providers.api-bar.api_key", "${API_BAR_KEY}", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.set("overview.depth", "4", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.set("providers.api-bar.api_key", "sk-literal", true); err == nil || !strings.Contains(err.Error(), "git") {
+		t.Errorf("a literal key went into the project file: %v", err)
+	}
+	if _, err := s.set("providers.api-bar.api_key", "${OTHER}", true); err != nil {
+		t.Errorf("a ${VAR} key was refused for the project file: %v", err)
+	}
+	project, err := os.ReadFile(filepath.Join(cwd, ".hint", "config.yaml"))
+	if err != nil || !strings.Contains(string(project), "depth: 4") {
+		t.Fatalf("project file = %q, %v", project, err)
+	}
+
+	// The project value wins; show says so, with the key masked.
+	s.locs = config.Locate(home, cwd, os.LookupEnv)
+	t.Setenv("OTHER", "sk-other-0987654321")
+	out, err := s.show()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"overview.depth = 4", "providers.api-bar.kind = openai", "providers.api-bar.header_timeout = (unset)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("show lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "sk-other-0987654321") {
+		t.Errorf("show printed the key:\n%s", out)
+	}
+
+	// Unset in the project hands the key back to the global layer.
+	if _, err := s.unset("overview.depth", true); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := s.show(); !strings.Contains(out, "overview.depth = 2") {
+		t.Errorf("after unset the default should apply:\n%s", out)
+	}
+	if !strings.Contains(keysText(), "providers.<profile>.context_window") {
+		t.Error("keys does not list the profile fields")
 	}
 }

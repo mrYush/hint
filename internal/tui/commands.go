@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
+
+	"github.com/mrYush/hint/internal/config"
 )
 
 // command is one slash command of the input line. The same table drives
@@ -17,12 +19,31 @@ import (
 type command struct {
 	name string
 	help string
-	// args are the arguments the command takes, a closed set; none means
-	// the command takes no argument. Completion offers exactly these.
-	args []string
+	// next says what may follow the arguments typed so far; nil means the
+	// command takes no argument.
+	next func(m model, prev []string) argSpec
 	// enabled says whether the command makes sense in the current state;
 	// nil means always.
 	enabled func(m model) bool
+}
+
+// argSpec is what may come at one argument position: the candidates Tab
+// offers, and whether an argument is expected there even when nothing
+// can be offered (a free value such as a model name).
+type argSpec struct {
+	cands    []string
+	expected bool
+}
+
+// fixed is the next of a command with one optional argument from a
+// closed set.
+func fixed(args ...string) func(model, []string) argSpec {
+	return func(_ model, prev []string) argSpec {
+		if len(prev) == 0 {
+			return argSpec{cands: args}
+		}
+		return argSpec{}
+	}
 }
 
 // commands is the table. It is a function so that a later source of
@@ -31,13 +52,78 @@ type command struct {
 func commands() []command {
 	return []command{
 		{name: "/copy", help: "copy the last answer to the clipboard (or: question, code, all)",
-			args: []string{"answer", "question", "code", "all"}, enabled: func(m model) bool { return len(m.entries) > 0 }},
+			next: fixed("answer", "question", "code", "all"), enabled: func(m model) bool { return len(m.entries) > 0 }},
 		{name: "/mouse", help: "toggle mouse mode: wheel scrolls, a click copies the block under it (off: select with the terminal)"},
-		{name: "/setup", help: "fill in the provider configuration (profile, base URL, model, API key)", enabled: func(m model) bool { return m.setup != nil && m.setup.Save != nil && !m.busy }},
+		{name: "/setup", help: "fill in a provider profile: kind, base URL, API key (masked), model, context window, header timeout",
+			enabled: func(m model) bool { return m.setup != nil && m.setup.Save != nil && !m.busy }},
+		{name: "/config", help: "show | keys | set [--project] <key> <value> | unset [--project] <key>: any config key, checked before it is written",
+			next: configArgs, enabled: func(m model) bool { return m.setup != nil && m.setup.Set != nil }},
 		{name: "/sessions", help: "list this directory's sessions and resume one", enabled: func(m model) bool { return !m.busy }},
 		{name: "/help", help: "show this list"},
 		{name: "/exit", help: "leave (ctrl+d does too); /quit is the same"},
 	}
+}
+
+// configArgs completes /config: the subcommand, --project, a key from the
+// schema, and for a typed key its allowed values.
+func configArgs(m model, prev []string) argSpec {
+	if len(prev) == 0 {
+		return argSpec{cands: []string{"show", "keys", "set", "unset"}}
+	}
+	sub, rest := prev[0], prev[1:]
+	if sub != "set" && sub != "unset" {
+		return argSpec{}
+	}
+	if len(rest) > 0 && rest[0] == "--project" {
+		rest = rest[1:]
+	}
+	switch len(rest) {
+	case 0:
+		cands := configKeys(m, sub == "unset")
+		if len(prev) == 1 {
+			cands = append([]string{"--project"}, cands...)
+		}
+		return argSpec{cands: cands, expected: true}
+	case 1:
+		if sub == "unset" {
+			return argSpec{}
+		}
+		k, _, err := config.LookupKey(rest[0])
+		if err != nil {
+			return argSpec{expected: true}
+		}
+		switch k.Type {
+		case config.TypeEnum:
+			return argSpec{cands: k.Enum, expected: true}
+		case config.TypeBool:
+			return argSpec{cands: []string{"true", "false"}, expected: true}
+		case config.TypeString, config.TypeInt, config.TypeDuration, config.TypeSecret:
+			// A free value: nothing to offer, but one is expected.
+		}
+		return argSpec{expected: true}
+	}
+	return argSpec{}
+}
+
+// configKeys are the keys /config offers: the top-level ones, and the
+// fields of the profile in use under its name. A key is not offered for
+// set — typed into the input line it would sit there in plain sight;
+// /setup takes it masked.
+func configKeys(m model, withSecrets bool) []string {
+	var out []string
+	for _, k := range config.Keys() {
+		field, isProfile := k.Profile()
+		switch {
+		case k.Type == config.TypeSecret && !withSecrets:
+		case isProfile:
+			if m.setup != nil && m.setup.Profile != "" {
+				out = append(out, "providers."+m.setup.Profile+"."+field)
+			}
+		default:
+			out = append(out, k.Path)
+		}
+	}
+	return out
 }
 
 // available returns the commands that can be used right now.
@@ -62,34 +148,73 @@ func helpText() string {
 }
 
 // complete returns the whole-line replacements Tab may offer for input:
-// command names while the first word is being typed, that command's
-// arguments after it. Anything not starting with "/" is a question, and a
-// question has no deterministic completion.
+// command names while the first word is being typed, then what the
+// command's next says about the argument under the cursor. Anything not
+// starting with "/" is a question, and a question has no deterministic
+// completion.
 func (m model) complete(input string) []string {
 	if !strings.HasPrefix(input, "/") || strings.Contains(input, "\n") {
 		return nil
 	}
-	name, rest, hasArg := strings.Cut(input, " ")
-	var out []string
-	if !hasArg {
+	cmd, prev, partial, ok := m.parseLine(input)
+	if !ok {
+		var out []string
 		for _, c := range m.available() {
-			if strings.HasPrefix(c.name, name) {
+			if strings.HasPrefix(c.name, partial) {
 				out = append(out, c.name)
 			}
 		}
 		return out
 	}
-	for _, c := range m.available() {
-		if c.name != name {
-			continue
-		}
-		for _, a := range c.args {
-			if strings.HasPrefix(a, strings.TrimLeft(rest, " ")) {
-				out = append(out, name+" "+a)
-			}
+	if cmd.next == nil {
+		return nil
+	}
+	head := strings.Join(append([]string{cmd.name}, prev...), " ") + " "
+	var out []string
+	for _, c := range cmd.next(m, prev).cands {
+		if strings.HasPrefix(c, partial) {
+			out = append(out, head+c)
 		}
 	}
 	return out
+}
+
+// parseLine splits a command line into the command, the finished
+// arguments and the word under the cursor. ok is false while the command
+// name itself is being typed (partial is then that name) or names no
+// available command.
+func (m model) parseLine(input string) (cmd command, prev []string, partial string, ok bool) {
+	fields := strings.Fields(input)
+	if len(fields) == 0 {
+		return command{}, nil, "", false
+	}
+	if !strings.HasSuffix(input, " ") {
+		partial, fields = fields[len(fields)-1], fields[:len(fields)-1]
+	}
+	if len(fields) == 0 {
+		return command{}, nil, partial, false
+	}
+	for _, c := range m.available() {
+		if c.name == fields[0] {
+			return c, fields[1:], partial, true
+		}
+	}
+	return command{}, nil, partial, false
+}
+
+// wantsMore says whether a completed line expects another word, so that
+// Tab can type the space before it. A key prefix ending in "." does not:
+// its continuation is the same word.
+func (m model) wantsMore(line string) bool {
+	if strings.HasSuffix(line, ".") {
+		return false
+	}
+	cmd, prev, _, ok := m.parseLine(line + " ")
+	if !ok || cmd.next == nil {
+		return false
+	}
+	spec := cmd.next(m, prev)
+	return spec.expected || len(spec.cands) > 0
 }
 
 // completion is a Tab in progress: the line the candidates were computed
@@ -122,10 +247,9 @@ func (m model) tab() model {
 			m.status = "no command matches " + cur
 		}
 	case 1:
-		// A command that takes arguments gets the space that starts them;
-		// a finished command or argument is left as it is.
+		// The space before the next word is typed when one is expected.
 		m.ta.SetValue(cands[0])
-		if !strings.Contains(cands[0], " ") && len(commandArgs(cands[0])) > 0 {
+		if m.wantsMore(cands[0]) {
 			m.ta.SetValue(cands[0] + " ")
 		}
 	default:
@@ -137,17 +261,6 @@ func (m model) tab() model {
 		m.status = strings.Join(cands, "  ")
 	}
 	return m
-}
-
-// commandArgs is the argument set of the command a completed line names.
-func commandArgs(line string) []string {
-	name, _, _ := strings.Cut(line, " ")
-	for _, c := range commands() {
-		if c.name == name {
-			return c.args
-		}
-	}
-	return nil
 }
 
 func commonPrefix(ss []string) string {

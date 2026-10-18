@@ -28,6 +28,10 @@ const defaultBaseURL = "https://api-bar.ru/route/openai"
 type setupInfo struct {
 	profile config.Profile
 	locs    config.Locations
+	// cwd and flags are what the run was started with, so that showing
+	// the effective configuration resolves the same layers.
+	cwd   string
+	flags config.Flags
 	// firstRun is setup before any session: the start carries on with
 	// what is written instead of asking for a restart.
 	firstRun bool
@@ -41,12 +45,12 @@ func (s *setupInfo) needsKey() bool {
 
 // newSetupInfo describes the configuration cfg was loaded from. cfg may
 // be nil (loading failed): setup then starts from nothing.
-func newSetupInfo(cfg *config.Config, cwd string) *setupInfo {
+func newSetupInfo(cfg *config.Config, cwd string, flags config.Flags) *setupInfo {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = ""
 	}
-	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv)}
+	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv), cwd: cwd, flags: flags}
 	if cfg != nil {
 		if p, err := cfg.Default(); err == nil {
 			s.profile = p
@@ -80,15 +84,14 @@ func (s *setupInfo) describe() string {
 // save writes the answers to the global config and says what the user has
 // to do next. The key is written as given: a literal, or ${VAR} to be
 // read from the environment.
-func (s *setupInfo) save(profile, baseURL, model, key string) (string, error) {
+func (s *setupInfo) save(profile string, values map[string]string) (string, error) {
 	if s.locs.Global == "" {
-		return "", errors.New("no home directory and no XDG_CONFIG_HOME: there is nowhere to write the config")
+		return "", errNowhere
 	}
-	if err := config.WriteProfile(s.locs.Global, config.ProfileUpdate{
-		Name: profile, BaseURL: baseURL, Model: model, APIKey: key,
-	}); err != nil {
+	if err := config.WriteProfile(s.locs.Global, profile, values); err != nil {
 		return "", err
 	}
+	key := values["api_key"]
 	msg := "saved to " + s.locs.Global
 	if !s.firstRun {
 		msg += "; restart hint to use it (hint models tries the profile first)"
@@ -121,9 +124,11 @@ func (s *setupInfo) tuiSetup() *tui.Setup {
 	return &tui.Setup{
 		Describe: s.describe(),
 		Profile:  s.profile.Name,
-		BaseURL:  s.profile.BaseURL,
-		Model:    s.profile.Model,
+		Values:   s.currentValues(),
 		Save:     s.save,
+		Set:      s.set,
+		Unset:    s.unset,
+		Show:     s.show,
 	}
 }
 
@@ -238,7 +243,7 @@ func askSetup(ctx context.Context, in setupIO, out io.Writer, s *setupInfo) erro
 	if err != nil {
 		return err
 	}
-	msg, err := s.save(profile, baseURL, model, key)
+	msg, err := s.save(profile, map[string]string{"base_url": baseURL, "model": model, "api_key": key})
 	if err != nil {
 		return err
 	}
@@ -317,7 +322,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 	if err != nil {
 		return false
 	}
-	info := newSetupInfo(nil, cwd)
+	info := newSetupInfo(nil, cwd, config.Flags{})
 	info.firstRun = true
 	if missingKey {
 		info.profile.Name = noKey.Profile
@@ -361,7 +366,7 @@ in a repository.`,
 			}
 			// A config that does not load yet is the reason to run setup.
 			cfg, _ := config.Load(*flags)
-			info := newSetupInfo(cfg, cwd)
+			info := newSetupInfo(cfg, cwd, *flags)
 			fmt.Fprintln(os.Stderr, info.describe())
 			return askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
 		},
