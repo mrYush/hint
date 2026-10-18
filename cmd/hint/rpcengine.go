@@ -182,7 +182,7 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		limits:   limits,
 		notices:  as.notices,
 		trace:    as.trace,
-		setup:    newSetupInfo(as.cfg, as.cwd),
+		setup:    newSetupInfo(as.cfg, as.cwd, as.opts.flags),
 	}, nil
 }
 

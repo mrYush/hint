@@ -15,6 +15,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/shell"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -199,7 +200,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// user presses enter. A list or a dialog has nothing to paste into.
 		if m.setupForm != nil {
 			var cmd tea.Cmd
-			m.setupForm.in[m.setupForm.focus], cmd = m.setupForm.in[m.setupForm.focus].Update(msg)
+			fl := &m.setupForm.fields[m.setupForm.focus]
+			fl.in, cmd = fl.in.Update(msg)
 			return m, cmd
 		}
 		if m.picker != nil || m.dialog != nil {
@@ -380,6 +382,9 @@ func (m *model) resize(w, h int) {
 	if m.dialog != nil {
 		m.dialog = newDialog(m.dialog.req, m.dialog.reply, w, m.bodyHeight(), m.sty)
 	}
+	if m.setupForm != nil {
+		m.setupForm.setWidth(w)
+	}
 }
 
 // bodyHeight is what the transcript, the dialog or the list may use.
@@ -474,6 +479,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		return m, nil
 	}
 	switch name {
+	case "/config":
+		return m.configCommand(fields[1:])
 	case "/exit":
 		return m.quit()
 	case "/help":
@@ -531,4 +538,58 @@ func (m model) click(mouse tea.Mouse) (model, tea.Cmd) {
 	}
 	m.status = copied("block", m.entries[i].text)
 	return m, copyCmd(m.entries[i].text)
+}
+
+// configCommand runs /config: show and keys print, set and unset change a
+// file. The answer, or why there is none, goes to the transcript.
+func (m model) configCommand(args []string) (model, tea.Cmd) {
+	sub := "show"
+	if len(args) > 0 {
+		sub, args = args[0], args[1:]
+	}
+	project := len(args) > 0 && args[0] == "--project"
+	if project {
+		args = args[1:]
+	}
+	var text string
+	var err error
+	switch {
+	case sub == "show":
+		text, err = m.setup.Show()
+	case sub == "keys":
+		text = configKeysHelp()
+	case sub == "set" && len(args) >= 2:
+		if k, _, lerr := config.LookupKey(args[0]); lerr == nil && k.Type == config.TypeSecret {
+			err = errors.New("a key typed here stays in the input line in plain sight: use /setup, which masks it")
+			break
+		}
+		text, err = m.setup.Set(args[0], strings.Join(args[1:], " "), project)
+	case sub == "unset" && len(args) == 1:
+		text, err = m.setup.Unset(args[0], project)
+	default:
+		m.status = "usage: /config show | keys | set [--project] <key> <value> | unset [--project] <key>"
+		return m, nil
+	}
+	if err != nil {
+		m.status = strings.TrimPrefix(err.Error(), "config: ")
+		return m, nil
+	}
+	m.add(entry{kind: entryNotice, text: text, done: true})
+	return m, nil
+}
+
+// configKeysHelp is /config keys: every key with its type hint and help.
+func configKeysHelp() string {
+	var b strings.Builder
+	for _, k := range config.Keys() {
+		fmt.Fprintf(&b, "%s — %s", strings.Replace(k.Path, "*", "<profile>", 1), k.Help)
+		switch {
+		case len(k.Enum) > 0:
+			fmt.Fprintf(&b, " (%s)", strings.Join(k.Enum, " | "))
+		case k.Default != "":
+			fmt.Fprintf(&b, " (default %s)", k.Default)
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

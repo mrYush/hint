@@ -203,12 +203,14 @@ func (h *harness) run(cmd tea.Cmd) {
 // specialKeys are the keys without a character of their own that the
 // tests press, under the names tea.KeyPressMsg.String gives them.
 var specialKeys = map[string]tea.KeyPressMsg{
-	"enter":  {Code: tea.KeyEnter},
-	"esc":    {Code: tea.KeyEscape},
-	"ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
-	"ctrl+d": {Code: 'd', Mod: tea.ModCtrl},
-	"ctrl+y": {Code: 'y', Mod: tea.ModCtrl},
-	"tab":    {Code: tea.KeyTab},
+	"enter":     {Code: tea.KeyEnter},
+	"esc":       {Code: tea.KeyEscape},
+	"ctrl+c":    {Code: 'c', Mod: tea.ModCtrl},
+	"ctrl+d":    {Code: 'd', Mod: tea.ModCtrl},
+	"ctrl+y":    {Code: 'y', Mod: tea.ModCtrl},
+	"tab":       {Code: tea.KeyTab},
+	"ctrl+s":    {Code: 's', Mod: tea.ModCtrl},
+	"backspace": {Code: tea.KeyBackspace},
 }
 
 // keyMsg is the key press for a name: one of specialKeys, or a single
@@ -729,12 +731,14 @@ func TestFailedTurnExplainsAuth(t *testing.T) {
 }
 
 func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
-	var saved []string
+	var savedName string
+	var saved map[string]string
 	setup := &Setup{
 		Describe: "config in use: /home/u/.config/hint/config.yaml",
-		Profile:  "api-bar", BaseURL: "https://gw.test", Model: "m1",
-		Save: func(profile, baseURL, model, key string) (string, error) {
-			saved = []string{profile, baseURL, model, key}
+		Profile:  "api-bar",
+		Values:   map[string]string{"kind": "openai", "base_url": "https://gw.test", "model": "m1"},
+		Save: func(profile string, values map[string]string) (string, error) {
+			savedName, saved = profile, values
 			return "saved to /home/u/.config/hint/config.yaml", nil
 		},
 	}
@@ -755,21 +759,38 @@ func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
 	if h.m.setupForm == nil {
 		t.Fatal("/setup did not open the form")
 	}
-	if v := h.view(); !strings.Contains(v, "gw.test") || !strings.Contains(v, "m1") {
-		t.Errorf("form does not start from the current values:\n%s", v)
+	// Every profile field of the schema is in the form, empty ones with
+	// what leaving them empty means.
+	v := h.view()
+	for _, want := range []string{"gw.test", "m1", "kind", "api key", "context window", "header timeout", "default 60s"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("form lacks %q:\n%s", want, v)
+		}
 	}
-	// Three enters move to the key; the key is typed, masked, and saved.
+	// profile, kind, base url → the key: typed, masked.
 	h.press("enter", "enter", "enter")
 	h.typeText("sk-secret-123")
 	if v := h.view(); strings.Contains(v, "sk-secret-123") {
 		t.Errorf("the key is shown on screen:\n%s", v)
 	}
-	h.run(h.press("enter"))
-	if h.m.setupForm != nil {
-		t.Fatalf("form still open: %+v", h.m.setupForm.err)
+	// model → context window: a bad number is refused, on its field.
+	h.press("enter", "enter")
+	h.typeText("lots")
+	h.press("ctrl+s")
+	if h.m.setupForm == nil || !strings.Contains(h.view(), "whole number") || h.m.setupForm.fields[h.m.setupForm.focus].label != "context window" {
+		t.Fatalf("a bad context window was not refused on its field:\n%s", h.view())
 	}
-	if want := []string{"api-bar", "https://gw.test", "m1", "sk-secret-123"}; strings.Join(saved, "|") != strings.Join(want, "|") {
-		t.Errorf("Save got %v, want %v", saved, want)
+	for range "lots" {
+		h.press("backspace")
+	}
+	h.typeText("128000")
+	h.run(h.press("ctrl+s"))
+	if h.m.setupForm != nil {
+		t.Fatalf("form still open: %q", h.m.setupForm.err)
+	}
+	want := map[string]string{"kind": "openai", "base_url": "https://gw.test", "api_key": "sk-secret-123", "model": "m1", "context_window": "128000"}
+	if savedName != "api-bar" || fmt.Sprint(saved) != fmt.Sprint(want) {
+		t.Errorf("Save got %q %v, want api-bar %v", savedName, saved, want)
 	}
 	if v := h.view(); !strings.Contains(v, "saved to /home/u") || strings.Contains(v, "sk-secret-123") {
 		t.Errorf("confirmation missing or leaking:\n%s", v)
@@ -777,13 +798,12 @@ func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
 }
 
 func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
-	setup := &Setup{Describe: "d", Profile: "p", Save: func(string, string, string, string) (string, error) {
+	setup := &Setup{Describe: "d", Profile: "p", Save: func(string, map[string]string) (string, error) {
 		return "", errors.New("permission denied")
 	}}
 	h := newHarness(t, &fakeEngine{}, Options{Setup: setup})
 	h.submit("/setup")
-	h.press("enter", "enter", "enter")
-	h.run(h.press("enter"))
+	h.run(h.press("ctrl+s"))
 	if h.m.setupForm == nil || !strings.Contains(h.view(), "permission denied") {
 		t.Fatalf("a failed save closed the form or hid the reason:\n%s", h.view())
 	}
@@ -791,11 +811,86 @@ func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
 	if h.m.setupForm != nil {
 		t.Error("esc did not close the form")
 	}
-	// A core in another process offers no form.
+	// A core in another process offers neither the form nor /config.
 	remote := newHarness(t, &fakeEngine{}, Options{Setup: &Setup{Describe: "elsewhere"}})
 	for _, c := range remote.m.complete("/") {
-		if c == "/setup" {
-			t.Errorf("/setup offered without a way to save: %v", remote.m.complete("/"))
+		if c == "/setup" || c == "/config" {
+			t.Errorf("%s offered without a way to save: %v", c, remote.m.complete("/"))
 		}
+	}
+}
+
+func TestConfigCommand(t *testing.T) {
+	type call struct {
+		key, value string
+		project    bool
+	}
+	var sets []call
+	var unsets []call
+	setup := &Setup{
+		Describe: "d", Profile: "api-bar",
+		Save: func(string, map[string]string) (string, error) { return "", nil },
+		Set: func(key, value string, project bool) (string, error) {
+			sets = append(sets, call{key, value, project})
+			return key + " set", nil
+		},
+		Unset: func(key string, project bool) (string, error) {
+			unsets = append(unsets, call{key: key, project: project})
+			return key + " removed", nil
+		},
+		Show: func() (string, error) { return "overview.depth = 2", nil },
+	}
+	h := newHarness(t, &fakeEngine{}, Options{Setup: setup})
+
+	// Tab walks the grammar: subcommand, --project or a key, a value.
+	h.typeText("/con")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/config " {
+		t.Fatalf("/con + tab = %q", got)
+	}
+	h.typeText("se")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/config set " {
+		t.Fatalf("/config se + tab = %q", got)
+	}
+	h.typeText("overview.d")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/config set overview.depth " {
+		t.Fatalf("key completion = %q", got)
+	}
+	h.m.ta.Reset()
+	h.typeText("/config set providers.api-bar.k")
+	h.press("tab")
+	if got := h.m.ta.Value(); got != "/config set providers.api-bar.kind " {
+		t.Fatalf("profile field completion = %q", got)
+	}
+	h.press("tab")
+	if st := h.m.statusLine(); !strings.Contains(st, "ollama") || !strings.Contains(st, "openai") {
+		t.Errorf("enum values not offered: %q", st)
+	}
+	h.m.ta.Reset()
+	for _, c := range h.m.complete("/config set ") {
+		if strings.HasSuffix(c, ".api_key") {
+			t.Errorf("the key is offered for set: %v", h.m.complete("/config set "))
+		}
+	}
+
+	h.m.ta.Reset()
+	h.submit("/config set --project overview.depth 3")
+	h.submit("/config unset instructions.budget")
+	if len(sets) != 1 || sets[0] != (call{"overview.depth", "3", true}) || len(unsets) != 1 || unsets[0].key != "instructions.budget" || unsets[0].project {
+		t.Errorf("sets %v unsets %v", sets, unsets)
+	}
+	h.submit("/config set providers.api-bar.api_key sk-x")
+	if len(sets) != 1 || !strings.Contains(h.m.statusLine(), "/setup") {
+		t.Errorf("a key was accepted on the command line: %v, %q", sets, h.m.statusLine())
+	}
+	h.submit("/config")
+	if !strings.Contains(h.view(), "overview.depth = 2") {
+		t.Errorf("/config did not show the configuration:\n%s", h.view())
+	}
+	h.submit("/config keys")
+	if !strings.Contains(h.view(), "providers.<profile>.header_timeout") {
+		t.Errorf("/config keys did not list the keys:\n%s", h.view())
 	}
 }

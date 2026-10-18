@@ -3,7 +3,8 @@
 # Copy this file to ~/.config/hint/config.yaml (or $XDG_CONFIG_HOME/hint/config.yaml)
 # for settings that apply everywhere, and/or to .hint/config.yaml in a repository
 # for settings that apply to that project only. `hint setup` writes the global file
-# for you and keeps whatever else is in it.
+# for you and keeps whatever else is in it; `hint config set [--project] <key> <value>`
+# changes one key, checked against its type (`hint config keys` lists them).
 #
 # Layers, most specific first: command-line flags, HINT_* environment variables,
 # the project file, the global file, the built-in defaults. A key a more specific

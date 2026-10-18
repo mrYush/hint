@@ -12,7 +12,7 @@ import (
 
 func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hint", "config.yaml")
-	err := WriteProfile(path, ProfileUpdate{Name: "api-bar", BaseURL: "https://example.test/v1", APIKey: "${API_BAR_KEY}", Model: "m"})
+	err := WriteProfile(path, "api-bar", map[string]string{"base_url": "https://example.test/v1", "api_key": "${API_BAR_KEY}", "model": "m"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ default_provider: api-bar
 	if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProfile(path, ProfileUpdate{Name: "api-bar", APIKey: "${NEW}"}); err != nil {
+	if err := WriteProfile(path, "api-bar", map[string]string{"api_key": "${NEW}"}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)
@@ -76,7 +76,7 @@ func TestWriteProfileAddsAProfileWithoutChangingTheDefault(t *testing.T) {
 	if err := os.WriteFile(path, []byte("providers:\n  - name: a\n    kind: openai\ndefault_provider: a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProfile(path, ProfileUpdate{Name: "b", APIKey: "k"}); err != nil {
+	if err := WriteProfile(path, "b", map[string]string{"api_key": "k"}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)
@@ -91,10 +91,10 @@ func TestWriteProfileRefusesWhatItCannotEdit(t *testing.T) {
 	if err := os.WriteFile(path, []byte("providers: nope\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProfile(path, ProfileUpdate{Name: "a"}); err == nil {
+	if err := WriteProfile(path, "a", nil); err == nil {
 		t.Error("a providers value that is not a list was overwritten")
 	}
-	if err := WriteProfile(path, ProfileUpdate{}); err == nil {
+	if err := WriteProfile(path, "", nil); err == nil {
 		t.Error("a profile without a name was written")
 	}
 }
@@ -146,25 +146,147 @@ func TestExampleConfigIsCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	documented := map[string]bool{}
-	var walk func(n *yaml.Node)
-	walk = func(n *yaml.Node) {
-		for i, c := range n.Content {
-			if n.Kind == yaml.MappingNode && i%2 == 0 {
-				documented[c.Value] = true
+	var walk func(n *yaml.Node, prefix string)
+	walk = func(n *yaml.Node, prefix string) {
+		switch n.Kind {
+		case yaml.DocumentNode:
+			walk(n.Content[0], prefix)
+		case yaml.SequenceNode:
+			for _, c := range n.Content {
+				walk(c, prefix+"*.")
 			}
-			walk(c)
+		case yaml.MappingNode:
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				documented[prefix+n.Content[i].Value] = true
+				walk(n.Content[i+1], prefix+n.Content[i].Value+".")
+			}
 		}
 	}
-	walk(&doc)
-	for _, typ := range []reflect.Type{reflect.TypeOf(fileConfig{}), reflect.TypeOf(fileProfile{}), reflect.TypeOf(fileInstructions{}), reflect.TypeOf(fileOverview{})} {
+	walk(&doc, "")
+	for _, k := range Keys() {
+		if !documented[k.Path] {
+			t.Errorf("config key %q is in the schema but not in config.example.yaml", k.Path)
+		}
+	}
+}
+
+// TestSchemaCoversTheLoader keeps the key table and the loader's structs
+// in step: every key the loader reads is in the table, and the other way
+// round, so that setup and /config can neither miss a key nor offer one
+// that is ignored.
+func TestSchemaCoversTheLoader(t *testing.T) {
+	read := map[string]bool{}
+	collect := func(typ reflect.Type, prefix string) {
 		for i := 0; i < typ.NumField(); i++ {
-			key := typ.Field(i).Tag.Get("yaml")
-			if key == "" || key == "api_url" || (typ == reflect.TypeOf(fileConfig{}) && (key == "api_key" || key == "model")) {
-				continue // the legacy flat schema is deliberately not documented
-			}
-			if !documented[key] {
-				t.Errorf("config key %q (%s) is not in config.example.yaml", key, typ.Name())
+			if tag := typ.Field(i).Tag.Get("yaml"); tag != "" {
+				read[prefix+tag] = true
 			}
 		}
+	}
+	collect(reflect.TypeOf(fileProfile{}), "providers.*.")
+	collect(reflect.TypeOf(fileInstructions{}), "instructions.")
+	collect(reflect.TypeOf(fileOverview{}), "overview.")
+	for _, top := range []string{"default_provider", "fallback_provider"} {
+		read[top] = true
+	}
+	delete(read, "providers.*.name") // the profile's identity, not a settable field
+	inTable := map[string]bool{}
+	for _, k := range Keys() {
+		inTable[k.Path] = true
+		if !read[k.Path] {
+			t.Errorf("schema key %q is not read by the loader", k.Path)
+		}
+	}
+	for path := range read {
+		if !inTable[path] {
+			t.Errorf("the loader reads %q but the schema does not list it", path)
+		}
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	cases := []struct {
+		path, in, want string
+		bad            bool
+	}{
+		{"overview.depth", " 3 ", "3", false},
+		{"overview.depth", "-1", "", true},
+		{"instructions.budget", "big", "", true},
+		{"instructions.summarize", "TRUE", "true", false},
+		{"providers.x.header_timeout", "15m", "15m", false},
+		{"providers.x.header_timeout", "15", "", true},
+		{"providers.x.kind", "ollama", "ollama", false},
+		{"providers.x.kind", "anthropic", "", true},
+		{"providers.x.model", "", "", true},
+	}
+	for _, c := range cases {
+		k, _, err := LookupKey(c.path)
+		if err != nil {
+			t.Fatalf("LookupKey(%q): %v", c.path, err)
+		}
+		got, err := k.Normalize(c.in)
+		if (err != nil) != c.bad || got != c.want {
+			t.Errorf("%s = %q: got %q, %v", c.path, c.in, got, err)
+		}
+	}
+	for _, bad := range []string{"nope", "providers.x", "providers.x.colour", "providers..model", "overview"} {
+		if _, _, err := LookupKey(bad); err == nil {
+			t.Errorf("LookupKey(%q) accepted", bad)
+		}
+	}
+}
+
+func TestEditSetsAndUnsetsInOneWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("# keep me\noverview:\n  depth: 2 # levels\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Edit(path, func(d *Document) error {
+		for _, kv := range [][2]string{{"overview.max_entries", "50"}, {"instructions.summarize", "yes"}, {"providers.local.model", "8"}, {"providers.local.kind", "ollama"}} {
+			if err := d.Set(kv[0], kv[1]); err != nil {
+				return err
+			}
+		}
+		return d.Unset("overview.depth")
+	})
+	if err == nil {
+		t.Fatal("\"yes\" was accepted as a boolean")
+	}
+	// Nothing was written by the failed edit.
+	if data, _ := os.ReadFile(path); !strings.Contains(string(data), "depth: 2") {
+		t.Fatalf("a failed edit changed the file:\n%s", data)
+	}
+
+	err = Edit(path, func(d *Document) error {
+		for _, kv := range [][2]string{{"overview.max_entries", "50"}, {"instructions.summarize", "true"}, {"providers.local.model", "8"}, {"providers.local.kind", "ollama"}} {
+			if err := d.Set(kv[0], kv[1]); err != nil {
+				return err
+			}
+		}
+		if err := d.Unset("overview.depth"); err != nil {
+			return err
+		}
+		return d.Unset("fallback_provider") // not there: fine
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	got := string(data)
+	for _, want := range []string{"# keep me", "max_entries: 50", "summarize: true", "name: local", "kind: ollama"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("result lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "depth:") {
+		t.Errorf("unset left the key:\n%s", got)
+	}
+	if strings.Contains(got, "default_provider") {
+		t.Errorf("setting a profile field made the profile the default:\n%s", got)
+	}
+	// The model "8" must come back as a string, which the loader requires.
+	var fc fileConfig
+	if err := yaml.Unmarshal(data, &fc); err != nil || fc.Providers[0].Model != "8" {
+		t.Errorf("model read back as %+v, %v", fc.Providers, err)
 	}
 }

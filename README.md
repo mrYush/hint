@@ -210,6 +210,24 @@ the same questions (in the TUI: `/setup`, with the key masked). A project
 `.hint/config.yaml` is never written, so a key does not end up in git.
 Restart `hint` after saving.
 
+`hint config` changes one key at a time without an editor; every value
+is checked against the key's type before anything is written, and the
+file keeps its comments:
+
+```bash
+hint config                                     # what the next start uses, keys masked
+hint config keys                                # every key, default, HINT_* variable, flag
+hint config set overview.depth 3                # the global file
+hint config set --project providers.api-bar.model gpt-4o-mini   # this repository only
+hint config unset --project overview.depth      # back to the global value
+```
+
+In the TUI the same is `/config show | keys | set | unset`, with Tab
+completing the subcommand, the key and, where there is a closed set, the
+value; `/setup` edits every field of a provider profile in one form. An
+API key is set through `/setup` or `hint setup` only, where it is masked,
+and never as a literal into the project file.
+
 ### Models
 
 ```bash
