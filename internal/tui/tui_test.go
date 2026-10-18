@@ -18,16 +18,38 @@ import (
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
-// fakeEngine is the core as the shell sees it: sessions whose turns run
-// a script. The script writes events to out and returns; the fake sends
-// turn_start before it and closes the channel after it.
+// testVersion is the core version the harness serves; the header shows it.
+const testVersion = "test"
+
+// The terminal every model starts at. Wide enough that no assertion
+// depends on wrapping; TestResizeRedraws shrinks it on purpose.
+const (
+	termWidth  = 80
+	termHeight = 24
+)
+
+// turnTimeout bounds how long pump waits for a turn to reach the message
+// a test expects.
+const turnTimeout = 5 * time.Second
+
+// script is what one turn of a fakeSession does: it writes events to out
+// and returns. The session sends turn_start before it and closes out
+// after it, so a script ends with the turn_end it wants reported.
+type script func(ctx context.Context, text string, ask permission.Prompter, out chan<- agentapi.Event)
+
+// fakeEngine is the core as the shell sees it: sessions whose turns run a
+// script. The zero value is usable through newHarness, which fills in the
+// session map and echoScript. infos is what List reports; a test sets it
+// before opening the picker. mu guards sessions and every session's msgs.
 type fakeEngine struct {
 	mu       sync.Mutex
 	sessions map[string]*fakeSession
-	script   func(ctx context.Context, text string, ask permission.Prompter, out chan<- agentapi.Event)
+	script   script
 	infos    []rpc.Info
 }
 
+// fakeSession is one session of a fakeEngine: its id and the questions
+// its turns were given, in order.
 type fakeSession struct {
 	id   string
 	eng  *fakeEngine
@@ -53,11 +75,25 @@ func (e *fakeEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
 	return nil, errors.New("no such session")
 }
 
-func (s *fakeSession) ID() string                   { return s.id }
-func (s *fakeSession) Created() time.Time           { return time.Unix(0, 0) }
-func (s *fakeSession) Messages() []agentapi.Message { return s.msgs }
-func (s *fakeSession) Warnings() []string           { return nil }
-func (s *fakeSession) Close() error                 { return nil }
+// add records a session the engine did not open itself, the way a
+// session recorded by an earlier run would already be on disk.
+func (e *fakeEngine) add(s *fakeSession) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.sessions[s.id] = s
+}
+
+func (s *fakeSession) ID() string         { return s.id }
+func (s *fakeSession) Created() time.Time { return time.Unix(0, 0) }
+func (s *fakeSession) Warnings() []string { return nil }
+func (s *fakeSession) Close() error       { return nil }
+
+// Messages is the session's history: the questions RunTurn recorded.
+func (s *fakeSession) Messages() []agentapi.Message {
+	s.eng.mu.Lock()
+	defer s.eng.mu.Unlock()
+	return s.msgs
+}
 
 func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
 	s.eng.mu.Lock()
@@ -72,29 +108,36 @@ func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.P
 	return out, nil
 }
 
-// echoScript answers "**hi** <text>" in two deltas.
+// echoScript answers "**hi** <text>" in two deltas: enough to see
+// streaming and the markdown rendering of the finished answer.
 func echoScript(_ context.Context, text string, _ permission.Prompter, out chan<- agentapi.Event) {
 	out <- agentapi.Event{Kind: agentapi.EventTextDelta, Text: "**hi** "}
 	out <- agentapi.Event{Kind: agentapi.EventTextDelta, Text: text}
 	out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishStop}
 }
 
-// chanSender is the program's Send for a model driven by hand.
+// chanSender is the program's Send for a model driven by hand: the turn
+// goroutine writes here and pump reads. The buffer must hold whatever a
+// turn produces before the test starts pumping.
 type chanSender chan tea.Msg
 
 func (c chanSender) Send(msg tea.Msg) { c <- msg }
 
-// harness is a model over a served fake engine, with the channel its
-// turns report on.
+// harness is a model over a fake engine served on an in-memory pipe, and
+// the channel its turns report on. Update is driven by hand; a command
+// a test cares about is executed through run.
 type harness struct {
 	t   *testing.T
 	eng *fakeEngine
-	cl  *rpc.Client
-	ctx context.Context
 	m   model
 	ch  chanSender
 }
 
+// newHarness serves eng on a pipe, dials it and builds a model over the
+// client at termWidth×termHeight. Nil fields of eng get their defaults:
+// an empty session map and echoScript. Unless opts names a session or
+// asks for the picker, a recorded session is opened first, as cmd/hint
+// does before it starts the shell.
 func newHarness(t *testing.T, eng *fakeEngine, opts Options) *harness {
 	t.Helper()
 	if eng.sessions == nil {
@@ -106,29 +149,32 @@ func newHarness(t *testing.T, eng *fakeEngine, opts Options) *harness {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	shellConn, core := net.Pipe()
-	srv := &rpc.Server{Engine: eng, Version: "test"}
+	srv := &rpc.Server{Engine: eng, Version: testVersion}
 	go func() { _ = srv.ServeConn(ctx, core) }()
 	cl, err := rpc.Dial(ctx, shellConn, "")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Dial: %v", err)
 	}
+	// Cleanups run last-in first-out: the connection closes before the
+	// context that serves it is cancelled.
 	t.Cleanup(func() { _ = cl.Close(); srv.Close() })
 	opts.Client = cl
-	opts.ServerVersion = "test"
+	opts.ServerVersion = testVersion
 	if opts.SessionID == "" && !opts.PickSession {
 		view, err := cl.OpenSession(ctx, rpc.OpenOptions{})
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("OpenSession: %v", err)
 		}
 		opts.SessionID, opts.Recorded = view.ID, true
 	}
 	ch := make(chanSender, 64)
-	h := &harness{t: t, eng: eng, cl: cl, ctx: ctx, ch: ch}
+	h := &harness{t: t, eng: eng, ch: ch}
 	h.m = newModel(ctx, opts, true, ch)
-	h.update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	h.update(tea.WindowSizeMsg{Width: termWidth, Height: termHeight})
 	return h
 }
 
+// update feeds one message to the model and keeps the model it returns.
 func (h *harness) update(msg tea.Msg) tea.Cmd {
 	next, cmd := h.m.Update(msg)
 	h.m = next.(model)
@@ -136,35 +182,48 @@ func (h *harness) update(msg tea.Msg) tea.Cmd {
 }
 
 // run executes a command synchronously and feeds its message back, the
-// way the program would.
+// way the program would; a batch is run command by command. Commands
+// the resulting updates return are dropped: none of them matter here,
+// and a cursor blink would sleep.
 func (h *harness) run(cmd tea.Cmd) {
 	if cmd == nil {
 		return
 	}
-	if msg := cmd(); msg != nil {
+	switch msg := cmd().(type) {
+	case nil:
+	case tea.BatchMsg:
+		for _, c := range msg {
+			h.run(c)
+		}
+	default:
 		h.update(msg)
 	}
 }
 
-func keyMsg(s string) tea.KeyPressMsg {
-	switch s {
-	case "enter":
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "esc":
-		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "pgup":
-		return tea.KeyPressMsg{Code: tea.KeyPgUp}
-	case "down":
-		return tea.KeyPressMsg{Code: tea.KeyDown}
-	case "ctrl+c":
-		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
-	case "ctrl+d":
-		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
-	}
-	r := []rune(s)
-	return tea.KeyPressMsg{Code: r[0], Text: s}
+// specialKeys are the keys without a character of their own that the
+// tests press, under the names tea.KeyPressMsg.String gives them.
+var specialKeys = map[string]tea.KeyPressMsg{
+	"enter":  {Code: tea.KeyEnter},
+	"esc":    {Code: tea.KeyEscape},
+	"ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
+	"ctrl+d": {Code: 'd', Mod: tea.ModCtrl},
 }
 
+// keyMsg is the key press for a name: one of specialKeys, or a single
+// character typed as text.
+func keyMsg(name string) tea.KeyPressMsg {
+	if k, ok := specialKeys[name]; ok {
+		return k
+	}
+	r := []rune(name)
+	if len(r) != 1 {
+		panic(fmt.Sprintf("keyMsg: %q is neither a special key nor one character", name))
+	}
+	return tea.KeyPressMsg{Code: r[0], Text: name}
+}
+
+// press sends the named keys in order and returns the command of the
+// last one.
 func (h *harness) press(keys ...string) tea.Cmd {
 	var cmd tea.Cmd
 	for _, k := range keys {
@@ -173,16 +232,26 @@ func (h *harness) press(keys ...string) tea.Cmd {
 	return cmd
 }
 
+// typeText presses each character of s, the way a user types it.
 func (h *harness) typeText(s string) {
 	for _, r := range s {
 		h.update(keyMsg(string(r)))
 	}
 }
 
-// pump feeds the turn's messages into the model until stop says so.
+// submit types a line and presses enter, returning enter's command: the
+// list request of /sessions, or the spinner tick of a question whose turn
+// runs on its own goroutine.
+func (h *harness) submit(line string) tea.Cmd {
+	h.typeText(line)
+	return h.press("enter")
+}
+
+// pump feeds the turn's messages into the model until stop says so, and
+// fails the test when turnTimeout passes first.
 func (h *harness) pump(stop func(msg tea.Msg) bool) {
 	h.t.Helper()
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(turnTimeout)
 	for {
 		select {
 		case msg := <-h.ch:
@@ -196,65 +265,98 @@ func (h *harness) pump(stop func(msg tea.Msg) bool) {
 	}
 }
 
-func untilDone(msg tea.Msg) bool  { _, ok := msg.(turnDoneMsg); return ok }
-func untilAsked(msg tea.Msg) bool { _, ok := msg.(permissionMsg); return ok }
+// until is pump's stop condition: the message is a T.
+func until[T tea.Msg](msg tea.Msg) bool {
+	_, ok := msg.(T)
+	return ok
+}
 
 // view is the drawn screen without its styling, so that words a style
 // change splits can still be found.
 func (h *harness) view() string { return ansiSeq.ReplaceAllString(h.m.View().Content, "") }
 
-var ansiSeq = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
+// ansiSeq matches one CSI sequence, which is all lipgloss and glamour
+// emit for what these tests draw.
+var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
+// TestStreamsAndRendersTheAnswer walks one question through the shell:
+// enter starts a turn and shows the question with the spinner; the
+// deltas stream in; the finished answer is rendered as markdown, the
+// status line is back at the help, the input is empty and the core has
+// the question on record.
 func TestStreamsAndRendersTheAnswer(t *testing.T) {
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
 
-	h.typeText("hello")
-	h.press("enter")
+	h.submit("hello")
 	if !h.m.busy {
 		t.Fatal("enter did not start a turn")
 	}
-	if v := h.view(); !strings.Contains(v, "you") || !strings.Contains(v, "hello") || !strings.Contains(v, "thinking") {
-		t.Errorf("view after enter lacks the question or the spinner:\n%s", v)
-	}
-	h.pump(untilDone)
 	v := h.view()
-	if h.m.busy || !strings.Contains(v, "hi") || !strings.Contains(v, "hello") || strings.Contains(v, "**") {
+	for _, want := range []string{"you", "hello", "thinking"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("view after enter lacks %q:\n%s", want, v)
+		}
+	}
+
+	h.pump(until[turnDoneMsg])
+	if h.m.busy {
+		t.Error("still busy after the turn ended")
+	}
+	v = h.view()
+	// "**hi**" is bold in markdown: the word stays, the markers go.
+	if !strings.Contains(v, "hi") || !strings.Contains(v, "hello") || strings.Contains(v, "**") {
 		t.Errorf("answer not rendered as markdown:\n%s", v)
 	}
 	if !strings.Contains(v, "enter sends") {
 		t.Errorf("status line did not return to the help:\n%s", v)
 	}
 	sess := eng.sessions[h.m.sessionID]
-	if sess == nil || len(sess.msgs) != 1 || sess.msgs[0].Text() != "hello" {
-		t.Errorf("the core did not get the question: %+v", sess)
+	if sess == nil {
+		t.Fatalf("no session %q in the core", h.m.sessionID)
 	}
-	if h.m.ta.Value() != "" {
-		t.Errorf("input not cleared: %q", h.m.ta.Value())
+	if msgs := sess.Messages(); len(msgs) != 1 || msgs[0].Text() != "hello" {
+		t.Errorf("the core got %+v, want the one question", msgs)
+	}
+	if got := h.m.ta.Value(); got != "" {
+		t.Errorf("input not cleared: %q", got)
 	}
 }
 
+// TestPermissionDialog pins the permission dialog: the event opens it
+// with the summary, the path, the diff and the options; a key that is
+// not an answer neither closes it nor reaches the input; "a" answers
+// AllowAlways, the core sees that decision, and the turn goes on to its
+// tool call and answer.
 func TestPermissionDialog(t *testing.T) {
-	var decision permission.Decision
+	req := agentapi.PermissionRequest{
+		CallID:  "c1",
+		Tool:    "edit_file",
+		Class:   agentapi.ClassWrite,
+		Summary: "edit main.go",
+		Path:    "main.go",
+		Detail:  "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n-old line\n+new line",
+		Always:  `edits under "."`,
+	}
+	// decided carries the core's view of the answer back to the test.
+	decided := make(chan permission.Decision, 1)
 	eng := &fakeEngine{script: func(ctx context.Context, _ string, ask permission.Prompter, out chan<- agentapi.Event) {
-		req := agentapi.PermissionRequest{
-			CallID: "c1", Tool: "edit_file", Class: agentapi.ClassWrite, Summary: "edit main.go", Path: "main.go",
-			Detail: "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n-old line\n+new line",
-			Always: `edits under "."`,
-		}
 		out <- agentapi.Event{Kind: agentapi.EventPermission, Permission: &req}
-		decision, _ = ask.Prompt(ctx, permission.Ask{Request: req})
+		decision, _ := ask.Prompt(ctx, permission.Ask{Request: req})
+		decided <- decision
 		if decision != permission.Deny {
-			out <- agentapi.Event{Kind: agentapi.EventToolStart, Call: &agentapi.ToolCall{ID: "c1", Name: "edit_file", Arguments: []byte(`{"path":"main.go"}`)}}
+			out <- agentapi.Event{
+				Kind: agentapi.EventToolStart,
+				Call: &agentapi.ToolCall{ID: "c1", Name: "edit_file", Arguments: []byte(`{"path":"main.go"}`)},
+			}
 		}
 		out <- agentapi.Event{Kind: agentapi.EventTextDelta, Text: "done"}
 		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishStop}
 	}}
 	h := newHarness(t, eng, Options{})
 
-	h.typeText("fix it")
-	h.press("enter")
-	h.pump(untilAsked)
+	h.submit("fix it")
+	h.pump(until[permissionMsg])
 	if h.m.dialog == nil {
 		t.Fatal("no dialog after the permission event")
 	}
@@ -264,40 +366,47 @@ func TestPermissionDialog(t *testing.T) {
 			t.Errorf("dialog lacks %q:\n%s", want, v)
 		}
 	}
+
 	// Typing goes nowhere while the question is open; "a" answers it.
 	h.press("x")
 	if h.m.dialog == nil || h.m.ta.Value() != "" {
-		t.Fatalf("a stray key reached the input or closed the dialog")
+		t.Fatal("a stray key reached the input or closed the dialog")
 	}
 	h.press("a")
 	if h.m.dialog != nil {
 		t.Fatal("the dialog stayed open after the answer")
 	}
-	h.pump(untilDone)
-	if decision != permission.AllowAlways {
-		t.Errorf("core saw %v, want AllowAlways", decision)
+
+	h.pump(until[turnDoneMsg])
+	if got := <-decided; got != permission.AllowAlways {
+		t.Errorf("core saw %v, want AllowAlways", got)
 	}
 	if v := h.view(); !strings.Contains(v, "⚙ edit_file") || !strings.Contains(v, "done") {
 		t.Errorf("tool activity or answer missing:\n%s", v)
 	}
 }
 
+// TestCtrlCCancelsTheTurn pins the two meanings of ctrl+c: during a turn
+// it cancels the turn, which the transcript reports as interrupted; at
+// rest it quits the shell.
 func TestCtrlCCancelsTheTurn(t *testing.T) {
+	// The turn hangs until it is cancelled, as a slow model would.
 	eng := &fakeEngine{script: func(ctx context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
 		<-ctx.Done()
 		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishCanceled}
 	}}
 	h := newHarness(t, eng, Options{})
-	h.typeText("wait")
-	h.press("enter")
+
+	h.submit("wait")
 	h.press("ctrl+c")
 	if h.m.quitting {
 		t.Fatal("ctrl+c during a turn must cancel it, not quit")
 	}
-	h.pump(untilDone)
-	if h.m.busy || !strings.Contains(h.view(), "interrupted") {
-		t.Errorf("turn not reported as interrupted:\n%s", h.view())
+	h.pump(until[turnDoneMsg])
+	if v := h.view(); h.m.busy || !strings.Contains(v, "interrupted") {
+		t.Errorf("turn not reported as interrupted:\n%s", v)
 	}
+
 	// Idle, ctrl+c leaves.
 	h.press("ctrl+c")
 	if !h.m.quitting {
@@ -305,30 +414,42 @@ func TestCtrlCCancelsTheTurn(t *testing.T) {
 	}
 }
 
+// TestHistoryIsShown pins the first screen of a continued session: the
+// recorded questions, answers and tool calls are in the transcript, and
+// the header names the session and the core's version.
 func TestHistoryIsShown(t *testing.T) {
 	history := []agentapi.Message{
 		agentapi.UserMessage("earlier question"),
-		{Role: agentapi.RoleAssistant, Content: []agentapi.ContentPart{agentapi.Text("earlier answer")}, ToolCalls: []agentapi.ToolCall{{ID: "c", Name: "grep", Arguments: []byte(`{"pattern":"x"}`)}}},
+		{
+			Role:      agentapi.RoleAssistant,
+			Content:   []agentapi.ContentPart{agentapi.Text("earlier answer")},
+			ToolCalls: []agentapi.ToolCall{{ID: "c", Name: "grep", Arguments: []byte(`{"pattern":"x"}`)}},
+		},
 	}
 	h := newHarness(t, &fakeEngine{}, Options{History: history})
+
 	v := h.view()
-	for _, want := range []string{"earlier question", "earlier answer", "⚙ grep", "session s1", "core test"} {
+	for _, want := range []string{"earlier question", "earlier answer", "⚙ grep", "session s1", "core " + testVersion} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q:\n%s", want, v)
 		}
 	}
 }
 
+// TestSessionPickerAttaches walks /sessions: the list opens and fills
+// from the server, keys go to the list and not the input, enter attaches
+// the row under the cursor and shows its history, and esc from the list
+// returns to the session the shell is on.
 func TestSessionPickerAttaches(t *testing.T) {
-	eng := &fakeEngine{sessions: map[string]*fakeSession{}}
+	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
-	// A second session with history, recorded earlier.
+	// A second session with history, recorded earlier. The list shows
+	// ids cut to eight characters.
 	old := &fakeSession{id: "old-session", eng: eng, msgs: []agentapi.Message{agentapi.UserMessage("from before")}}
-	eng.sessions[old.id] = old
+	eng.add(old)
 	eng.infos = []rpc.Info{{ID: old.id, Messages: 1, FirstPrompt: "from before"}, {ID: h.m.sessionID}}
 
-	h.typeText("/sessions")
-	cmd := h.press("enter")
+	cmd := h.submit("/sessions")
 	if h.m.picker == nil {
 		t.Fatal("/sessions did not open the list")
 	}
@@ -336,6 +457,7 @@ func TestSessionPickerAttaches(t *testing.T) {
 	if v := h.view(); !strings.Contains(v, "sessions") || !strings.Contains(v, "old-sess") || !strings.Contains(v, "from before") {
 		t.Fatalf("list not shown:\n%s", v)
 	}
+
 	// Keys go to the list, not the input.
 	h.press("x")
 	if h.m.ta.Value() != "" {
@@ -350,22 +472,27 @@ func TestSessionPickerAttaches(t *testing.T) {
 	}
 
 	// Esc in the list goes back to the current session.
-	h.run(h.press("/", "s", "e", "s", "s", "i", "o", "n", "s", "enter"))
+	h.run(h.submit("/sessions"))
 	h.press("esc")
 	if h.m.picker != nil || h.m.sessionID != old.id {
 		t.Error("esc did not return to the session")
 	}
 }
 
+// TestStartsInThePickerWithoutASession pins hint -r: the shell starts in
+// the list with no session, Init asks the server for the rows, an empty
+// list says so, and esc then opens a fresh recorded session rather than
+// leaving the user nowhere.
 func TestStartsInThePickerWithoutASession(t *testing.T) {
 	h := newHarness(t, &fakeEngine{}, Options{PickSession: true})
 	if h.m.picker == nil || h.m.sessionID != "" {
 		t.Fatal("PickSession did not open the list")
 	}
-	h.update(sessionsMsg{})
+	h.run(h.m.Init())
 	if v := h.view(); !strings.Contains(v, "no recorded sessions") || !strings.Contains(v, "no session") {
 		t.Errorf("empty list not explained:\n%s", v)
 	}
+
 	// Esc with nothing to pick opens a fresh session.
 	h.run(h.press("esc"))
 	if h.m.picker != nil || h.m.sessionID == "" || !h.m.recorded {
@@ -373,39 +500,51 @@ func TestStartsInThePickerWithoutASession(t *testing.T) {
 	}
 }
 
+// TestPasteGoesToTheInput pins bracketed paste: pasted text lands in the
+// input with its newlines, is not sent until enter, and goes to the core
+// as one question; while the list is open a paste is dropped.
 func TestPasteGoesToTheInput(t *testing.T) {
+	const pasted = "line one\nline two"
 	h := newHarness(t, &fakeEngine{}, Options{})
-	h.update(tea.PasteMsg{Content: "line one\nline two"})
-	if got := h.m.ta.Value(); got != "line one\nline two" {
+
+	h.update(tea.PasteMsg{Content: pasted})
+	if got := h.m.ta.Value(); got != pasted {
 		t.Fatalf("input after paste = %q", got)
 	}
-	// Pasted newlines do not send; enter does, as one question.
 	if h.m.busy {
 		t.Fatal("a paste started a turn")
 	}
 	h.press("enter")
-	h.pump(untilDone)
-	sess := h.eng.sessions[h.m.sessionID]
-	if len(sess.msgs) != 1 || sess.msgs[0].Text() != "line one\nline two" {
-		t.Errorf("the core got %+v", sess.msgs)
+	h.pump(until[turnDoneMsg])
+	if msgs := h.eng.sessions[h.m.sessionID].Messages(); len(msgs) != 1 || msgs[0].Text() != pasted {
+		t.Errorf("the core got %+v, want the pasted text as one question", msgs)
 	}
 
 	// Nothing to paste into while a list is open.
-	h.run(h.press("/", "s", "e", "s", "s", "i", "o", "n", "s", "enter"))
+	h.run(h.submit("/sessions"))
 	h.update(tea.PasteMsg{Content: "stray"})
-	if h.m.ta.Value() != "" {
-		t.Errorf("a paste reached the input behind the list: %q", h.m.ta.Value())
+	if got := h.m.ta.Value(); got != "" {
+		t.Errorf("a paste reached the input behind the list: %q", got)
 	}
 }
 
+// TestResizeRedraws pins the layout on a window change: the transcript
+// is rewrapped to the new width, the viewport takes the height the
+// layout leaves it, and the whole screen still fits the terminal.
 func TestResizeRedraws(t *testing.T) {
-	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{agentapi.UserMessage(strings.Repeat("word ", 40))}})
+	const width, height = 40, 20
+	long := agentapi.UserMessage(strings.Repeat("word ", 40))
+	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{long}})
+
 	before := h.m.vp.TotalLineCount()
-	h.update(tea.WindowSizeMsg{Width: 40, Height: 20})
+	h.update(tea.WindowSizeMsg{Width: width, Height: height})
 	if after := h.m.vp.TotalLineCount(); after <= before {
 		t.Errorf("narrower window did not rewrap: %d lines before, %d after", before, after)
 	}
-	if h.m.vp.Height() != 20-headerLines-statusLines-inputLines-1 {
-		t.Errorf("viewport height = %d", h.m.vp.Height())
+	if got, want := h.m.vp.Height(), h.m.bodyHeight(); got != want {
+		t.Errorf("viewport height = %d, want %d", got, want)
+	}
+	if lines := strings.Count(h.view(), "\n") + 1; lines > height {
+		t.Errorf("screen is %d lines for a %d-line terminal:\n%s", lines, height, h.view())
 	}
 }

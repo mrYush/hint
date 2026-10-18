@@ -125,7 +125,7 @@ func (m model) attached(msg attachedMsg) model {
 // view draws the list in a w×h box.
 func (p *picker) view(w, h int, sty styles) string {
 	var b strings.Builder
-	b.WriteString(sty.header.Render("sessions") + "\n\n")
+	b.WriteString(rule(sty.header.Render("sessions"), w, sty) + "\n\n")
 	switch {
 	case p.loading:
 		b.WriteString(sty.hint.Render("loading…"))

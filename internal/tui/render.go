@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/glamour/v2"
+	"charm.land/glamour/v2/ansi"
 	gstyles "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
 
@@ -37,10 +38,10 @@ type entry struct {
 // styles are the colors of the shell, chosen once for a dark or a light
 // terminal.
 type styles struct {
-	header, you, tool, toolErr, notice, status, hint lipgloss.Style
-	dialogBox, dialogTitle, dialogKey                lipgloss.Style
-	diffAdd, diffDel, diffHunk, diffHead             lipgloss.Style
-	pickerCursor, pickerDim                          lipgloss.Style
+	header, you, assistant, tool, toolErr, notice, status, hint, rule lipgloss.Style
+	dialogBox, dialogTitle, dialogKey                                 lipgloss.Style
+	diffAdd, diffDel, diffHunk, diffHead                              lipgloss.Style
+	pickerCursor, pickerDim                                           lipgloss.Style
 }
 
 func newStyles(dark bool) styles {
@@ -50,6 +51,8 @@ func newStyles(dark bool) styles {
 	return styles{
 		header:       lipgloss.NewStyle().Foreground(accent).Bold(true),
 		you:          lipgloss.NewStyle().Foreground(ld(lipgloss.Color("36"), lipgloss.Color("43"))).Bold(true),
+		assistant:    lipgloss.NewStyle().Foreground(accent).Bold(true),
+		rule:         lipgloss.NewStyle().Foreground(ld(lipgloss.Color("250"), lipgloss.Color("238"))),
 		tool:         lipgloss.NewStyle().Foreground(dim),
 		toolErr:      lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		notice:       lipgloss.NewStyle().Foreground(dim).Italic(true),
@@ -73,12 +76,13 @@ func (m *model) renderEntry(e entry, w int) string {
 	case entryUser:
 		return m.sty.you.Render("you") + "\n" + wrap(e.text, w)
 	case entryAssistant:
+		label := m.sty.assistant.Render("hint") + "\n"
 		if e.done && e.text != "" {
 			if s, ok := m.markdown(e.text, w); ok {
-				return s
+				return label + s
 			}
 		}
-		return wrap(e.text, w)
+		return label + wrap(e.text, w)
 	case entryTool:
 		if e.failed {
 			return m.sty.toolErr.Render("✗ " + e.name + " failed: " + e.text)
@@ -104,11 +108,7 @@ func wrap(text string, w int) string {
 // plain text rather than hiding the answer.
 func (m *model) markdown(text string, w int) (string, bool) {
 	if m.md == nil || m.mdWidth != w {
-		style := gstyles.LightStyleConfig
-		if m.dark {
-			style = gstyles.DarkStyleConfig
-		}
-		r, err := glamour.NewTermRenderer(glamour.WithStyles(style), glamour.WithWordWrap(w))
+		r, err := glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(m.dark)), glamour.WithWordWrap(w))
 		if err != nil {
 			return "", false
 		}
@@ -119,6 +119,33 @@ func (m *model) markdown(text string, w int) (string, bool) {
 		return "", false
 	}
 	return strings.TrimRight(s, "\n"), true
+}
+
+// markdownStyle is glamour's palette for the terminal's background with
+// the filled areas taken out: a heading and inline code are told apart by
+// color and weight, like everything else on the screen, not by a block of
+// background behind them.
+func markdownStyle(dark bool) ansi.StyleConfig {
+	style := gstyles.LightStyleConfig
+	if dark {
+		style = gstyles.DarkStyleConfig
+	}
+	style.H1.BackgroundColor = nil
+	style.Code.BackgroundColor = nil
+	return style
+}
+
+// rule draws a horizontal line of width w with text at its left, the
+// separator between the zones of the screen.
+func rule(text string, w int, sty styles) string {
+	line := sty.rule.Render("── ")
+	if text != "" {
+		line += text + " "
+	}
+	if n := w - lipgloss.Width(line); n > 0 {
+		line += sty.rule.Render(strings.Repeat("─", n))
+	}
+	return line
 }
 
 // colorDiff colors a unified diff by line prefix. It is the whole of the

@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/shell"
@@ -77,6 +78,15 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 	// never swallows the key that every chat uses to submit.
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"))
 	ta.Focus()
+	sty := newStyles(dark)
+	// The input is set apart by the rule above it and its prompt, not by
+	// a filled cursor line.
+	tas := ta.Styles()
+	tas.Focused.CursorLine = lipgloss.NewStyle()
+	tas.Blurred.CursorLine = lipgloss.NewStyle()
+	tas.Focused.Prompt = sty.you
+	tas.Blurred.Prompt = sty.hint
+	ta.SetStyles(tas)
 
 	vp := viewport.New()
 	// The transcript scrolls by page; the arrows belong to the input.
@@ -84,7 +94,6 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		b.SetEnabled(false)
 	}
 
-	sty := newStyles(dark)
 	m := model{
 		ctx:           ctx,
 		cl:            opts.Client,
@@ -392,20 +401,24 @@ func (m model) header() string {
 			session += " (not recorded)"
 		}
 	}
-	line := " hint · " + session
+	meta := " · " + session
 	if m.serverVersion != "" {
-		line += " · core " + m.serverVersion
+		meta += " · core " + m.serverVersion
 	}
-	return m.sty.header.Render(line)
+	return rule(m.sty.header.Render("hint")+m.sty.hint.Render(meta), m.width, m.sty)
 }
 
+// statusLine is the rule between the transcript and the input, carrying
+// what the user should know right now.
 func (m model) statusLine() string {
+	var text string
 	switch {
 	case m.status != "":
-		return m.sty.status.Render(m.status)
+		text = m.sty.status.Render(m.status)
 	case m.busy:
-		return m.spin.View() + m.sty.status.Render(" thinking… ctrl+c stops")
+		text = m.spin.View() + m.sty.status.Render(" thinking… ctrl+c stops")
 	default:
-		return m.sty.hint.Render(help)
+		text = m.sty.hint.Render(help)
 	}
+	return rule(text, m.width, m.sty)
 }
