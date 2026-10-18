@@ -921,13 +921,18 @@ func TestConnect(t *testing.T) {
 // server serves. The engine wiring is the one file allowed to know the
 // agent exists; everything else in cmd/hint is a client.
 func TestShellNeverImportsTheAgent(t *testing.T) {
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
+	var files []string
+	for _, dir := range []string{".", "../../internal/shell", "../../internal/tui"} {
+		matches, err := filepath.Glob(filepath.Join(dir, "*.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, matches...)
 	}
 	fset := token.NewFileSet()
 	for _, file := range files {
 		if strings.HasSuffix(file, "_test.go") || file == "rpcengine.go" || file == "rules.go" {
+			// rules.go and rpcengine.go are the engine side of cmd/hint.
 			continue
 		}
 		f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)

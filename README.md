@@ -122,6 +122,14 @@ next. `/help` lists the commands, `/exit` (or Ctrl-D) leaves. Ctrl-C while
 an answer is being written stops that answer and returns to the prompt; the
 session is kept.
 
+`hint --tui` runs the same session as a full-screen TUI (experimental):
+the conversation scrolls above the input with answers rendered as
+Markdown, a file edit or a command asks for permission in a dialog that
+shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
+this directory's sessions to resume one. The TUI is a client of the same
+protocol as `hint serve`; the line REPL stays the default until the TUI
+has passed the Phase 0 scenarios.
+
 ### One question
 
 ```bash

@@ -13,6 +13,7 @@ import (
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
+	"github.com/mrYush/hint/pkg/agentapi"
 )
 
 // stdio is the process's three streams as one value, so that the run
@@ -57,6 +58,9 @@ func run(ctx context.Context, opts options, inv invocation, sio stdio) error {
 	defer a.close()
 
 	if inv.interactive {
+		if opts.tui {
+			return a.tui(ctx)
+		}
 		return a.repl(ctx, interrupts())
 	}
 	return a.oneShot(ctx, inv.question)
@@ -78,6 +82,8 @@ type app struct {
 	// whether it is written to disk, which is what --output json reports.
 	sessionID string
 	recorded  bool
+	// history is the conversation so far, for a shell that redraws it.
+	history []agentapi.Message
 	// prompter answers permission events on the terminal. It is the only
 	// permission UI: the core never asks on its own stdin.
 	prompter permission.Prompter
@@ -164,20 +170,24 @@ func newApp(ctx context.Context, cl *rpc.Client, opts options, sio stdio) (*app,
 	// permission prompter and the REPL all ask through it, so none can
 	// swallow another's answer.
 	lines := console.NewLineReader(sio.in)
-	view, recorded, err := openSession(ctx, cl, opts.session, opts.sessionID, lines, sio.err)
-	if err != nil {
-		return nil, err
+	a := &app{
+		io:       sio,
+		opts:     opts,
+		lines:    lines,
+		client:   cl,
+		prompter: permission.NewLinePrompter(lines, sio.err),
+	}
+	// The TUI has a session list of its own, so -r is not asked on the
+	// line reader; the shell starts in that list instead.
+	if !opts.tui || opts.session != sessionResume {
+		view, recorded, err := openSession(ctx, cl, opts.session, opts.sessionID, lines, sio.err)
+		if err != nil {
+			return nil, err
+		}
+		a.sessionID, a.recorded, a.history = view.ID, recorded, view.Messages
 	}
 	warnMode(sio.err, opts.mode, sio.tty)
-	return &app{
-		io:        sio,
-		opts:      opts,
-		lines:     lines,
-		client:    cl,
-		sessionID: view.ID,
-		recorded:  recorded,
-		prompter:  permission.NewLinePrompter(lines, sio.err),
-	}, nil
+	return a, nil
 }
 
 // close releases what the run opened.
