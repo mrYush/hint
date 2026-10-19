@@ -221,7 +221,7 @@ Decisions (2026-10-19):
 - **The REPL has no completion.**
   `--plain` has no status line to show one in; the method stays in the protocol for other clients.
 
-Backlog from the review: inline ghost text; a request budget enforced by the core when there is a second client; prefix caching of suggestions; a quality and latency measurement of small models for completions.
+Backlog from the review: inline ghost text; a request budget enforced by the core when there is a second client; prefix caching of suggestions; and the quality, latency and cost measurement of small models for completions, written up as [`completion-quality-eval.md`](completion-quality-eval.md) with its pass criteria — nothing but `off` is a default until it has run.
 
 ### WP1.7 — Secrets out of the agent's reach
 
