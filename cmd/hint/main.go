@@ -243,6 +243,7 @@ keeps the line REPL.`,
 	pf.StringVar(&flags.OverviewDepth, "overview-depth", "", "Directory levels listed in the system prompt; 0 for none (default 2)")
 	pf.StringVar(&flags.OverviewEntries, "overview-entries", "", "Cap on the entries listed in the system prompt (default 100)")
 	pf.StringVar(&flags.SummarizeInstructions, "summarize-instructions", "", "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
+	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	// A bare --summarize-instructions means true; =false still turns a
 	// config file's setting off for one run.
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"

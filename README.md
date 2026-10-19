@@ -131,7 +131,9 @@ Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
 
 Tab completes `/commands` and their arguments; `/help` lists them:
 `/sessions` shows this directory's sessions as a tree and resumes one,
-`/profile` switches the provider profile, `/setup` and `/config` edit the
+`/profile` switches the provider profile, `/completion` shows or sets
+when a model continues what you type (see [Completion of what you
+type](#completion-of-what-you-type)), `/setup` and `/config` edit the
 configuration, `/copy` and `ctrl+y` copy the last answer (or `question`,
 `code`, `all`), `/mouse` switches to a mode where the wheel scrolls and a
 click copies the block under it (off by default, so the terminal's own
@@ -265,13 +267,62 @@ switch takes effect for the next question and stays with the session:
 ```
 
 In the TUI `/profile` alone opens a list to pick from, Tab completes the
-names, and the header shows what is in use. A profile that cannot be used
+names, and the header shows what is in use. Tab after a profile name
+completes the model from what that profile's endpoint serves: the first
+Tab on it asks the core (`hint models` does the same on the command
+line), says so in the status line, and the list is kept for the rest of
+the session; the next Tab offers the names. The same list completes the
+value of `/config set providers.<profile>.model`. An endpoint that does
+not answer the models request leaves the model a free value, with the
+reason in the status line. A profile that cannot be used
 (an openai profile without a key, an ollama profile without a model) is
 listed with the reason and refused. The core re-reads the configuration
 files on every switch, which is how `hint setup` and `/setup` take effect
 without a restart. Switching `fallback_provider` off is not part of it:
 the configured fallback stays behind whichever profile is in use, unless
 it is the same one.
+
+### Completion of what you type
+
+The TUI can ask a model to continue the question you are typing. The
+continuation is shown in the status line and Tab takes it; any other key
+drops it. It is off by default, because every request sends the text
+typed so far and the last question of the conversation to a provider:
+with a cloud profile that text leaves the machine on every request.
+`completion.mode` picks when the shell asks:
+
+| mode | when a request goes out |
+|---|---|
+| `off` | never (the default) |
+| `tab` | only when you press Tab on a question; Tab with a suggestion on offer accepts it instead |
+| `idle` | after a pause in typing (`completion.idle_after`, 600ms), once the question is 12 characters or longer, at most once every two seconds and only after three more characters were typed |
+| `both` | either of the two |
+
+`tab` costs a request per Tab and nothing else, which is why it is the
+mode to start with. `idle` is the one that spends tokens without a key
+press; `/completion` in the TUI shows how many requests and tokens the
+session has spent so far, and `/completion off|tab|idle|both` changes the
+mode for the session without touching the config. Three failed requests
+in a row switch completion off for the session, with a notice.
+
+By default the session's own profile and model answer, so nothing extra
+runs anywhere. A separate small model is optional:
+
+```yaml
+completion:
+  mode: tab
+  profile: local        # a profile from providers:, e.g. Ollama with a 1-3B model
+  model: qwen2.5:1.5b   # optional: a model of that profile for completions only
+  warn_after: 2s        # after this long the status line says the model is slow
+```
+
+Think twice about a second model on a small machine: Ollama keeps models
+loaded, so a completion model beside the main one on a Raspberry Pi or
+a laptop with little RAM can evict the main model and make every answer
+start with a reload. On such a machine keep `profile` empty, or keep
+completion off. A profile named here that does not exist, or cannot be
+used, switches completion off with a warning at start rather than
+stopping the run. Completions are never written to the session file.
 
 ### Configuration setup
 

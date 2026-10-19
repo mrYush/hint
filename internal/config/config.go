@@ -117,6 +117,50 @@ type OverviewSettings struct {
 	MaxEntries int
 }
 
+// CompletionMode says when the shell asks a model to continue what the
+// user is typing (WP1.6).
+type CompletionMode string
+
+// The completion modes. Off is the default: a continuation is a request
+// to a provider on the user's behalf, and that is opted into.
+const (
+	CompletionOff CompletionMode = "off"
+	// CompletionTab asks only when the user presses Tab on a question.
+	CompletionTab CompletionMode = "tab"
+	// CompletionIdle asks after a pause in typing (CompletionSettings.IdleAfter).
+	CompletionIdle CompletionMode = "idle"
+	// CompletionBoth is tab and idle together.
+	CompletionBoth CompletionMode = "both"
+)
+
+// OnTab says whether the mode asks when Tab is pressed.
+func (m CompletionMode) OnTab() bool { return m == CompletionTab || m == CompletionBoth }
+
+// OnIdle says whether the mode asks after a pause in typing.
+func (m CompletionMode) OnIdle() bool { return m == CompletionIdle || m == CompletionBoth }
+
+// Built-in defaults of the completion block.
+const (
+	DefaultCompletionIdleAfter = 600 * time.Millisecond
+	DefaultCompletionWarnAfter = 2 * time.Second
+)
+
+// CompletionSettings is the completion: block of the config files, with
+// the usual layering (the project file overrides the global one key by
+// key) and the defaults applied.
+type CompletionSettings struct {
+	Mode CompletionMode
+	// Profile is the provider profile that answers completions; empty
+	// means the session's own. Model overrides that profile's model.
+	Profile string
+	Model   string
+	// IdleAfter is the pause in typing that triggers a request in the
+	// idle mode; WarnAfter is how long a request may take before the
+	// shell says the model is slow.
+	IdleAfter time.Duration
+	WarnAfter time.Duration
+}
+
 // Config is the fully resolved configuration.
 type Config struct {
 	Providers        []Profile
@@ -130,6 +174,8 @@ type Config struct {
 	// of the config files, with the built-in defaults applied.
 	Instructions InstructionSettings
 	Overview     OverviewSettings
+	// Completion is the completion: block (WP1.6).
+	Completion CompletionSettings
 	// Warnings collects non-fatal findings (legacy paths, migrated flat
 	// keys, ignored values). The CLI prints them to stderr once per run.
 	Warnings []string

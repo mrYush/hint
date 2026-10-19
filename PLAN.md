@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-18
+> Status: living document · Last updated: 2026-10-19
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -260,9 +260,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
 14. ~~WP1.4: the TUI on Bubble Tea v2, as a second client of the same protocol.~~ Done; its leftovers (the default-TUI flip, applying a saved setup without a restart) went to WP1.5 (decided 2026-10-18).
 15. ~~WP1.5: session and profile operations over RPC — a profile switch mid-session and a session fork, each a protocol method and core work first; the TUI then shows them.~~ Done (2026-10-18): `session.profile`, `session.fork`, `profile.list`; `/profile` in both shells, `f` forks in the TUI, the session list is a tree, the TUI is the default on a terminal with `--plain` for the REPL.
-16. WP1.6: completion of what the user is typing — a short continuation from a small model over RPC, shown as ghost text in the TUI input, plus configuration-dependent command arguments.
-    Switchable in the layered config (the project's `.hint/` value beats the global one, a key it leaves out is inherited), and it never blocks typing: a slow model gets a warning, an edit or Esc cancels the request, and a late answer is dropped.
-    The deterministic part (Tab on slash commands and their arguments) is already in WP1.4.
+16. ~~WP1.6: completion of what the user is typing.~~ Done (2026-10-19): `complete` over RPC with cancel, a `completion:` block with three triggers (`tab`, `idle`, `both`; off by default), the suggestion in the TUI's status line with Tab to accept, `/completion` with the cost so far, and the model argument of `/profile` and `/config` completed from what the profile serves.
+    Backlog, not gating `v0.3`: the quality and cost evaluation on small models ([`docs/plan/completion-quality-eval.md`](docs/plan/completion-quality-eval.md)); until it has run, `off` is the only default.
 17. WP1.7: secrets out of the agent's reach — keys in the OS secret store, `hint config show-key` as the only way to see one again, tool subprocesses without the key variables, tool results redacted before the model or a session file sees them, the config directory closed to the file tools.
     Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
 18. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.

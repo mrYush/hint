@@ -98,6 +98,11 @@ func (s *setupInfo) show() (string, error) {
 		"instructions.summarize": strconv.FormatBool(cfg.Instructions.Summarize),
 		"overview.depth":         strconv.Itoa(cfg.Overview.Depth),
 		"overview.max_entries":   strconv.Itoa(cfg.Overview.MaxEntries),
+		"completion.mode":        string(cfg.Completion.Mode),
+		"completion.profile":     cfg.Completion.Profile,
+		"completion.model":       cfg.Completion.Model,
+		"completion.idle_after":  cfg.Completion.IdleAfter.String(),
+		"completion.warn_after":  cfg.Completion.WarnAfter.String(),
 	}
 	for _, k := range config.Keys() {
 		if _, ok := k.Profile(); !ok {

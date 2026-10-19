@@ -89,6 +89,16 @@ var keys = []Key{
 		Help: "directory levels listed in the system prompt; 0 for none"},
 	{Path: "overview.max_entries", Type: TypeInt, Min: 1, Default: strconv.Itoa(DefaultOverviewEntries), Env: "HINT_OVERVIEW_ENTRIES", Flag: "--overview-entries",
 		Help: "cap on the entries the overview lists"},
+	{Path: "completion.mode", Type: TypeEnum, Enum: []string{string(CompletionOff), string(CompletionTab), string(CompletionIdle), string(CompletionBoth)}, Default: string(CompletionOff), Env: "HINT_COMPLETION_MODE", Flag: "--completion",
+		Help: "when the TUI asks a model to continue what you type: never, on Tab, after a pause, or both"},
+	{Path: "completion.profile", Type: TypeString,
+		Help: "the profile that answers completions; empty means the session's own"},
+	{Path: "completion.model", Type: TypeString,
+		Help: "the model for completions, overriding the profile's; empty keeps the profile's"},
+	{Path: "completion.idle_after", Type: TypeDuration, Default: DefaultCompletionIdleAfter.String(),
+		Help: "the pause in typing that triggers a request in the idle mode"},
+	{Path: "completion.warn_after", Type: TypeDuration, Default: DefaultCompletionWarnAfter.String(),
+		Help: "how long a completion may take before the TUI says the model is slow"},
 }
 
 // Keys returns the table of config keys. The slice is a copy.
