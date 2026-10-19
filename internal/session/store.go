@@ -104,6 +104,39 @@ func fileName(created time.Time, id string) string {
 // Create starts a new session for cwd: it creates the project directory
 // and writes the header. The returned Session is open for appending.
 func (s *Store) Create(cwd string) (*Session, error) {
+	return s.create(cwd, nil)
+}
+
+// Fork starts a new session for cwd whose conversation is messages — the
+// caller's cut of parent's history, see [UpToTurn] — and whose header
+// names parent. profile, when it has a name, is recorded first so the
+// fork answers with the same profile as its source. The copy is written
+// as plain message records: the fork's file stands on its own, and
+// deleting the parent later loses nothing.
+func (s *Store) Fork(cwd string, parent Parent, messages []agentapi.Message, profile ProfileRef) (*Session, error) {
+	if parent.ID == "" {
+		return nil, fmt.Errorf("session: fork: no parent id")
+	}
+	sess, err := s.create(cwd, &parent)
+	if err != nil {
+		return nil, err
+	}
+	if profile.Name != "" {
+		if err := sess.AppendProfile(profile); err != nil {
+			return nil, sess.abandon(err)
+		}
+	}
+	for _, m := range messages {
+		if err := sess.AppendMessage(m); err != nil {
+			return nil, sess.abandon(err)
+		}
+	}
+	return sess, nil
+}
+
+// create writes a header for a new session, with parent when it is a
+// fork.
+func (s *Store) create(cwd string, parent *Parent) (*Session, error) {
 	id, err := s.newID()
 	if err != nil {
 		return nil, err
@@ -118,7 +151,7 @@ func (s *Store) Create(cwd string) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("session: create %s: %w", path, err)
 	}
-	sess := &Session{path: path, id: id, cwd: filepath.Clean(cwd), created: created, f: f, now: s.now}
+	sess := &Session{path: path, id: id, cwd: filepath.Clean(cwd), created: created, parent: parent, f: f, now: s.now}
 	header := Record{
 		Kind:        KindSession,
 		At:          created,
@@ -126,13 +159,23 @@ func (s *Store) Create(cwd string) (*Session, error) {
 		WireVersion: wireVersion,
 		ID:          id,
 		Cwd:         sess.cwd,
+		Parent:      parent,
 	}
 	if err := sess.write(header); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return nil, err
+		return nil, sess.abandon(err)
 	}
 	return sess, nil
+}
+
+// abandon closes and removes a file that never became a complete
+// session, and returns err for the caller to pass on.
+func (s *Session) abandon(err error) error {
+	if s.f != nil {
+		_ = s.f.Close()
+		s.f = nil
+	}
+	_ = os.Remove(s.path)
+	return err
 }
 
 // Open loads the session file at path and opens it for appending. The
@@ -224,6 +267,8 @@ type Info struct {
 	Messages int
 	// FirstPrompt is the text of the first user message, for display.
 	FirstPrompt string
+	// Parent is set for a fork: the session and turn it was cut from.
+	Parent *Parent
 }
 
 // List returns cwd's sessions, most recently modified first. A file that
@@ -276,6 +321,7 @@ func summarize(path string) (Info, error) {
 		Created:  sess.created,
 		Modified: st.ModTime(),
 		Messages: len(sess.messages),
+		Parent:   sess.parent,
 	}
 	for _, m := range sess.messages {
 		if m.Role == agentapi.RoleUser {

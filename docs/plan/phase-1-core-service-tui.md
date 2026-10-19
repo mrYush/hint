@@ -105,6 +105,7 @@ Splitting it after review had started would have cost a rebase of reviewed commi
 
 Moved to WP1.5 (2026-10-17): the model/profile switcher and the session tree with branching.
 Both need the protocol and the core before any UI, and WP1.4 does not touch the protocol.
+Decided 2026-10-18: the whole of WP1.4's remaining debt moved to WP1.5 as well — the default-TUI flip, applying a saved setup to the running core (below, "Setup writes the global config"), and the `f` hook of the message browser.
 
 Decisions (2026-10-17):
 
@@ -144,16 +145,45 @@ Decisions (2026-10-17):
 - **Tests drive the model.**
   `Update` and `View` are called directly against an `rpc.Server` on a `net.Pipe` with the fake engine already in `internal/rpc`; no `teatest`.
 
-### WP1.5 — Session and profile operations over RPC
+### WP1.5 — Session and profile operations over RPC — **done** (2026-10-18)
 
 **Branch:** `dev/wp1.5-session-ops`
 
-- [ ] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process
-- [ ] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1).
+- [x] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process.
+      An optional `model` overrides the profile's own for that session
+- [x] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1; 0 or omitted is the whole conversation).
       A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them; the TUI's entries already carry their turn, and the message browser's `f` calls it
-- [ ] The TUI exposes both: a profile picker, and a fork action in the session list, which becomes a tree
+- [x] `profile.list`: the configured profiles with their roles and whether a session can switch to them, read from the files as they stand
+- [x] The TUI exposes both: `/profile [name [model]]` with Tab completion and a picker, the profile in the header, `f` in the message browser (fork after that turn) and in the session list (fork the whole row), and the list drawn as a tree with forks under their source
+- [x] The line REPL has `/profile` too, so `--plain` is not left without the switch
+- [x] WP1.4 debt: a saved `hint setup` / `/setup` is applied to the running session instead of asking for a restart; the TUI is the default on a terminal, `--plain` keeps the REPL and `--tui` stays as a hidden no-op
 
-Additive methods, no `WireVersion` bump expected; the UI half is small once the methods exist.
+Additive methods, no `WireVersion` or `ProtocolVersion` bump; an older core answers them with method-not-found.
+
+Decisions (2026-10-18):
+
+- **A provider per session, rebuilt on switch.**
+  The engine keeps a cache of providers keyed by profile and model override, seeded with the one it started with; a switch builds the profile's router (the configured fallback behind it unless it is the same profile) and installs a new `agent.Agent` over it.
+  The agent is stateless between turns, so rebuilding it is cheaper and safer than making its provider swappable; the permission gate, the recorder and the preamble stay, so an "always" grant and the conversation survive the switch.
+  The context window follows the profile (`limitsFor`).
+- **The configuration is re-read on every switch and every `profile.list`.**
+  That is how a key written by setup reaches a running core: the shells call `session.profile` with the saved profile after a successful save, and the "restart hint" message is gone.
+  The reload uses the same flags the run started with, so `--provider`/`--model` overlays stay consistent; a reload failure is an internal error, not a silent fallback.
+- **The switch is persisted as a `profile` record in the session file.**
+  Only the name and the model override, never the profile's contents; a reader that does not know the record skips it (`FormatVersion` stays 1).
+  What was asked is recorded, not what it resolved to: a model left to the profile follows the profile when its config changes.
+  On attach the engine restores it; a profile the configuration lost, or that cannot be used, falls back to the default with a warning the client shows.
+- **A fork is a standalone file.**
+  The header names the parent (`parent: {id, turn}`), the copied conversation is written as plain `message` records, and the source's profile record comes first, so deleting the parent later loses nothing.
+  A source with a turn in flight is refused as busy: a cut through a half-finished turn would leave a dangling tool call.
+  An ephemeral fork is allowed and stays in memory.
+- **Error codes reuse the existing set.**
+  An unknown session or profile is `-32005`, a request that names things which exist but cannot be used that way (a profile without a key, a turn the conversation does not have) is `-32602`, a session or source mid-turn is `-32004`; the engine signals the first two with `rpc.ErrNotFound` and `rpc.ErrInvalid`.
+- **The session list is a tree in the TUI only.**
+  `session.list` stays flat and carries `parent`; the shell builds the forest (roots by recency, forks under their source, an orphan at the root still naming its parent).
+  `hint sessions` prints the flat list with a `forked from` note.
+- **Default TUI without a Phase 0 re-run under a model.**
+  Acceptance 3 is covered by the automated TUI tests (tools and their results in the transcript, the permission dialog with the diff, `-c` history on attach, sessions) and a terminal smoke test of the default; a manual pass of the four Phase 0 scenarios through the TUI against a live provider is left to the release branch.
 
 ### WP1.6 — Completion of what the user is typing
 
@@ -166,7 +196,7 @@ Additive methods, no `WireVersion` bump expected; the UI half is small once the 
 - [ ] A slow or failing completion never gets in the way: the request runs beside the input, not in front of it.
       Past the configured latency the status line shows a warning that the model is slow.
       Any edit of the line (a character added or removed) or Esc cancels the request, and an answer that arrives after that is dropped, never shown, even if it is already on the wire; a suggestion belongs to the exact text it was asked for
-- [ ] Command arguments that depend on the configuration (profile names for the WP1.5 switcher, models the profile serves) join the deterministic table in `internal/tui/commands.go`
+- [ ] Command arguments that depend on the configuration (models the profile serves) join the deterministic table in `internal/tui/commands.go`; profile names for `/profile` are already there since WP1.5
 
 Rules fixed on 2026-10-18, before any code: the feature is switchable in the layered config, and it must never make typing wait.
 The cancel-on-edit rule needs a request id carried through `complete` and echoed in its reply, so the shell can recognise a late answer for text that is no longer in the input; the same id lets the core cancel the provider call.
@@ -181,7 +211,7 @@ Once entered, an API key must not be readable by the agent: not by its tools, no
 Only the user sees it again, through a command that exists for that and is not reachable over RPC or from a tool.
 
 Where it leaks today (2026-10-18):
-the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `API_BAR_KEY`;
+the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `APIBAR_KEY`;
 `~/.config/hint/config.yaml` is mode 0600 but owned by the same user, so `cat` reads it;
 the file tools are confined to the project root, which is the home directory when `hint` runs there;
 tool results reach the model and the session file unmasked — only the `--debug` trace is redacted.
@@ -189,7 +219,7 @@ tool results reach the model and the session file unmasked — only the `--debug
 - [ ] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
       A headless Linux box without a Secret Service needs a decided fallback (the 0600 file as today, with a warning), not a silent one
 - [ ] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
-- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`API_BAR_KEY`, `APIBAR_TOKEN`, `OPENAI_API_KEY`, `HINT_API_KEY`)
+- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`, `API_BAR_KEY`, `OPENAI_API_KEY`, `HINT_API_KEY`)
 - [ ] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — the catch-all for a key that leaked some other way
 - [ ] The file tools refuse the config directory and the session directory even when the project root contains them
 - [ ] `tool.Root` opens files through `os.Root` (Go 1.24; the floor is 1.26 since WP1.4), which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)

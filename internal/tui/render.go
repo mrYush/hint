@@ -35,9 +35,9 @@ type entry struct {
 	failed bool
 	// turn is the user turn the entry belongs to, counting from 1: the
 	// question opens it, the answer and the tools it ran are part of it.
-	// A fork from an entry is "the turns up to this one" (WP1.5), which a
-	// client can count; an index into the session's messages it cannot,
-	// since the tools add messages it never sees.
+	// A fork from an entry is "the turns up to this one", which a client
+	// can count; an index into the session's messages it cannot, since
+	// the tools add messages it never sees.
 	turn int
 }
 

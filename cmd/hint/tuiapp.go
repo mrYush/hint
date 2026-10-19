@@ -17,6 +17,7 @@ func (a *app) tui(ctx context.Context) error {
 		SessionID:     a.sessionID,
 		Recorded:      a.recorded,
 		History:       a.history,
+		Profile:       a.profile,
 		PickSession:   a.sessionID == "",
 		ServerVersion: a.client.ServerVersion(),
 		Setup:         a.setupForTUI(),

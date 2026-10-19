@@ -189,7 +189,7 @@ or config.example.yaml in the repository.`,
 		Example: `  hint config                                   # what the next start uses
   hint config keys                              # every key, with defaults
   hint config set overview.depth 3              # global
-  hint config set --project providers.api-bar.model gpt-4o-mini
+  hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct
   hint config unset --project overview.depth    # back to the global value`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
