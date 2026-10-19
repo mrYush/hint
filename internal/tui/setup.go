@@ -211,11 +211,11 @@ func (m model) setupSaved(msg setupDoneMsg) (model, tea.Cmd) {
 	m.setupForm = nil
 	m.add(entry{kind: entryNotice, text: msg.msg, done: true})
 	if m.sessionID == "" || m.busy {
-		return m, m.loadProfiles()
+		return m, tea.Batch(m.loadProfiles(), m.loadCompletionSettings())
 	}
 	var cmd tea.Cmd
 	m, cmd = m.switchProfile(rpc.ProfileRef{Profile: msg.profile})
-	return m, tea.Batch(cmd, m.loadProfiles())
+	return m, tea.Batch(cmd, m.loadProfiles(), m.loadCompletionSettings())
 }
 
 // view draws the form in a w×h box: the inputs, and under them the help

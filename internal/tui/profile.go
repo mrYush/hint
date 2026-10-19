@@ -119,9 +119,8 @@ func describeProfile(ref rpc.ProfileRef) string {
 	return ref.Profile + "/" + ref.Model
 }
 
-// profileArgs completes /profile: a profile name first, then a model,
-// which is a free value until the core lists what a profile serves
-// (WP1.6).
+// profileArgs completes /profile: a profile name first, then a model
+// the profile serves, fetched by the first Tab on it.
 func profileArgs(m model, prev []string) argSpec {
 	switch len(prev) {
 	case 0:
@@ -131,7 +130,7 @@ func profileArgs(m model, prev []string) argSpec {
 		}
 		return argSpec{cands: names}
 	case 1:
-		return argSpec{expected: false}
+		return argSpec{cands: m.modelsOf(prev[0])}
 	}
 	return argSpec{}
 }

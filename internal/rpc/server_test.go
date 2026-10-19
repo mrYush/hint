@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -236,9 +237,19 @@ func TestNextTurnStartsRightAfterDone(t *testing.T) {
 		if turnID == "" {
 			return started
 		}
+		// The pipe is synchronous: the reply's own response must be read
+		// before the next request is written, or the server is stuck
+		// writing it while this side is stuck writing turn.start.
+		replied, acked := false, false
 		for {
 			msg := mustRecv(t, dec)
+			if msg["id"] == float64(id+1) {
+				acked = true
+			}
 			if msg["method"] == "turn.done" {
+				if replied && !acked {
+					_ = mustRecv(t, dec)
+				}
 				return started
 			}
 			if msg["method"] != "event" {
@@ -251,6 +262,7 @@ func TestNextTurnStartsRightAfterDone(t *testing.T) {
 					"jsonrpc": "2.0", "id": id + 1, "method": "permission.reply",
 					"params": map[string]any{"turn_id": turnID, "call_id": perm["call_id"], "decision": DecisionAllow},
 				})
+				replied = true
 			}
 		}
 	}
@@ -339,11 +351,64 @@ type fakeEngine struct {
 	// profiles is what profile.list answers; "local" and "cloud" are
 	// the two SetProfile accepts, "cloud" needing a key it has not got.
 	profiles []ProfileInfo
+	// completeDelay is how long Complete takes; completionOff makes it
+	// answer disabled. completes and cancelled count what it saw. cmu
+	// guards them: Complete runs on the server's goroutine.
+	cmu           sync.Mutex
+	completeDelay time.Duration
+	completionOff bool
+	completes     int
+	cancelled     int
+}
+
+// setCompletion changes the fake's completion behaviour from a test.
+func (e *fakeEngine) setCompletion(delay time.Duration, off bool) {
+	e.cmu.Lock()
+	defer e.cmu.Unlock()
+	e.completeDelay, e.completionOff = delay, off
+}
+
+func (e *fakeEngine) completionCounts() (completes, cancelled int) {
+	e.cmu.Lock()
+	defer e.cmu.Unlock()
+	return e.completes, e.cancelled
 }
 
 func (e *fakeEngine) List(context.Context) ([]Info, error) { return nil, nil }
 
 func (e *fakeEngine) Profiles(context.Context) ([]ProfileInfo, error) { return e.profiles, nil }
+
+// Complete answers "<text> done" after completeDelay, or on cancel; the
+// fake counts the requests and the cancels it saw.
+func (e *fakeEngine) Complete(ctx context.Context, req CompleteRequest) (CompleteResult, error) {
+	e.cmu.Lock()
+	e.completes++
+	delay, off := e.completeDelay, e.completionOff
+	e.cmu.Unlock()
+	if off {
+		return CompleteResult{Disabled: true, Reason: "completion.mode is off"}, nil
+	}
+	select {
+	case <-time.After(delay):
+		return CompleteResult{Suggestion: " done", Usage: &agentapi.Usage{InputTokens: 10, OutputTokens: 2}}, nil
+	case <-ctx.Done():
+		e.cmu.Lock()
+		e.cancelled++
+		e.cmu.Unlock()
+		return CompleteResult{}, ctx.Err()
+	}
+}
+
+func (e *fakeEngine) CompletionSettings(context.Context) (CompletionSettings, error) {
+	return CompletionSettings{Mode: "tab", IdleAfterMs: 600, WarnAfterMs: 2000}, nil
+}
+
+func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error) {
+	if profile != "local" {
+		return nil, fmt.Errorf("%w: unknown profile %q", ErrNotFound, profile)
+	}
+	return []string{"qwen", "llama"}, nil
+}
 
 func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {
 	src := e.sessions[opts.ID]
