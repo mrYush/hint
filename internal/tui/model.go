@@ -74,8 +74,10 @@ type model struct {
 	// setup is the configuration offer, setupForm the form while open.
 	setup     *Setup
 	setupForm *setupForm
-	// comp is a Tab completion in progress.
+	// comp is a Tab completion of a command in progress; cmpl is the
+	// completion of a question by a model (WP1.6).
 	comp *completion
+	cmpl *completer
 	// mouse is the terminal's mouse reporting. Off, the terminal's own
 	// selection works and copying text out of the transcript is a drag;
 	// on, the wheel scrolls and a click copies the block under it.
@@ -131,6 +133,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		spin:          spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(sty.status)),
 		entries:       fromHistory(opts.History),
 		sel:           noSelection,
+		cmpl:          newCompleter(),
 	}
 	m.turns = turnsOf(m.entries)
 	if opts.PickSession {
@@ -140,7 +143,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 }
 
 func (m model) Init() tea.Cmd {
-	cmds := []tea.Cmd{textarea.Blink, m.loadProfiles()}
+	cmds := []tea.Cmd{textarea.Blink, m.loadProfiles(), m.loadCompletionSettings()}
 	if m.picker != nil {
 		cl, ctx := m.cl, m.ctx
 		cmds = append(cmds, func() tea.Msg {
@@ -211,6 +214,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.profilesLoaded(msg), nil
 	case profileMsg:
 		return m.profileSwitched(msg), nil
+	case completionSettingsMsg:
+		return m.completionSettingsLoaded(msg), nil
+	case completionMsg:
+		return m.completed(msg), nil
+	case idleTickMsg:
+		return m.idleTick(msg)
+	case warnTickMsg:
+		return m.warnTick(msg), nil
+	case modelsMsg:
+		return m.modelsLoaded(msg), nil
 
 	case tea.PasteMsg:
 		// Bracketed paste: the terminal hands pasted text over as one
@@ -227,7 +240,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.ta, cmd = m.ta.Update(msg)
-		return m, cmd
+		var typed tea.Cmd
+		m, typed = m.typed()
+		return m, tea.Batch(cmd, typed)
 	}
 	// Whatever else arrives is for the input: the clipboard read behind
 	// its ctrl+v comes back as a message of its own, for instance.
@@ -261,6 +276,11 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.scrollKey(k) {
 		return m, nil
 	}
+	// Any key but Tab withdraws a suggestion: it was for the text as it
+	// stood, and Tab is the one way to take it.
+	if k.String() != "tab" {
+		m.cmpl.sugg = nil
+	}
 	switch k.String() {
 	case "esc", "ctrl+up":
 		// esc in an empty input, or ctrl+↑ from anywhere, hands the arrows
@@ -283,12 +303,18 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.submit()
 	case "tab":
-		return m.tab(), nil
+		return m.tab()
 	case "ctrl+y":
 		return m.copyLast()
 	}
+	before := m.ta.Value()
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(k)
+	if m.ta.Value() != before {
+		var typed tea.Cmd
+		m, typed = m.typed()
+		cmd = tea.Batch(cmd, typed)
+	}
 	return m, cmd
 }
 
@@ -320,13 +346,14 @@ func (m model) submit() (model, tea.Cmd) {
 		return m, nil
 	}
 	m.ta.Reset()
+	stop := m.cancelOnSubmit()
 	m.add(entry{kind: entryUser, text: text, done: true})
 	m.add(entry{kind: entryAssistant})
 	m.busy = true
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.cancelTurn = cancel
 	go runTurn(ctx, m.cl, m.sessionID, text, m.send)
-	return m, m.spin.Tick
+	return m, tea.Batch(m.spin.Tick, stop)
 }
 
 // finishTurn closes the streaming entry and renders it as markdown; a
@@ -497,6 +524,8 @@ func (m model) statusLine() string {
 		text = m.sty.hint.Render(fmt.Sprintf("turn %d · ↑↓ move · y copy · f fork · g/G first/last · esc back to the input", m.entries[m.sel].turn))
 	case m.busy:
 		text = m.spin.View() + m.sty.status.Render(" thinking… ctrl+c stops")
+	case m.suggestionLine() != "":
+		text = m.sty.hint.Render(m.suggestionLine())
 	default:
 		text = m.sty.hint.Render(help)
 	}
@@ -538,6 +567,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		m.add(entry{kind: entryNotice, text: helpText(), done: true})
 	case "/sessions":
 		return m.openPicker()
+	case "/completion":
+		return m.completionCommand(arg)
 	case "/profile":
 		if arg == "" {
 			return m.openProfiles()

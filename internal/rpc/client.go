@@ -128,6 +128,38 @@ func (c *Client) ForkSession(ctx context.Context, opts ForkOptions) (SessionView
 	return res, err
 }
 
+// Complete is complete: it returns when the core has an answer, which
+// may take as long as the model does. The request runs on the server
+// until it answers or CancelComplete names it; ctx ending here only
+// stops the wait.
+func (c *Client) Complete(ctx context.Context, req CompleteRequest) (CompleteResult, error) {
+	var res CompleteResult
+	err := c.call(ctx, "complete", req, &res)
+	return res, err
+}
+
+// CancelComplete is complete.cancel.
+func (c *Client) CancelComplete(ctx context.Context, id string) error {
+	var res okResult
+	return c.call(ctx, "complete.cancel", completeCancelParams{ID: id}, &res)
+}
+
+// CompletionSettings is complete.settings.
+func (c *Client) CompletionSettings(ctx context.Context) (CompletionSettings, error) {
+	var res CompletionSettings
+	err := c.call(ctx, "complete.settings", nil, &res)
+	return res, err
+}
+
+// Models is profile.models: the models the profile's endpoint serves.
+func (c *Client) Models(ctx context.Context, profile string) ([]string, error) {
+	var res modelsResult
+	if err := c.call(ctx, "profile.models", modelsParams{Profile: profile}, &res); err != nil {
+		return nil, err
+	}
+	return res.Models, nil
+}
+
 // Profiles is profile.list.
 func (c *Client) Profiles(ctx context.Context) ([]ProfileInfo, error) {
 	var res profilesResult

@@ -198,6 +198,11 @@ type conn struct {
 	srv     *Server
 	wmu     sync.Mutex
 	helloed bool
+	// completes are the complete requests in flight on this connection,
+	// by the client's id, so complete.cancel and a newer complete can
+	// end them. cmu guards it.
+	cmu       sync.Mutex
+	completes map[string]context.CancelFunc
 }
 
 func (c *conn) loop() error {
@@ -245,6 +250,14 @@ func (c *conn) dispatch(req request) {
 		c.sessionFork(req)
 	case "profile.list":
 		c.profileList(req)
+	case "profile.models":
+		c.profileModels(req)
+	case "complete":
+		c.complete(req)
+	case "complete.cancel":
+		c.completeCancel(req)
+	case "complete.settings":
+		c.completeSettings(req)
 	case "turn.start":
 		c.turnStart(req)
 	case "permission.reply":
@@ -381,6 +394,94 @@ func (c *conn) sessionFork(req request) {
 	}
 	sess = c.srv.hold(sess)
 	_ = c.writeResult(req.ID, sessionView(sess))
+}
+
+// complete runs beside the connection's loop: a completion waits on a
+// provider, and the loop must stay free for permission.reply and
+// turn.cancel meanwhile. One completion at a time per connection — a
+// newer request cancels the older, whose answer the client no longer
+// wants.
+func (c *conn) complete(req request) {
+	var p CompleteRequest
+	if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" || p.Text == "" {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "id and text are required"))
+		return
+	}
+	ctx, cancel := context.WithCancel(c.ctx)
+	c.cmu.Lock()
+	for id, old := range c.completes {
+		old()
+		delete(c.completes, id)
+	}
+	if c.completes == nil {
+		c.completes = map[string]context.CancelFunc{}
+	}
+	c.completes[p.ID] = cancel
+	c.cmu.Unlock()
+	go func() {
+		defer func() {
+			cancel()
+			c.cmu.Lock()
+			if c.completes[p.ID] != nil {
+				delete(c.completes, p.ID)
+			}
+			c.cmu.Unlock()
+		}()
+		res, err := c.srv.Engine.Complete(ctx, p)
+		switch {
+		case ctx.Err() != nil:
+			_ = c.writeError(req.ID, errCode(CodeInternal, "completion %s was cancelled", p.ID))
+		case err != nil:
+			_ = c.writeError(req.ID, engineError(err))
+		default:
+			res.ID = p.ID
+			_ = c.writeResult(req.ID, res)
+		}
+	}()
+}
+
+func (c *conn) completeCancel(req request) {
+	var p completeCancelParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "id is required"))
+		return
+	}
+	c.cmu.Lock()
+	cancel := c.completes[p.ID]
+	delete(c.completes, p.ID)
+	c.cmu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	// A cancel for a completion that already answered is not a mistake:
+	// the two crossed on the wire.
+	_ = c.writeResult(req.ID, okResult{OK: true})
+}
+
+func (c *conn) completeSettings(req request) {
+	s, err := c.srv.Engine.CompletionSettings(c.ctx)
+	if err != nil {
+		_ = c.writeError(req.ID, errCode(CodeInternal, "%v", err))
+		return
+	}
+	_ = c.writeResult(req.ID, s)
+}
+
+func (c *conn) profileModels(req request) {
+	var p modelsParams
+	if err := unmarshalParams(req.Params, &p); err != nil || p.Profile == "" {
+		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "profile is required"))
+		return
+	}
+	models, err := c.srv.Engine.Models(c.ctx, p.Profile)
+	if err != nil {
+		_ = c.writeError(req.ID, engineError(err))
+		return
+	}
+	if models == nil {
+		models = []string{}
+	}
+	_ = c.writeResult(req.ID, modelsResult{Models: models})
 }
 
 func (c *conn) profileList(req request) {

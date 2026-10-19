@@ -139,6 +139,18 @@ type profilesResult struct {
 	Profiles []ProfileInfo `json:"profiles"`
 }
 
+type completeCancelParams struct {
+	ID string `json:"id"`
+}
+
+type modelsParams struct {
+	Profile string `json:"profile"`
+}
+
+type modelsResult struct {
+	Models []string `json:"models"`
+}
+
 type listResult struct {
 	Sessions []Info `json:"sessions"`
 }

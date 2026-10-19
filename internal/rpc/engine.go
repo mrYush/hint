@@ -57,6 +57,42 @@ type ForkOptions struct {
 	Ephemeral bool   `json:"ephemeral,omitempty"`
 }
 
+// CompleteRequest is the body of complete: the text typed so far and the
+// session it belongs to, for context. ID is the client's: the result
+// echoes it, so a late answer for text that is no longer in the input is
+// told from the one being waited for.
+type CompleteRequest struct {
+	ID        string `json:"id"`
+	SessionID string `json:"session_id,omitempty"`
+	Text      string `json:"text"`
+}
+
+// CompleteResult is the answer to complete. Suggestion is the
+// continuation, empty when the model had none. Disabled says the
+// configuration has completion off, with Reason; a client then stops
+// asking. Usage is the provider's accounting, so a client can show what
+// completion costs.
+type CompleteResult struct {
+	ID         string          `json:"id"`
+	Suggestion string          `json:"suggestion,omitempty"`
+	Disabled   bool            `json:"disabled,omitempty"`
+	Reason     string          `json:"reason,omitempty"`
+	Usage      *agentapi.Usage `json:"usage,omitempty"`
+}
+
+// CompletionSettings is the completion block of the configuration as it
+// stands on disk, for a client that drives the triggers.
+type CompletionSettings struct {
+	// Mode is off, tab, idle or both.
+	Mode    string `json:"mode"`
+	Profile string `json:"profile,omitempty"`
+	Model   string `json:"model,omitempty"`
+	// IdleAfterMs is the pause that triggers a request in the idle mode;
+	// WarnAfterMs how long a request may take before the client warns.
+	IdleAfterMs int `json:"idle_after_ms"`
+	WarnAfterMs int `json:"warn_after_ms"`
+}
+
 // Info is one row of session.list, most recently modified first.
 type Info struct {
 	ID string `json:"id"`
@@ -126,4 +162,16 @@ type Engine interface {
 	// An unknown source is ErrNotFound, a turn it does not have — or an
 	// empty conversation — ErrInvalid.
 	Fork(ctx context.Context, opts ForkOptions) (Session, error)
+	// Complete asks a model for a short continuation of req.Text. It
+	// blocks for the provider's answer and honours ctx: the server runs
+	// it beside the connection's other requests and cancels it on
+	// complete.cancel. A disabled configuration is a result, not an
+	// error.
+	Complete(ctx context.Context, req CompleteRequest) (CompleteResult, error)
+	// CompletionSettings reads the completion block as the configuration
+	// stands now.
+	CompletionSettings(ctx context.Context) (CompletionSettings, error)
+	// Models lists the models the profile's endpoint serves, by name. An
+	// unknown profile is ErrNotFound.
+	Models(ctx context.Context, profile string) ([]string, error)
 }

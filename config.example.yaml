@@ -72,3 +72,18 @@ overview:
   depth: 2 # directory levels listed in the system prompt; 0 for none.
   #          HINT_OVERVIEW_DEPTH, --overview-depth
   max_entries: 100 # cap on the entries listed. HINT_OVERVIEW_ENTRIES, --overview-entries
+
+# Completion of what you type in the TUI: a short continuation from a model,
+# shown in the status line, Tab accepts it. Every request sends the text typed
+# so far and the last question to the provider, so it is off by default and
+# the modes differ in how often they ask. HINT_COMPLETION_MODE, --completion.
+completion:
+  mode: off # off | tab (ask only when Tab is pressed on a question) | idle (ask after
+  #           a pause in typing) | both. With a cloud profile the text leaves the
+  #           machine on every request; on a small machine a second model loaded
+  #           beside the main one slows both down, so prefer the session's profile
+  profile: "" # the profile that answers; empty: the session's own profile and model.
+  #             A separate small model is optional; name its profile here
+  model: "" # a model of that profile for completions; empty keeps the profile's
+  idle_after: 600ms # the pause that triggers a request in the idle mode
+  warn_after: 2s # after this long the status line says the completion model is slow

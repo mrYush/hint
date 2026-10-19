@@ -77,8 +77,18 @@ type rpcEngine struct {
 	reload    func() (*config.Config, error)
 	providers map[rpc.ProfileRef]agentapi.ChatProvider
 
+	// listModels stands in for provider.Models in tests.
+	listModels func(context.Context, config.Profile) ([]provider.Model, error)
+
 	mu   sync.Mutex
 	live map[string]*rpcSession
+}
+
+// tracef writes to the debug log when there is one.
+func (e *rpcEngine) tracef(format string, args ...any) {
+	if e.trace != nil {
+		e.trace.Printf(format, args...)
+	}
 }
 
 // newRPCEngine assembles the engine from the process: configuration,

@@ -1,0 +1,136 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/mrYush/hint/internal/config"
+	"github.com/mrYush/hint/internal/provider"
+	"github.com/mrYush/hint/internal/rpc"
+)
+
+func TestCompleteAsksTheSessionProviderWithoutTools(t *testing.T) {
+	chat := &fakeChat{reply: func(n int) string {
+		if n == 1 {
+			return "the answer"
+		}
+		return "\"the parser\"\nsecond line"
+	}}
+	as, _, _, _ := testAssembly(t, chat, "")
+	as.cfg.Completion = config.CompletionSettings{Mode: config.CompletionTab, IdleAfter: config.DefaultCompletionIdleAfter, WarnAfter: config.DefaultCompletionWarnAfter}
+	_, cl := testEngine(t, as)
+	ctx := context.Background()
+	view, err := cl.OpenSession(ctx, rpc.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drive(t, cl, view.ID, "what does main.go do?")
+
+	res, err := cl.Complete(ctx, rpc.CompleteRequest{ID: "c1", SessionID: view.ID, Text: "and where is"})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if res.Suggestion != " the parser" || res.Usage == nil || res.Usage.InputTokens != 10 {
+		t.Errorf("result = %+v; want the first line, unquoted, with a leading space and the usage", res)
+	}
+	reqs := chat.seen()
+	if len(reqs) != 2 {
+		t.Fatalf("%d requests, want the turn and the completion", len(reqs))
+	}
+	req := reqs[1]
+	if len(req.Tools) != 0 || req.MaxTokens != completionMaxTokens || req.Temperature == nil {
+		t.Errorf("completion request has %d tools, max_tokens %d, temperature %v", len(req.Tools), req.MaxTokens, req.Temperature)
+	}
+	if len(req.Messages) != 2 || req.Messages[0].Role != "system" || !strings.Contains(req.Messages[1].Text(), "what does main.go do?") || !strings.Contains(req.Messages[1].Text(), "and where is") {
+		t.Errorf("completion messages = %+v; want the instruction, the last question and the text", req.Messages)
+	}
+	// Nothing of it reached the session.
+	again, err := cl.AttachSession(ctx, view.ID)
+	if err != nil || len(again.Messages) != 2 {
+		t.Errorf("session has %d messages after a completion, want 2", len(again.Messages))
+	}
+
+	// Off in the configuration is an answer, not an error; an unknown
+	// session is not found.
+	as.cfg.Completion.Mode = config.CompletionOff
+	_, cl2 := testEngine(t, as)
+	if res, err := cl2.Complete(ctx, rpc.CompleteRequest{ID: "c2", Text: "x"}); err != nil || !res.Disabled || !strings.Contains(res.Reason, "completion.mode") {
+		t.Errorf("off = %+v, %v", res, err)
+	}
+	as.cfg.Completion.Mode = config.CompletionIdle
+	_, cl3 := testEngine(t, as)
+	var rpcErr *rpc.Error
+	if _, err := cl3.Complete(ctx, rpc.CompleteRequest{ID: "c3", SessionID: "ghost", Text: "x"}); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotFound {
+		t.Errorf("unknown session = %v; want code %d", err, rpc.CodeNotFound)
+	}
+	// Without a session the default profile answers.
+	if res, err := cl3.Complete(ctx, rpc.CompleteRequest{ID: "c4", Text: "no session"}); err != nil || res.Disabled {
+		t.Errorf("sessionless completion = %+v, %v", res, err)
+	}
+}
+
+func TestCompleteUsesTheConfiguredProfile(t *testing.T) {
+	main := &fakeChat{reply: func(int) string { return "from main" }}
+	small := &fakeChat{reply: func(int) string { return "from small" }}
+	as, _, _, _ := testAssembly(t, main, "")
+	as.cfg = twoProfiles()
+	as.cfg.Completion = config.CompletionSettings{Mode: config.CompletionBoth, Profile: "other", Model: "tiny", IdleAfter: config.DefaultCompletionIdleAfter, WarnAfter: config.DefaultCompletionWarnAfter}
+	eng, cl := testEngine(t, as)
+	eng.providers[rpc.ProfileRef{Profile: "other", Model: "tiny"}] = small
+	ctx := context.Background()
+	view, err := cl.OpenSession(ctx, rpc.OpenOptions{Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, err := cl.Complete(ctx, rpc.CompleteRequest{ID: "c1", SessionID: view.ID, Text: "hello"}); err != nil || res.Suggestion != " from small" {
+		t.Errorf("Complete = %+v, %v; want the small model's answer", res, err)
+	}
+	if len(main.seen()) != 0 || len(small.seen()) != 1 {
+		t.Errorf("requests: main %d, small %d", len(main.seen()), len(small.seen()))
+	}
+	settings, err := cl.CompletionSettings(ctx)
+	if err != nil || settings.Mode != "both" || settings.Profile != "other" || settings.Model != "tiny" || settings.IdleAfterMs != 600 || settings.WarnAfterMs != 2000 {
+		t.Errorf("CompletionSettings = %+v, %v", settings, err)
+	}
+}
+
+func TestModelsListsWhatTheProfileServes(t *testing.T) {
+	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
+	as.cfg = twoProfiles()
+	eng, cl := testEngine(t, as)
+	var asked config.Profile
+	eng.listModels = func(_ context.Context, p config.Profile) ([]provider.Model, error) {
+		asked = p
+		return []provider.Model{{Name: "a"}, {Name: "b"}}, nil
+	}
+	ctx := context.Background()
+	models, err := cl.Models(ctx, "other")
+	if err != nil || len(models) != 2 || models[1] != "b" || asked.Name != "other" {
+		t.Fatalf("Models = %v, %v (asked %s)", models, err, asked.Name)
+	}
+	var rpcErr *rpc.Error
+	if _, err := cl.Models(ctx, "nope"); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotFound {
+		t.Errorf("unknown profile = %v; want code %d", err, rpc.CodeNotFound)
+	}
+}
+
+func TestTrimSuggestion(t *testing.T) {
+	cases := []struct{ typed, raw, want string }{
+		{"add a test for", " the parser", " the parser"},
+		{"add a test for", "the parser\nand more", " the parser"},
+		{"add a test for", "\"the parser\"", " the parser"},
+		{"add a test for", "add a test for the parser", " the parser"},
+		{"add a test for ", "the parser", "the parser"},
+		{"what is", "?", "?"},
+		{"x", "   ", ""},
+		{"x", "", ""},
+		{"count", "one two three four five six seven eight nine ten eleven twelve thirteen", " one two three four five six seven eight nine ten eleven twelve"},
+	}
+	for _, c := range cases {
+		if got := trimSuggestion(c.typed, c.raw); got != c.want {
+			t.Errorf("trimSuggestion(%q, %q) = %q, want %q", c.typed, c.raw, got, c.want)
+		}
+	}
+}

@@ -49,6 +49,16 @@ type fakeEngine struct {
 	// profiles is what profile.list answers; every name in it is one
 	// SetProfile accepts, unless the row says it is not usable.
 	profiles []rpc.ProfileInfo
+	// settings is what complete.settings answers; models what
+	// profile.models answers per profile. completes records the texts
+	// Complete was asked about, completeDelay how long it takes,
+	// completeErr makes it fail and completionOff makes it disabled.
+	settings      rpc.CompletionSettings
+	models        map[string][]string
+	completes     []string
+	completeDelay time.Duration
+	completeErr   error
+	completionOff bool
 }
 
 // fakeSession is one session of a fakeEngine: its id and the questions
@@ -78,6 +88,43 @@ func (e *fakeEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
 		return s, nil
 	}
 	return nil, errors.New("no such session")
+}
+
+// Complete answers " and tests" for any text, after completeDelay, and
+// counts the requests. A completeErr fails every request; completionOff
+// answers disabled.
+func (e *fakeEngine) Complete(ctx context.Context, req rpc.CompleteRequest) (rpc.CompleteResult, error) {
+	e.mu.Lock()
+	e.completes = append(e.completes, req.Text)
+	delay, fail, off := e.completeDelay, e.completeErr, e.completionOff
+	e.mu.Unlock()
+	if off {
+		return rpc.CompleteResult{Disabled: true, Reason: "completion.mode is off"}, nil
+	}
+	select {
+	case <-time.After(delay):
+	case <-ctx.Done():
+		return rpc.CompleteResult{}, ctx.Err()
+	}
+	if fail != nil {
+		return rpc.CompleteResult{}, fail
+	}
+	return rpc.CompleteResult{Suggestion: " and tests", Usage: &agentapi.Usage{InputTokens: 10, OutputTokens: 2}}, nil
+}
+
+func (e *fakeEngine) CompletionSettings(context.Context) (rpc.CompletionSettings, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.settings, nil
+}
+
+func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if m, ok := e.models[profile]; ok {
+		return m, nil
+	}
+	return nil, fmt.Errorf("%w: unknown profile %q", rpc.ErrNotFound, profile)
 }
 
 func (e *fakeEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {
