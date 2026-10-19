@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-17
+> Status: living document · Last updated: 2026-10-18
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -11,8 +11,11 @@ universal agent with "eyes" (camera + VLM), "ears and voice" (microphone +
 STT/TTS), memory (vector index), and access to device sensors. It works with
 any OpenAI-compatible API and degrades gracefully to local models when offline
 (Ollama on desktop, on-device runtimes on mobile). It is extensible through
-tools: built-in, MCP servers, and — eventually — a public catalog ("feature
-store") for third-party developers.
+tools: built-in, MCP servers, other agents over A2A, HTTP APIs described by
+OpenAPI, and — eventually — a public catalog ("feature store") for
+third-party developers. Instructions and knowledge come in the same open
+way: rule files in the repository, MCP prompts and resources, local
+databases and document indexes.
 
 ## Core architectural principle: "core as a service, shells as clients"
 
@@ -66,7 +69,7 @@ part-time; roughly halve them for full-time.
 | 0 | MVP CLI: agent loop, tools, permissions, sessions | v0.2.0 | 6–10 wk | [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md) |
 | — | Install indexes: apt + Scoop, cask cleanup. Parallel with Phase 1; does not gate v0.3 | current final tag | — | [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) |
 | 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
-| 2 | Memory, MCP client, code maturity | v0.4 | 6–8 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
+| 2 | Memory, MCP client, A2A, open integration surfaces, code maturity | v0.4 | 8–10 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
 | 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
 | 4 | Desktop widgets (macOS/Windows/Linux) | v0.6 | 6–10 wk | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
 | 5 | Mobile: iPhone / iPad / Android | v0.7 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
@@ -255,10 +258,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     This does not gate `v0.3`.
     Official catalogs stay a separate parallel path and do not gate either track.
 13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
-14. WP1.4: the TUI on Bubble Tea v2, as a second client of the same protocol.
-    Opt-in `--tui` first: streaming chat with markdown, the permission dialog with the diff, the session list.
-    It becomes the default on a terminal, with `--plain` for the REPL, once the Phase 0 scenarios pass through it.
-15. WP1.5: session and profile operations over RPC — a profile switch mid-session and a session fork, each a protocol method and core work first; the TUI then shows them.
+14. ~~WP1.4: the TUI on Bubble Tea v2, as a second client of the same protocol.~~ Done; its leftovers (the default-TUI flip, applying a saved setup without a restart) went to WP1.5 (decided 2026-10-18).
+15. ~~WP1.5: session and profile operations over RPC — a profile switch mid-session and a session fork, each a protocol method and core work first; the TUI then shows them.~~ Done (2026-10-18): `session.profile`, `session.fork`, `profile.list`; `/profile` in both shells, `f` forks in the TUI, the session list is a tree, the TUI is the default on a terminal with `--plain` for the REPL.
 16. WP1.6: completion of what the user is typing — a short continuation from a small model over RPC, shown as ghost text in the TUI input, plus configuration-dependent command arguments.
     Switchable in the layered config (the project's `.hint/` value beats the global one, a key it leaves out is inherited), and it never blocks typing: a slow model gets a warning, an edit or Esc cancels the request, and a late answer is dropped.
     The deterministic part (Tab on slash commands and their arguments) is already in WP1.4.
@@ -279,6 +280,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
 | Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
+| Q10 | A2A: which side first — `hint` as an A2A client that delegates to remote agents, or `hint serve` as an A2A server other agents call — and which Go implementation to build on (the A2A project's Go SDK, or a thin client over the JSON-RPC spec) | Phase 2 (WP2.6) | Spike at the start of WP2.6: read the current spec, run the reference samples against `hint serve`, decide; recorded in [phase-2](docs/plan/phase-2-memory-mcp.md#wp26--a2a-hint-among-other-agents) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
 
 ## Prior art

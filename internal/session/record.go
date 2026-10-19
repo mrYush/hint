@@ -25,7 +25,28 @@ const (
 	// KindCompaction is a checkpoint: Record.Compaction.History is the
 	// whole conversation from here on, replacing everything before.
 	KindCompaction Kind = "compaction"
+	// KindProfile says which provider profile answers from here on
+	// (Record.Profile); a session without one uses the configured
+	// default. Added by WP1.5 as an optional record: a reader that does
+	// not know it skips it and keeps the default.
+	KindProfile Kind = "profile"
 )
+
+// Parent names the session a fork was taken from and the user turn it
+// was cut at, turns counted from 1. It lives in the header only.
+type Parent struct {
+	ID   string `json:"id"`
+	Turn int    `json:"turn"`
+}
+
+// ProfileRef is the payload of KindProfile: the provider profile the
+// session uses from this record on, and the model when one overrides
+// the profile's own. Only the name is stored, never the profile's
+// contents — a key must not land in a session file.
+type ProfileRef struct {
+	Name  string `json:"name"`
+	Model string `json:"model,omitempty"`
+}
 
 // Record is one line of a session file. It is a tagged union — Kind says
 // which of the payload fields is meaningful — for the same reason
@@ -48,12 +69,16 @@ type Record struct {
 	ID string `json:"id,omitempty"`
 	// Cwd is the working directory the session belongs to.
 	Cwd string `json:"cwd,omitempty"`
+	// Parent is set on the header of a fork: where its history came from.
+	Parent *Parent `json:"parent,omitempty"`
 
 	// Message is the payload of KindMessage.
 	Message *agentapi.Message `json:"message,omitempty"`
 	// Compaction is the payload of KindCompaction. Its History has the
 	// run's preamble already removed — see [Recorder].
 	Compaction *agentapi.Compaction `json:"compaction,omitempty"`
+	// Profile is the payload of KindProfile.
+	Profile *ProfileRef `json:"profile,omitempty"`
 }
 
 // ErrUnknownKind reports a record kind this build does not define. A
@@ -71,6 +96,9 @@ func (r *Record) Validate() error {
 		if r.ID == "" {
 			return fmt.Errorf("session: header has no id")
 		}
+		if r.Parent != nil && (r.Parent.ID == "" || r.Parent.Turn < 0) {
+			return fmt.Errorf("session: header names a parent without an id or with a negative turn")
+		}
 	case KindMessage:
 		if r.Message == nil {
 			return fmt.Errorf("session: message record has no message")
@@ -86,6 +114,10 @@ func (r *Record) Validate() error {
 			if err := m.Validate(); err != nil {
 				return fmt.Errorf("session: compaction history[%d]: %w", i, err)
 			}
+		}
+	case KindProfile:
+		if r.Profile == nil || r.Profile.Name == "" {
+			return fmt.Errorf("session: profile record has no profile name")
 		}
 	case "":
 		return fmt.Errorf("session: record has no kind")

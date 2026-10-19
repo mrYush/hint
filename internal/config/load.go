@@ -413,46 +413,50 @@ func (l *loader) applyEnvScalars(cfg *Config) {
 // synthesizeIfEmpty provides the zero-config path: with no profiles from any
 // file, a single profile is built from well-known key variables. Implicit
 // key pickup happens ONLY here — an explicit profile must name its key via
-// ${VAR}; the loader never guesses a key for it. api-bar is the product
-// default, OPENAI_API_KEY is the legacy path, and when both are present
-// api-bar wins.
+// ${VAR}; the loader never guesses a key for it. Each hosted endpoint has
+// its own variable (APIBAR_KEY or APIBAR_TOKEN for the api-bar gateway,
+// OPENAI_API_KEY for api.openai.com) and api-bar wins when both are set;
+// API_BAR_KEY is the earlier spelling and still works, with a warning.
+// A bare HINT_API_KEY or --api-key lands on the kind default: a server on
+// this machine.
 func (l *loader) synthesizeIfEmpty(cfg *Config) {
 	if len(cfg.Providers) > 0 {
 		return
 	}
-	if key, ok := l.env("API_BAR_KEY"); ok {
-		l.addSynthetic(cfg, "api-bar", key)
-		return
-	}
-	if key, ok := l.env("APIBAR_TOKEN"); ok {
-		l.addSynthetic(cfg, "api-bar", key)
+	for _, name := range []string{"APIBAR_KEY", "APIBAR_TOKEN", "API_BAR_KEY"} {
+		key, ok := l.env(name)
+		if !ok {
+			continue
+		}
+		if name == "API_BAR_KEY" {
+			l.warnf("API_BAR_KEY is the old name of APIBAR_KEY; rename it")
+		}
+		l.addSynthetic(cfg, "api-bar", defaultAPIBarBaseURL, hostedDefaultModel, key)
 		return
 	}
 	if key, ok := l.env("OPENAI_API_KEY"); ok {
-		cfg.Providers = append(cfg.Providers, Profile{
-			Name:    "openai",
-			Kind:    KindOpenAI,
-			BaseURL: defaultOpenAIBaseURL,
-			APIKey:  key,
-		})
-		if cfg.DefaultProvider == "" {
-			cfg.DefaultProvider = "openai"
-		}
+		l.addSynthetic(cfg, "openai", defaultOpenAIBaseURL, hostedDefaultModel, key)
 		return
 	}
 	// No well-known key, but a key may still arrive via HINT_API_KEY or
-	// --api-key: give the overlays a profile to land on.
+	// --api-key: give the overlays a profile to land on. The model has to
+	// come the same way (HINT_MODEL, --model); validate says so otherwise.
 	_, envKey := l.env("HINT_API_KEY")
 	if envKey || l.opts.Flags.APIKey != "" {
-		l.addSynthetic(cfg, "default", "")
+		l.addSynthetic(cfg, "default", "", "", "")
 	}
 }
 
-func (l *loader) addSynthetic(cfg *Config, name, key string) {
+// addSynthetic appends an openai profile and makes it the default when
+// nothing named one. An empty baseURL leaves the kind default to
+// applyKindDefaults; an empty model stays empty.
+func (l *loader) addSynthetic(cfg *Config, name, baseURL, model, key string) {
 	cfg.Providers = append(cfg.Providers, Profile{
-		Name:   name,
-		Kind:   KindOpenAI,
-		APIKey: key, // BaseURL/Model filled by applyKindDefaults (api-bar gateway)
+		Name:    name,
+		Kind:    KindOpenAI,
+		BaseURL: baseURL,
+		Model:   model,
+		APIKey:  key,
 	})
 	if cfg.DefaultProvider == "" {
 		cfg.DefaultProvider = name
@@ -607,18 +611,16 @@ func applyKindDefaults(cfg *Config) {
 		switch p.Kind {
 		case KindOpenAI:
 			if p.BaseURL == "" {
-				p.BaseURL = defaultAPIBarBaseURL
-			}
-			if p.Model == "" {
-				p.Model = defaultOpenAIModel
+				p.BaseURL = defaultVLLMBaseURL
 			}
 		case KindOllama:
 			if p.BaseURL == "" {
 				p.BaseURL = defaultOllamaBaseURL
 			}
-			// An empty model stays empty: there is no sane default for a
-			// local install, validate rejects it for selected profiles.
 		}
+		// An empty model stays empty for either kind: a server serves
+		// whatever was loaded into it, and validate rejects a selected
+		// profile that names none.
 	}
 }
 
@@ -667,19 +669,6 @@ func (l *loader) validate(cfg *Config) error {
 }
 
 func (l *loader) validateUsable(cfg *Config, name, role string) error {
-	p, err := cfg.Profile(name)
-	if err != nil {
-		return err
-	}
-	switch p.Kind {
-	case KindOpenAI:
-		if p.APIKey == "" {
-			return &NoKeyError{Role: role, Profile: p.Name}
-		}
-	case KindOllama:
-		if p.Model == "" {
-			return fmt.Errorf("config: %s profile %q (kind ollama) needs an explicit model", role, p.Name)
-		}
-	}
-	return nil
+	_, err := cfg.Usable(name, role)
+	return err
 }

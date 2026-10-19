@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,6 +330,7 @@ providers:
   - name: p
     kind: openai
     api_key: real-key
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -348,6 +350,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -365,12 +368,14 @@ providers:
   - name: canon
     kind: openai
     api_key: k
+    model: m
 `)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint.yaml"), `
 providers:
   - name: legacy
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -393,6 +398,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -414,6 +420,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -433,14 +440,24 @@ func TestZeroConfig(t *testing.T) {
 		wantBaseURL string
 		wantModel   string
 		wantKey     string
+		wantWarning string
 	}{
 		{
-			name:        "API_BAR_KEY makes api-bar the default",
+			name:        "APIBAR_KEY makes api-bar the default",
+			env:         map[string]string{"APIBAR_KEY": "bar-key"},
+			wantName:    "api-bar",
+			wantBaseURL: "https://api-bar.ru/route/openai",
+			wantModel:   "gpt-4o",
+			wantKey:     "bar-key",
+		},
+		{
+			name:        "API_BAR_KEY, the old spelling, still works",
 			env:         map[string]string{"API_BAR_KEY": "bar-key"},
 			wantName:    "api-bar",
 			wantBaseURL: "https://api-bar.ru/route/openai",
 			wantModel:   "gpt-4o",
 			wantKey:     "bar-key",
+			wantWarning: "API_BAR_KEY is the old name",
 		},
 		{
 			name:        "APIBAR_TOKEN works too",
@@ -461,7 +478,7 @@ func TestZeroConfig(t *testing.T) {
 		{
 			name: "api-bar wins over openai when both keys are set",
 			env: map[string]string{
-				"API_BAR_KEY":    "bar-key",
+				"APIBAR_KEY":     "bar-key",
 				"OPENAI_API_KEY": "sk-x",
 			},
 			wantName:    "api-bar",
@@ -470,19 +487,19 @@ func TestZeroConfig(t *testing.T) {
 			wantKey:     "bar-key",
 		},
 		{
-			name:        "flags alone synthesize a profile on the product default",
-			flags:       Flags{APIKey: "flag-key"},
+			name:        "flags alone synthesize a profile on the kind default, a local server",
+			flags:       Flags{APIKey: "flag-key", Model: "flag-model"},
 			wantName:    "default",
-			wantBaseURL: "https://api-bar.ru/route/openai",
-			wantModel:   "gpt-4o",
+			wantBaseURL: "http://localhost:8000/v1",
+			wantModel:   "flag-model",
 			wantKey:     "flag-key",
 		},
 		{
-			name:        "HINT_API_KEY alone synthesizes on the product default",
-			env:         map[string]string{"HINT_API_KEY": "hint-key"},
+			name:        "HINT_API_KEY and HINT_MODEL synthesize on the kind default",
+			env:         map[string]string{"HINT_API_KEY": "hint-key", "HINT_MODEL": "env-model"},
 			wantName:    "default",
-			wantBaseURL: "https://api-bar.ru/route/openai",
-			wantModel:   "gpt-4o",
+			wantBaseURL: "http://localhost:8000/v1",
+			wantModel:   "env-model",
 			wantKey:     "hint-key",
 		},
 	}
@@ -500,8 +517,25 @@ func TestZeroConfig(t *testing.T) {
 				t.Errorf("profile = %#v, want name=%q base_url=%q model=%q key=%q",
 					p, tt.wantName, tt.wantBaseURL, tt.wantModel, tt.wantKey)
 			}
+			warned := strings.Contains(strings.Join(cfg.Warnings, "\n"), tt.wantWarning)
+			if tt.wantWarning != "" && !warned {
+				t.Errorf("warnings = %v, want one about %q", cfg.Warnings, tt.wantWarning)
+			}
+			if tt.wantWarning == "" && len(cfg.Warnings) != 0 {
+				t.Errorf("unexpected warnings %v", cfg.Warnings)
+			}
 		})
 	}
+
+	t.Run("a key without a model is an error that names the model", func(t *testing.T) {
+		opts := dirs(t)
+		opts.LookupEnv = lookup(map[string]string{"HINT_API_KEY": "hint-key"})
+		_, err := LoadFrom(opts)
+		var noModel *NoModelError
+		if !errors.As(err, &noModel) || !strings.Contains(err.Error(), "needs a model") {
+			t.Errorf("want a no-model error, got %v", err)
+		}
+	})
 
 	t.Run("nothing configured is an error", func(t *testing.T) {
 		opts := dirs(t)
@@ -512,20 +546,21 @@ func TestZeroConfig(t *testing.T) {
 	})
 }
 
-func TestOpenAIKindDefaultsToAPIBarNotOpenAICom(t *testing.T) {
+func TestOpenAIKindDefaultsToALocalServerNotOpenAICom(t *testing.T) {
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 	p := mustDefault(t, cfg)
-	if p.BaseURL != "https://api-bar.ru/route/openai" {
+	if p.BaseURL != "http://localhost:8000/v1" {
 		t.Errorf("base_url = %q, want the api-bar gateway", p.BaseURL)
 	}
 	if strings.Contains(p.BaseURL, "api.openai.com") {
@@ -564,6 +599,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: spare
     kind: openai
 default_provider: p
@@ -576,6 +612,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: fb
     kind: openai
 default_provider: p
@@ -599,6 +636,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: bad
     kind: anthropic
 default_provider: p
@@ -612,6 +650,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 default_provider: nope
 `,
 			wantErr: "default_provider",
@@ -623,6 +662,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: p
     kind: ollama
     model: llama3
@@ -636,6 +676,7 @@ providers:
   - name: a
     kind: openai
     api_key: k
+    model: m
   - name: b
     kind: ollama
     model: llama3
@@ -668,6 +709,7 @@ providers:
   - name: only
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -685,6 +727,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	opts.LookupEnv = lookup(map[string]string{"HINT_DEBUG": "true"})
 	cfg, err := LoadFrom(opts)
@@ -735,6 +778,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `
 	t.Run("defaults", func(t *testing.T) {
 		opts := dirs(t)
@@ -865,6 +909,7 @@ providers:
     kind: openai
     base_url: http://127.0.0.1:8080/v1
     api_key: local
+    model: m
     header_timeout: 90s
 `)
 		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
@@ -888,6 +933,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -910,6 +956,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
     header_timeout: `+value+`
 `)
 			if _, err := LoadFrom(opts); err == nil {

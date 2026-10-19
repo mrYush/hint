@@ -39,6 +39,17 @@ func NewRecorder(s *Session, preamble int) *Recorder {
 	return r
 }
 
+// Seed replaces the conversation of a Recorder that has no file behind
+// it: the ephemeral fork of a session starts from its source's history
+// without writing it anywhere. A Recorder with a file keeps the file's
+// conversation and ignores the call.
+func (r *Recorder) Seed(messages []agentapi.Message) {
+	if r.session != nil {
+		return
+	}
+	r.messages = append([]agentapi.Message(nil), messages...)
+}
+
 // Messages returns a copy of the conversation as it stands: what the
 // session held when the run started plus everything observed since.
 func (r *Recorder) Messages() []agentapi.Message {

@@ -117,12 +117,16 @@ func Age(t, now time.Time) string {
 }
 
 // Print lists infos on out, one per line and numbered from 1: when the
-// conversation last grew, the id, how many messages it holds and the
-// first prompt. The picker prints its choices this way, and `hint
-// sessions` prints the whole directory.
+// conversation last grew, the id, how many messages it holds, the first
+// prompt and, for a fork, where it was cut from. The picker prints its
+// choices this way, and `hint sessions` prints the whole directory.
 func Print(out io.Writer, infos []Info) {
 	for i, info := range infos {
-		fmt.Fprintf(out, "%3d. %s  %-16s  %3d msgs  %s\n",
+		fmt.Fprintf(out, "%3d. %s  %-16s  %3d msgs  %s",
 			i+1, info.Modified.Local().Format("2006-01-02 15:04"), info.ID, info.Messages, firstLineOf(info.FirstPrompt, 60))
+		if info.Parent != nil {
+			fmt.Fprintf(out, "  ↳ forked from %s after turn %d", info.Parent.ID, info.Parent.Turn)
+		}
+		fmt.Fprintln(out)
 	}
 }

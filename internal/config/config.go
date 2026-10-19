@@ -17,9 +17,9 @@ import (
 type Kind string
 
 const (
-	// KindOpenAI is the OpenAI Chat Completions dialect (OpenAI, OpenRouter,
-	// vLLM, api-bar /route/openai, Ollama /v1, ...). The default profile of
-	// this kind must carry an API key.
+	// KindOpenAI is the OpenAI Chat Completions dialect (vLLM, llama-server,
+	// OpenAI, OpenRouter, api-bar /route/openai, Ollama /v1, ...). The
+	// default profile of this kind must carry an API key.
 	KindOpenAI Kind = "openai"
 	// KindOllama is the same Chat Completions dialect served by a local
 	// Ollama; no API key is required and WP0.3 adds a native client for
@@ -28,13 +28,21 @@ const (
 )
 
 // Built-in defaults applied to profiles after all overlays, when a field is
-// still empty. The product default endpoint is the api-bar gateway, not
-// api.openai.com; OpenAI remains an explicit opt-in profile.
+// still empty. An openai profile that names no endpoint is taken to be a
+// model served on this machine the way vLLM serves one (decided
+// 2026-10-18; until then the compiled-in default was the maintainer's
+// api-bar gateway). The two hosted endpoints are used only by the
+// zero-config profiles their key variables synthesize.
 const (
+	defaultVLLMBaseURL   = "http://localhost:8000/v1"
 	defaultAPIBarBaseURL = "https://api-bar.ru/route/openai"
 	defaultOpenAIBaseURL = "https://api.openai.com/v1"
-	defaultOpenAIModel   = "gpt-4o"
 	defaultOllamaBaseURL = "http://localhost:11434/v1"
+	// hostedDefaultModel is the model of the two zero-config profiles,
+	// whose endpoints are known to serve it. A profile from a file names
+	// its model: a server serves whatever was loaded into it, so there is
+	// no default worth guessing (decided 2026-10-18).
+	hostedDefaultModel = "gpt-4o"
 )
 
 // Profile is one configured provider endpoint.
@@ -145,6 +153,25 @@ func (c *Config) Default() (Profile, error) {
 	return c.Profile(c.DefaultProvider)
 }
 
+// Usable returns the profile named name after checking that a run can
+// use it: every profile needs a model, an openai profile a key as well.
+// It is the check the loader applies to the default and fallback
+// profiles, offered for a profile picked later (session.profile, WP1.5).
+// role names the profile's part in the error ("default", "selected").
+func (c *Config) Usable(name, role string) (Profile, error) {
+	p, err := c.Profile(name)
+	if err != nil {
+		return Profile{}, err
+	}
+	if p.Kind == KindOpenAI && p.APIKey == "" {
+		return Profile{}, &NoKeyError{Role: role, Profile: p.Name}
+	}
+	if p.Model == "" {
+		return Profile{}, &NoModelError{Role: role, Profile: p.Name}
+	}
+	return p, nil
+}
+
 // Fallback returns the fallback profile, or false when none is configured.
 func (c *Config) Fallback() (Profile, bool) {
 	if c.FallbackProvider == "" {
@@ -178,7 +205,7 @@ func (c *Config) Secrets() []string {
 // ErrNoProvider is what loading returns when nothing says which provider
 // to use: no file, no key in the environment, no flag. A shell that can
 // ask questions answers it with the interactive setup.
-var ErrNoProvider = errors.New("config: no provider configured: run `hint setup`, set API_BAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
+var ErrNoProvider = errors.New("config: no provider configured: run `hint setup`, set APIBAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
 
 // NoKeyError is a profile the run needs that has no API key — none in
 // the file, or a ${VAR} that expands to nothing.
@@ -188,6 +215,18 @@ type NoKeyError struct {
 	Profile string
 }
 
+// NoModelError is a profile the run needs that names no model. A server
+// serves whatever was loaded into it, so the loader never guesses one.
+type NoModelError struct {
+	// Role is "default", "fallback" or "selected".
+	Role    string
+	Profile string
+}
+
+func (e *NoModelError) Error() string {
+	return fmt.Sprintf("config: %s profile %q needs a model: set model (hint models lists what the server serves), HINT_MODEL, or --model", e.Role, e.Profile)
+}
+
 func (e *NoKeyError) Error() string {
-	return fmt.Sprintf("config: %s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${API_BAR_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
+	return fmt.Sprintf("config: %s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${VLLM_API_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
 }

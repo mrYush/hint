@@ -152,6 +152,16 @@ depend on them:
   remains an explicit profile (or the `OPENAI_API_KEY`-only zero-config
   fallback). Revisit before a public release: a personal gateway as the
   compiled-in default is fine for the maintainer, not for strangers.
+  **Revisited 2026-10-18 (on `dev/wp1.5-session-ops`):** the kind default
+  for an `openai` profile without `base_url` is now `http://localhost:8000/v1`,
+  a vLLM-style server on this machine; api-bar is reached only by the
+  zero-config profile its own variable synthesizes, and that variable is
+  `APIBAR_KEY` (`APIBAR_TOKEN` too; `API_BAR_KEY` still works with a
+  warning). Docs and examples lead with a vLLM-served model; aggregators
+  (OpenRouter, api-bar.ru) are one more `openai` profile. The `model`
+  default (`gpt-4o`) went with it: every profile names its model, as
+  `ollama` profiles always had to, and only the two zero-config profiles
+  carry `gpt-4o` because their hosted endpoints are known to serve it.
 - **The default profile NAME is resolved before field overlays.**
   `--provider` → `HINT_PROVIDER` → files; only then do `HINT_API_KEY` /
   `HINT_API_URL` / `HINT_MODEL` and `--api-*` apply, and only to that

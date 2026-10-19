@@ -40,6 +40,11 @@ type assembly struct {
 	// notices is where the engine's own warnings go: the process's stderr
 	// for every entry point today.
 	notices io.Writer
+	// reload re-reads the configuration from where cfg came from, so a
+	// profile switch sees a key written by setup since the start. Nil
+	// keeps cfg for the life of the engine, which is what a test with a
+	// hand-made config wants.
+	reload func() (*config.Config, error)
 }
 
 // rpcEngine is the core every entry point serves: one working directory,
@@ -58,9 +63,19 @@ type rpcEngine struct {
 	limits   agent.Limits
 	notices  io.Writer
 	trace    *debuglog.Log
+	debugLog func(string)
 	// setup describes the configuration the engine was built from, for a
 	// shell that has to say where a rejected key lives.
 	setup *setupInfo
+
+	// cfg is the configuration as last loaded; reload refreshes it (see
+	// assembly.reload). providers caches one provider per profile and
+	// model asked for since, seeded with chat for the default profile,
+	// and is emptied whenever cfg is reloaded. cfgMu guards all three.
+	cfgMu     sync.Mutex
+	cfg       *config.Config
+	reload    func() (*config.Config, error)
+	providers map[rpc.ProfileRef]agentapi.ChatProvider
 
 	mu   sync.Mutex
 	live map[string]*rpcSession
@@ -123,6 +138,7 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		global:  global,
 		trace:   trace,
 		notices: notices,
+		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
 	})
 	if err != nil {
 		cleanup()
@@ -163,27 +179,45 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	// compaction; the fallback profile keeps the same limits, and a
 	// smaller window there is caught by its own overflow error.
 	limits := agent.DefaultLimits()
-	if p, err := as.cfg.Default(); err == nil && p.ContextWindow > 0 {
-		limits.MaxContextTokens = p.ContextWindow
+	if p, err := as.cfg.Default(); err == nil {
+		limits = limitsFor(p)
 	}
+	var debugLog func(string)
 	if as.trace != nil {
 		for _, p := range as.cfg.Providers {
 			as.trace.Printf("profile %s", p)
 		}
 		as.trace.Printf("default %s fallback %q mode %s window %d", as.cfg.DefaultProvider, as.cfg.FallbackProvider, as.opts.mode, limits.MaxContextTokens)
+		debugLog = func(line string) { as.trace.Printf("%s", line) }
 	}
 	return &rpcEngine{
-		cwd:      root.Dir(),
-		store:    as.store,
-		chat:     as.chat,
-		registry: registry,
-		pc:       pc,
-		mode:     as.opts.mode,
-		limits:   limits,
-		notices:  as.notices,
-		trace:    as.trace,
-		setup:    newSetupInfo(as.cfg, as.cwd, as.opts.flags),
+		cwd:       root.Dir(),
+		store:     as.store,
+		chat:      as.chat,
+		registry:  registry,
+		pc:        pc,
+		mode:      as.opts.mode,
+		limits:    limits,
+		notices:   as.notices,
+		trace:     as.trace,
+		debugLog:  debugLog,
+		setup:     newSetupInfo(as.cfg, as.cwd, as.opts.flags),
+		cfg:       as.cfg,
+		reload:    as.reload,
+		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
 	}, nil
+}
+
+// limitsFor is the agent's limits under profile p: the built-in ones,
+// with the context window the profile states when it states one. A
+// profile that does not keeps the built-in window; its own overflow
+// error catches a smaller one.
+func limitsFor(p config.Profile) agent.Limits {
+	limits := agent.DefaultLimits()
+	if p.ContextWindow > 0 {
+		limits.MaxContextTokens = p.ContextWindow
+	}
+	return limits
 }
 
 func (e *rpcEngine) List(context.Context) ([]rpc.Info, error) {
@@ -193,14 +227,18 @@ func (e *rpcEngine) List(context.Context) ([]rpc.Info, error) {
 	}
 	out := make([]rpc.Info, 0, len(infos))
 	for _, info := range infos {
-		out = append(out, rpc.Info{
+		row := rpc.Info{
 			ID:          info.ID,
 			Cwd:         info.Cwd,
 			Messages:    info.Messages,
 			Created:     info.Created,
 			Modified:    info.Modified,
 			FirstPrompt: info.FirstPrompt,
-		})
+		}
+		if info.Parent != nil {
+			row.Parent = &rpc.Parent{ID: info.Parent.ID, Turn: info.Parent.Turn}
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }
@@ -238,7 +276,9 @@ func (e *rpcEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
 
 // adopt registers sess under id, or returns the session already
 // registered there and closes the duplicate file. A nil sess is an
-// ephemeral session.
+// ephemeral session. The session answers with the profile its file last
+// recorded; one the configuration no longer has, or cannot use, falls
+// back to the default with a warning the client shows on attach.
 func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -251,6 +291,23 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 		}
 		return live
 	}
+	live := e.newSession(sess, id)
+	if sess != nil {
+		if rec := sess.Profile(); rec.Name != "" {
+			if err := live.switchTo(rpc.ProfileRef{Profile: rec.Name, Model: rec.Model}, false); err != nil {
+				live.warnings = append(live.warnings, fmt.Sprintf("the session's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
+			}
+		}
+	}
+	e.live[id] = live
+	return live
+}
+
+// newSession builds the stack of one conversation over the default
+// provider: its own permission gate, so an "always" grant does not leak
+// into another conversation, and its own recorder over sess (nil for an
+// ephemeral session).
+func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	// The preamble is this run's, not the conversation's: it is rebuilt
 	// every time from the project context — and again before every
 	// request once a split rule has been touched — and never stored, so
@@ -263,22 +320,25 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 	gate := permission.New(e.mode, slot)
 	pre := newPreamble(e.pc, e.registry, e.notices, trace)
 	initial := pre.initial()
-	ag := agent.New(e.chat,
-		agent.WithTools(e.registry.Tools()...),
-		agent.WithAuthorizer(gate),
-		agent.WithLimits(e.limits),
-		agent.WithPreamble(pre),
-	)
 	live := &rpcSession{
 		id:      id,
 		created: time.Now(),
+		eng:     e,
 		file:    sess,
 		rec:     session.NewRecorder(sess, len(initial)),
 		pre:     pre,
-		ag:      ag,
+		gate:    gate,
 		slot:    slot,
 		notices: e.notices,
 		trace:   e.trace,
+	}
+	// The default profile as the configuration stands now; the engine's
+	// own provider is the fallback should it have become unusable since.
+	ref := e.defaultRef()
+	if chat, p, err := e.providerFor(rpc.ProfileRef{Profile: ref.Profile}, false); err == nil {
+		live.use(chat, rpc.ProfileRef{Profile: ref.Profile}, rpc.ProfileRef{Profile: ref.Profile, Model: p.Model}, limitsFor(p))
+	} else {
+		live.use(e.chat, rpc.ProfileRef{Profile: ref.Profile}, ref, e.limits)
 	}
 	if sess != nil {
 		live.created = sess.Created()
@@ -291,7 +351,6 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 		}
 		e.trace.Printf("system prompt:\n%s", initial[0].Text())
 	}
-	e.live[id] = live
 	return live
 }
 
@@ -300,14 +359,28 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 type rpcSession struct {
 	id      string
 	created time.Time
+	eng     *rpcEngine
 	// file is nil for an ephemeral session.
 	file    *session.Session
 	rec     *session.Recorder
 	pre     *preamble
-	ag      *agent.Agent
+	gate    *permission.Gate
 	slot    *promptSlot
 	notices io.Writer
 	trace   *debuglog.Log
+	// parent is set on an ephemeral fork; a recorded one carries it in
+	// its file.
+	parent *rpc.Parent
+	// warnings are the engine's own, shown with the file's on attach.
+	warnings []string
+
+	// agMu guards ag, asked and profile: SetProfile replaces them between
+	// turns, RunTurn reads them when a turn starts. asked is the profile
+	// as requested, profile the same with the model filled in.
+	agMu    sync.Mutex
+	ag      *agent.Agent
+	asked   rpc.ProfileRef
+	profile rpc.ProfileRef
 
 	// warnedSave remembers that the "session not fully saved" notice was
 	// printed, so a conversation on a broken disk says it once, not per
@@ -322,10 +395,29 @@ func (s *rpcSession) Created() time.Time           { return s.created }
 func (s *rpcSession) Messages() []agentapi.Message { return s.rec.Messages() }
 
 func (s *rpcSession) Warnings() []string {
-	if s.file == nil {
-		return nil
+	var out []string
+	if s.file != nil {
+		out = s.file.Warnings()
 	}
-	return s.file.Warnings()
+	return append(out, s.warnings...)
+}
+
+func (s *rpcSession) Parent() (rpc.Parent, bool) {
+	if s.parent != nil {
+		return *s.parent, true
+	}
+	if s.file != nil {
+		if p, ok := s.file.Parent(); ok {
+			return rpc.Parent{ID: p.ID, Turn: p.Turn}, true
+		}
+	}
+	return rpc.Parent{}, false
+}
+
+func (s *rpcSession) Profile() rpc.ProfileRef {
+	s.agMu.Lock()
+	defer s.agMu.Unlock()
+	return s.profile
 }
 
 // RunTurn records text as the user message and runs the agent. It fails
@@ -339,8 +431,11 @@ func (s *rpcSession) RunTurn(ctx context.Context, text string, ask permission.Pr
 		return nil, err
 	}
 	history := append(append([]agentapi.Message{}, s.pre.initial()...), s.rec.Messages()...)
+	s.agMu.Lock()
+	ag := s.ag
+	s.agMu.Unlock()
 	s.tracef("turn: %q (%d messages)", text, len(history))
-	out := s.ag.RunTurn(ctx, history)
+	out := ag.RunTurn(ctx, history)
 	ch := make(chan agentapi.Event)
 	go func() {
 		defer close(ch)

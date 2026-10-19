@@ -10,16 +10,22 @@ back to a local [Ollama](https://github.com/ollama/ollama).
 
 ## Features
 
-- An interactive session by default; a one-shot answer with `-p`, plain
-  text or JSON, for scripts
+- A full-screen interactive session by default (a line REPL with
+  `--plain`); a one-shot answer with `-p`, plain text or JSON, for scripts
 - Tools the agent uses itself: read, list, glob, grep, edit and write files,
   run shell commands — every edit shown as a diff and every command
   confirmed before it runs
 - Automatic context: an overview of the directory (respecting `.gitignore`)
   and your own instructions from a `HINT.md`, global or per project
-- Conversations recorded as sessions you can continue, list and pick up by id
+- Conversations recorded as sessions you can continue, list, pick up by id
+  and fork at any turn into a branch of their own
 - Provider profiles with a default/fallback pair, configured from the
-  command line, environment variables or YAML files
+  command line, environment variables or YAML files, and switchable
+  mid-conversation with `/profile`
+- One core, several shells: `hint serve` runs the agent as a local
+  JSON-RPC service that other terminals join with `hint --connect`, and
+  `hint --mode rpc` speaks the same protocol on stdin/stdout for scripts
+  and editors
 
 ## Installation
 
@@ -104,44 +110,51 @@ are the checks CI runs; [CONTRIBUTING.md](CONTRIBUTING.md) has the rest.
 
 ### Interactive session
 
-Run `hint` with no arguments in your project:
+Run `hint` with no arguments in your project. On a terminal it opens the
+full-screen shell: the conversation scrolls above the input with answers
+rendered as Markdown, a file edit or a command asks for permission in a
+dialog that shows the diff or the command (`y` / `n` / `a`), and the
+header names the session and the provider profile in use. Enter sends; a
+newline is Shift+Enter where the terminal reports it (kitty, WezTerm,
+Ghostty, iTerm2), Alt+Enter or Ctrl+J, and on any terminal a `\` at the
+end of the line before Enter. Ctrl+C while an answer is being written
+stops that answer; Ctrl+D or `/exit` leaves, and the session is kept.
+
+The conversation scrolls with ↑ on the input's first line and ↓ on its
+last (a mouse wheel works the same way), Shift+↑/↓ by line, PgUp/PgDn by
+page and Ctrl+Home/End to its ends; the header says how many lines are
+below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓ move
+between messages, `y` copies the one picked, `f` forks the conversation
+after that message's turn (see [Sessions](#sessions)), Esc returns to the
+input. One-letter answers and commands (`y`/`n`/`a`, `j`/`k`) work in a
+Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
+
+Tab completes `/commands` and their arguments; `/help` lists them:
+`/sessions` shows this directory's sessions as a tree and resumes one,
+`/profile` switches the provider profile, `/setup` and `/config` edit the
+configuration, `/copy` and `ctrl+y` copy the last answer (or `question`,
+`code`, `all`), `/mouse` switches to a mode where the wheel scrolls and a
+click copies the block under it (off by default, so the terminal's own
+text selection works).
+
+`hint --plain` runs the same session as a line REPL, which is also what a
+terminal that cannot draw the shell gets:
 
 ```
-$ hint
+$ hint --plain
 hint: interactive session; /help for commands, Ctrl-D or /exit to quit
 
 > what does main.go do?
 ...
+> /profile local
+hint: answering with local/qwen2.5:7b from now on
 > and where is it tested?
 ...
 > /exit
 ```
 
-Each line is one question; the conversation carries over from one to the
-next. `/help` lists the commands, `/exit` (or Ctrl-D) leaves. Ctrl-C while
-an answer is being written stops that answer and returns to the prompt; the
-session is kept.
-
-`hint --tui` runs the same session as a full-screen TUI (experimental):
-the conversation scrolls above the input with answers rendered as
-Markdown, a file edit or a command asks for permission in a dialog that
-shows the diff or the command (`y` / `n` / `a`), and `/sessions` lists
-this directory's sessions to resume one. Enter sends; a newline is
-Shift+Enter where the terminal reports it (kitty, WezTerm, Ghostty, iTerm2),
-Alt+Enter or Ctrl+J, and on any terminal a `\` at the end of the line
-before Enter. The conversation scrolls with ↑ on the input's first line
-and ↓ on its last (a mouse wheel works the same way), Shift+↑/↓ by line,
-PgUp/PgDn by page and Ctrl+Home/End to its ends; the header says how many
-lines are below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓
-move between messages, `y` copies the one picked, Esc returns to the
-input. One-letter answers and commands (`y`/`n`/`a`, `j`/`k`) work in a
-Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`. Tab completes `/commands` and
-their arguments. Text is selected with the terminal as usual; `ctrl+y`
-(or `/copy [answer|question|code|all]`) copies the last answer, and
-`/mouse` switches to a mode where the wheel scrolls and a click copies the
-block under it. The TUI is a client of the same
-protocol as `hint serve`; the line REPL stays the default until the TUI
-has passed the Phase 0 scenarios.
+Each line is one question; `/help`, `/profile` and `/exit` are its
+commands. Both shells are clients of the same protocol as `hint serve`.
 
 ### One question
 
@@ -188,6 +201,26 @@ not confined, which is why `--auto-edit` keeps asking for it. Without a
 terminal on stdin (a script, `< /dev/null`) anything that needs an answer
 is denied.
 
+### One core, several shells
+
+The agent runs as a core that every shell talks to over newline-delimited
+JSON-RPC 2.0, even inside one process. `hint serve` runs that core on its
+own, so a second terminal can join a conversation, or an editor can drive
+it:
+
+```bash
+hint serve                       # the core on a Unix socket under $XDG_RUNTIME_DIR/hint
+hint --connect -c                # another terminal: continue the same session on it
+hint --connect unix:/path/hint.sock   # or name the socket (tcp:127.0.0.1:port on Windows)
+hint --mode rpc                  # the same protocol on stdin/stdout, for a script or an editor
+```
+
+`hint serve` binds to the working directory it was started in; the tools
+never leave it. Its socket is private to the user and guarded by a token
+it writes next to the socket, which `--connect` reads. The protocol — the
+handshake, sessions, turns and their events, permission questions, profile
+switches and forks — is in [docs/rpc.md](docs/rpc.md).
+
 ### Sessions
 
 Every run is recorded, so a later run can pick the conversation up:
@@ -201,13 +234,44 @@ hint --no-session -p "..."       # record nothing
 ```
 
 The session flags work for both the interactive session and `-p`.
+
+A session can branch. In the TUI, `f` on a picked message forks the
+conversation after that message's turn, and `f` on a row of `/sessions`
+forks the whole session: a new session starts with the copied history,
+the shell moves to it, and the original is left as it was. Forks are
+listed under the session they came from, in the TUI as a tree and in
+`hint sessions` with a `forked from <id> after turn N` note. Over RPC the
+same is `session.fork` ([docs/rpc.md](docs/rpc.md)).
+
 Sessions are one JSONL file each under
 `~/.local/share/hint/sessions/<project>/` (`$XDG_DATA_HOME` is respected),
 one per working directory; delete a file to forget the conversation. The
 system prompt is not stored — each run builds it afresh — and neither are
 `a(lways)` answers, so a continued session asks again before running
-commands. When the conversation outgrows the model's context window it is
-summarized, and the summary is what a later run continues from.
+commands. The provider profile a session was switched to is recorded, so
+`-c` continues with it. When the conversation outgrows the model's
+context window it is summarized, and the summary is what a later run
+continues from.
+
+### Profiles
+
+A session answers with the default profile until told otherwise; the
+switch takes effect for the next question and stays with the session:
+
+```
+> /profile                       # the profiles the configuration has, the one in use marked
+> /profile local                 # answer with the local profile from now on
+> /profile vllm Qwen/Qwen2.5-Coder-7B-Instruct   # that profile with another model it serves
+```
+
+In the TUI `/profile` alone opens a list to pick from, Tab completes the
+names, and the header shows what is in use. A profile that cannot be used
+(an openai profile without a key, an ollama profile without a model) is
+listed with the reason and refused. The core re-reads the configuration
+files on every switch, which is how `hint setup` and `/setup` take effect
+without a restart. Switching `fallback_provider` off is not part of it:
+the configured fallback stays behind whichever profile is in use, unless
+it is the same one.
 
 ### Configuration setup
 
@@ -217,7 +281,9 @@ environment variable that holds the API key, and writes them to
 rejects the key, `hint` says which config files it is using and offers
 the same questions (in the TUI: `/setup`, with the key masked). A project
 `.hint/config.yaml` is never written, so a key does not end up in git.
-Restart `hint` after saving.
+A running session switches to the saved profile at once, so the next
+question goes out with the new key; `hint setup` on its own is picked up
+by the next start.
 
 `hint config` changes one key at a time without an editor; every value
 is checked against the key's type before anything is written, and the
@@ -227,7 +293,7 @@ file keeps its comments:
 hint config                                     # what the next start uses, keys masked
 hint config keys                                # every key, default, HINT_* variable, flag
 hint config set overview.depth 3                # the global file
-hint config set --project providers.api-bar.model gpt-4o-mini   # this repository only
+hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct   # this repository only
 hint config unset --project overview.depth      # back to the global value
 ```
 
@@ -340,8 +406,10 @@ pair. Sources, highest priority first:
 ### First run
 
 With no configuration at all, `hint` on a terminal says so and asks
-whether to set it up now: the profile name, base URL and model (each has
-a default, Enter accepts it) and the API key, typed with the echo off.
+whether to set it up now: the profile name and base URL (each has a
+default, Enter accepts it), the model (required: a server serves what was
+loaded into it, `hint models` lists them) and the API key, typed with the
+echo off.
 The answers go to `~/.config/hint/config.yaml` (mode 0600) and the start
 continues. `hint setup` asks the same questions at any time and edits the
 file in place, keeping its comments. In a script or a pipe nothing is
@@ -353,36 +421,70 @@ path for settings that apply everywhere, or to `.hint/config.yaml` in a
 repository for that project only. A test keeps it in step with the code:
 it must load, and it must mention every key the loader reads.
 
-### Quick start (zero config)
+### Quick start
 
-Without any config file, `hint` talks to the [api-bar](https://api-bar.ru)
-gateway by default — one key is enough:
+`hint` speaks the OpenAI Chat Completions dialect, so any server or
+service that serves it is a provider: your own model behind
+[vLLM](https://docs.vllm.ai) (or llama-server, LM Studio, TGI), a local
+[Ollama](https://github.com/ollama/ollama), OpenAI itself, or an
+aggregator such as [OpenRouter](https://openrouter.ai) or
+[api-bar.ru](https://api-bar.ru). The quickest start is `hint setup`,
+which asks for the base URL, the model and the key and writes the file
+below. For a vLLM server on your network that is:
 
 ```bash
-export API_BAR_KEY=<your_api_bar_key>
+hint setup
+# profile name [vllm]:
+# base URL: http://inference.example.net:8000/v1
+# model: Qwen/Qwen2.5-Coder-32B-Instruct
+# API key, input hidden: ...        # whatever vLLM was started with (--api-key), or empty
 hint -p "How do I run this project?"
 ```
 
-If only `OPENAI_API_KEY` is set, a legacy `openai` profile on
-`https://api.openai.com/v1` is used instead.
+For a local [Ollama](https://github.com/ollama/ollama) the file is
+shorter still — `kind: ollama` needs no key — and it is the usual
+fallback behind a bigger model, so the agent keeps working offline:
+
+```yaml
+providers:
+  - name: local
+    kind: ollama
+    model: qwen2.5:7b                 # ollama pull qwen2.5:7b; hint models lists what is installed
+```
+
+Without any file, two environment variables still work as a zero-config
+path: `OPENAI_API_KEY` selects `https://api.openai.com/v1`, and
+`APIBAR_KEY` the api-bar.ru aggregator (`API_BAR_KEY`, the earlier
+spelling, still works with a warning). An `openai` profile that names no
+`base_url` is taken to be a server on this machine at
+`http://localhost:8000/v1`, where vLLM listens by default. Every profile
+names its model: there is no default, because a server serves whatever
+was loaded into it.
 
 ### Configuration file
 
 ```yaml
 providers:
-  - name: api-bar
+  - name: vllm
     kind: openai                                # OpenAI Chat Completions dialect
-    base_url: https://api-bar.ru/route/openai   # hint appends /chat/completions
-    api_key: ${API_BAR_KEY}                     # $VAR / ${VAR} references are expanded
-    model: gpt-4o
-    context_window: 128000                      # tokens; sizes the compaction (optional)
+    base_url: http://inference.example.net:8000/v1   # hint appends /chat/completions
+    api_key: ${VLLM_API_KEY}                    # $VAR / ${VAR} references are expanded; a vLLM
+                                                # started without a key accepts any value here
+    model: Qwen/Qwen2.5-Coder-32B-Instruct      # a model the server serves (hint models lists them)
+    context_window: 32768                       # tokens; sizes the compaction (optional)
   - name: local
     kind: ollama                                # same dialect, no key required
     base_url: http://localhost:11434/v1
     model: qwen2.5:7b
     context_window: 8192
     header_timeout: 15m                         # wait for response headers (default 60s)
-default_provider: api-bar
+  - name: cloud                                 # an aggregator works the same way:
+    kind: openai                                # OpenRouter, api-bar.ru, OpenAI itself
+    base_url: https://openrouter.ai/api/v1      # or https://api-bar.ru/route/openai
+    api_key: ${OPENROUTER_API_KEY}
+    model: anthropic/claude-sonnet-4
+    context_window: 200000
+default_provider: vllm
 fallback_provider: local
 ```
 

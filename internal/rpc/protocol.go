@@ -122,6 +122,21 @@ type SessionView struct {
 	Created  time.Time          `json:"created"`
 	Messages []agentapi.Message `json:"messages"`
 	Warnings []string           `json:"warnings,omitempty"`
+	// Profile and Model are the provider the session answers with.
+	Profile string `json:"profile,omitempty"`
+	Model   string `json:"model,omitempty"`
+	// Parent is set for a fork.
+	Parent *Parent `json:"parent,omitempty"`
+}
+
+type profileParams struct {
+	SessionID string `json:"session_id"`
+	Profile   string `json:"profile"`
+	Model     string `json:"model,omitempty"`
+}
+
+type profilesResult struct {
+	Profiles []ProfileInfo `json:"profiles"`
 }
 
 type listResult struct {

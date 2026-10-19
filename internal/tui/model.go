@@ -40,6 +40,7 @@ type model struct {
 	send          sender
 	sessionID     string
 	recorded      bool
+	profile       rpc.ProfileRef
 	serverVersion string
 	dark          bool
 	sty           styles
@@ -66,6 +67,10 @@ type model struct {
 
 	dialog *dialog
 	picker *picker
+	// profiles is the core's profile list, for Tab and the picker that
+	// ppicker is while open.
+	profiles []rpc.ProfileInfo
+	ppicker  *profilePicker
 	// setup is the configuration offer, setupForm the form while open.
 	setup     *Setup
 	setupForm *setupForm
@@ -116,6 +121,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		send:          send,
 		sessionID:     opts.SessionID,
 		recorded:      opts.Recorded,
+		profile:       opts.Profile,
 		serverVersion: opts.ServerVersion,
 		setup:         opts.Setup,
 		dark:          dark,
@@ -134,7 +140,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 }
 
 func (m model) Init() tea.Cmd {
-	cmds := []tea.Cmd{textarea.Blink}
+	cmds := []tea.Cmd{textarea.Blink, m.loadProfiles()}
 	if m.picker != nil {
 		cl, ctx := m.cl, m.ctx
 		cmds = append(cmds, func() tea.Msg {
@@ -196,11 +202,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case setupDoneMsg:
-		return m.setupSaved(msg), nil
+		return m.setupSaved(msg)
 	case sessionsMsg:
 		return m.sessionsLoaded(msg), nil
 	case attachedMsg:
 		return m.attached(msg), nil
+	case profilesMsg:
+		return m.profilesLoaded(msg), nil
+	case profileMsg:
+		return m.profileSwitched(msg), nil
 
 	case tea.PasteMsg:
 		// Bracketed paste: the terminal hands pasted text over as one
@@ -212,7 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fl.in, cmd = fl.in.Update(msg)
 			return m, cmd
 		}
-		if m.picker != nil || m.dialog != nil {
+		if m.picker != nil || m.ppicker != nil || m.dialog != nil {
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -235,6 +245,9 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.picker != nil {
 		return m.pickerKey(k)
+	}
+	if m.ppicker != nil {
+		return m.profileKey(k)
 	}
 	if m.dialog != nil {
 		if m.dialog.key(k) {
@@ -426,6 +439,8 @@ func (m model) View() tea.View {
 		body = m.setupForm.view(m.setup.Describe, m.width, m.bodyHeight(), m.sty)
 	case m.picker != nil:
 		body = m.picker.view(m.width, m.bodyHeight(), m.sty)
+	case m.ppicker != nil:
+		body = m.ppicker.view(m.profile, m.width, m.bodyHeight(), m.sty)
 	case m.dialog != nil:
 		body = m.dialog.view(m.width, m.bodyHeight(), m.sty)
 	default:
@@ -440,7 +455,7 @@ func (m model) View() tea.View {
 	if m.mouse {
 		v.MouseMode = tea.MouseModeCellMotion
 	}
-	if m.picker == nil && m.dialog == nil && m.setupForm == nil && m.sel == noSelection {
+	if m.picker == nil && m.ppicker == nil && m.dialog == nil && m.setupForm == nil && m.sel == noSelection {
 		if c := m.ta.Cursor(); c != nil {
 			c.Y += headerLines + m.bodyHeight() + statusLines
 			v.Cursor = c
@@ -458,11 +473,14 @@ func (m model) header() string {
 		}
 	}
 	meta := " · " + session
+	if m.profile.Profile != "" {
+		meta += " · " + describeProfile(m.profile)
+	}
 	if m.serverVersion != "" {
 		meta += " · core " + m.serverVersion
 	}
 	// Scrolled away from the end, the header says how far.
-	if n := m.below(); n > 0 && m.picker == nil && m.dialog == nil && m.setupForm == nil {
+	if n := m.below(); n > 0 && m.picker == nil && m.ppicker == nil && m.dialog == nil && m.setupForm == nil {
 		meta += fmt.Sprintf(" · ↓ %d more lines, ctrl+end", n)
 	}
 	return rule(m.sty.header.Render("hint")+m.sty.hint.Render(meta), m.width, m.sty)
@@ -520,6 +538,15 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		m.add(entry{kind: entryNotice, text: helpText(), done: true})
 	case "/sessions":
 		return m.openPicker()
+	case "/profile":
+		if arg == "" {
+			return m.openProfiles()
+		}
+		ref := rpc.ProfileRef{Profile: arg}
+		if len(fields) > 2 {
+			ref.Model = fields[2]
+		}
+		return m.switchProfile(ref)
 	case "/setup":
 		return m.openSetup()
 	case "/mouse":
@@ -562,7 +589,7 @@ func (m model) copyLast() (model, tea.Cmd) {
 // click copies the transcript block under the pointer; it only arrives
 // while mouse mode is on.
 func (m model) click(mouse tea.Mouse) (model, tea.Cmd) {
-	if mouse.Button != tea.MouseLeft || m.picker != nil || m.dialog != nil {
+	if mouse.Button != tea.MouseLeft || m.picker != nil || m.ppicker != nil || m.dialog != nil {
 		return m, nil
 	}
 	i := m.entryAt(mouse.Y)

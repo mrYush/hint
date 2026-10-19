@@ -100,8 +100,8 @@ type options struct {
 	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
 	// runs the core in this process.
 	connect string
-	// tui runs the interactive session as the full-screen shell instead
-	// of the line REPL.
+	// tui runs the interactive session as the full-screen shell; false is
+	// the line REPL (--plain, or no terminal on stdout).
 	tui bool
 }
 
@@ -113,7 +113,7 @@ func newRootCommand() *cobra.Command {
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
 	var sessionID, prompt, output, rpcMode, connect string
-	var debug, tuiMode bool
+	var debug, tuiMode, plain bool
 
 	rootCmd := &cobra.Command{
 		Use:     "hint [flags] [-p \"question\"]",
@@ -126,8 +126,12 @@ next one; the conversation is recorded and can be continued later with
 wants; --output json makes the answer machine-readable.
 
 A question given as plain arguments (hint "question") still works as a
-one-shot for compatibility and prints a note about -p.`,
-		Example: `  hint                                   # interactive session
+one-shot for compatibility and prints a note about -p.
+
+The interactive session is a full-screen shell on a terminal; --plain
+keeps the line REPL.`,
+		Example: `  hint                                   # interactive session (full-screen shell)
+  hint --plain                           # the same as a line REPL
   hint -p "what does main.go do?"        # one answer, then exit
   hint -p "list the tests" --output json # for scripts
   hint -c                                # continue this directory's last session
@@ -150,7 +154,7 @@ one-shot for compatibility and prints a note about -p.`,
 				sessionID: sessionID,
 				debug:     debug,
 				connect:   connect,
-				tui:       tuiMode,
+				tui:       useTUI(tuiMode, plain, os.Stdout),
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
 				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
@@ -170,7 +174,7 @@ one-shot for compatibility and prints a note about -p.`,
 			if err != nil {
 				return err
 			}
-			if opts.tui && !inv.interactive {
+			if tuiMode && !inv.interactive {
 				return errors.New("--tui is the interactive session; it takes no -p or question")
 			}
 			if inv.note != "" {
@@ -199,8 +203,15 @@ one-shot for compatibility and prints a note about -p.`,
 	// the files hint serve wrote; a value names the address outright.
 	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:127.0.0.1:port")
 	rootCmd.Flags().Lookup("connect").NoOptDefVal = connectAuto
-	rootCmd.Flags().BoolVar(&tuiMode, "tui", false, "Run the interactive session as a full-screen TUI (experimental; the line REPL stays the default)")
+	// The full-screen shell is the interactive session on a terminal;
+	// --plain keeps the line REPL (a terminal that cannot draw it, a
+	// transcript to copy from). --tui was the opt-in while the shell was
+	// new and stays as a no-op so that scripts and habits keep working.
+	rootCmd.Flags().BoolVar(&plain, "plain", false, "Run the interactive session as a line REPL instead of the full-screen TUI")
+	rootCmd.Flags().BoolVar(&tuiMode, "tui", false, "Run the interactive session as the full-screen TUI (the default on a terminal)")
+	_ = rootCmd.Flags().MarkHidden("tui")
 	rootCmd.MarkFlagsMutuallyExclusive("connect", "mode")
+	rootCmd.MarkFlagsMutuallyExclusive("plain", "tui")
 
 	// Run modes are a policy of this run, not part of a provider profile,
 	// so they are plain flags rather than config.Flags. --ask exists so
@@ -274,6 +285,20 @@ func dispatch(prompt string, args []string, output outputFormat, stdin *os.File)
 		return invocation{}, errors.New("stdin is not a terminal, so there is nobody to ask; use hint -p \"question\" for a non-interactive run")
 	}
 	return invocation{interactive: true}, nil
+}
+
+// useTUI decides the shape of the interactive session: the full-screen
+// shell when stdout is a terminal to draw on, unless --plain asks for the
+// line REPL; --tui asks for the shell outright. A one-shot ignores it.
+func useTUI(tuiFlag, plain bool, stdout *os.File) bool {
+	switch {
+	case plain:
+		return false
+	case tuiFlag:
+		return true
+	default:
+		return isTerminal(stdout)
+	}
 }
 
 // isTerminal reports whether f is a character device — a tty, but also

@@ -17,16 +17,24 @@
 # Only `providers` is needed to start; everything else has a default.
 
 # Provider profiles: named ways to reach a model. At least one is needed.
+# Any server of the OpenAI Chat Completions dialect is a provider: a model
+# behind vLLM (the example below), llama-server or LM Studio, a local Ollama,
+# OpenAI itself, or an aggregator such as OpenRouter or api-bar.ru.
 providers:
-  - name: api-bar # required, unique; what default_provider / --provider refer to
+  - name: vllm # required, unique; what default_provider / --provider refer to
     kind: openai # openai (Chat Completions dialect, the default) | ollama
-    base_url: https://api-bar.ru/route/openai # default for openai: the api-bar gateway;
-    #                                           for ollama: http://localhost:11434/v1.
-    #                                           hint appends /chat/completions
-    api_key: ${API_BAR_KEY} # required for openai; $VAR and ${VAR} are expanded from the
-    #                         environment. A literal key works too (global file only)
-    model: gpt-4o # default for openai: gpt-4o. For ollama there is no default: name one
-    context_window: 128000 # tokens; sizes the compaction. Default: unknown, a built-in window
+    base_url: http://inference.example.net:8000/v1 # the server's OpenAI-compatible root;
+    #                                                hint appends /chat/completions.
+    #                                                Default for openai when omitted:
+    #                                                http://localhost:8000/v1 (vLLM on this
+    #                                                machine); for ollama: http://localhost:11434/v1
+    api_key: ${VLLM_API_KEY} # required for openai; $VAR and ${VAR} are expanded from the
+    #                          environment. A literal key works too (global file only).
+    #                          A vLLM started without a key accepts any value here
+    model: Qwen/Qwen2.5-Coder-32B-Instruct # required: a model the server serves (`hint models`
+    #                                        lists them). There is no default for either kind;
+    #                                        a server serves what was loaded into it
+    context_window: 32768 # tokens; sizes the compaction. Default: unknown, a built-in window
     header_timeout: 60s # how long to wait for response headers, a Go duration with units.
     #                     Default 60s; raise it for a local server on a small board
 
@@ -37,9 +45,17 @@ providers:
     context_window: 8192
     header_timeout: 15m
 
+  # An aggregator is one more openai profile; uncomment and pick one:
+  # - name: cloud
+  #   kind: openai
+  #   base_url: https://openrouter.ai/api/v1 # or https://api-bar.ru/route/openai
+  #   api_key: ${OPENROUTER_API_KEY}
+  #   model: anthropic/claude-sonnet-4
+  #   context_window: 200000
+
 # The profile used for a run. Optional when there is exactly one profile.
 # Overridden by HINT_PROVIDER and --provider.
-default_provider: api-bar
+default_provider: vllm
 
 # The profile tried when the default one is unreachable (network, timeout, 5xx).
 # Optional; must differ from default_provider. Overridden by HINT_FALLBACK_PROVIDER.
