@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,8 @@ type Flags struct {
 	// SummarizeInstructions is --summarize-instructions: "true" or "false",
 	// a string so that an unset flag stays distinct from an explicit false.
 	SummarizeInstructions string
+	// Completion is --completion: a completion mode for this run.
+	Completion string
 }
 
 // Options are the external inputs of LoadFrom. Everything the loader touches
@@ -169,6 +172,7 @@ type fileConfig struct {
 	// apart from a file that says nothing.
 	Instructions fileInstructions `yaml:"instructions"`
 	Overview     fileOverview     `yaml:"overview"`
+	Completion   fileCompletion   `yaml:"completion"`
 
 	// Legacy flat schema (pre-WP0.2).
 	APIURL string `yaml:"api_url"`
@@ -196,6 +200,14 @@ type fileInstructions struct {
 type fileOverview struct {
 	Depth      *int `yaml:"depth"`
 	MaxEntries *int `yaml:"max_entries"`
+}
+
+type fileCompletion struct {
+	Mode      string         `yaml:"mode"`
+	Profile   string         `yaml:"profile"`
+	Model     string         `yaml:"model"`
+	IdleAfter *time.Duration `yaml:"idle_after"`
+	WarnAfter *time.Duration `yaml:"warn_after"`
 }
 
 // GlobalDir returns the directory of the global configuration —
@@ -373,6 +385,24 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	if project.Overview.MaxEntries != nil {
 		out.Overview.MaxEntries = project.Overview.MaxEntries
 	}
+	// An explicit "off" in the project file is a non-empty value and
+	// beats the global file: a team can keep completion out of a
+	// repository a developer has it on everywhere else.
+	if project.Completion.Mode != "" {
+		out.Completion.Mode = project.Completion.Mode
+	}
+	if project.Completion.Profile != "" {
+		out.Completion.Profile = project.Completion.Profile
+	}
+	if project.Completion.Model != "" {
+		out.Completion.Model = project.Completion.Model
+	}
+	if project.Completion.IdleAfter != nil {
+		out.Completion.IdleAfter = project.Completion.IdleAfter
+	}
+	if project.Completion.WarnAfter != nil {
+		out.Completion.WarnAfter = project.Completion.WarnAfter
+	}
 	return out
 }
 
@@ -541,7 +571,62 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if cfg.Overview.MaxEntries <= 0 {
 		cfg.Overview.MaxEntries = DefaultOverviewEntries
 	}
+	return l.resolveCompletion(cfg, files.Completion)
+}
+
+// resolveCompletion settles the completion: block: the merged files, then
+// HINT_COMPLETION_MODE, then --completion for the mode; the durations
+// from the files or the defaults. A profile it names must exist and be
+// usable, or the block is switched off with a warning — a project file
+// must not stop a run for a profile only one developer has.
+func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
+	c := &cfg.Completion
+	c.Mode = CompletionMode(fc.Mode)
+	c.Profile, c.Model = fc.Profile, fc.Model
+	c.IdleAfter, c.WarnAfter = DefaultCompletionIdleAfter, DefaultCompletionWarnAfter
+	if fc.IdleAfter != nil {
+		c.IdleAfter = *fc.IdleAfter
+	}
+	if fc.WarnAfter != nil {
+		c.WarnAfter = *fc.WarnAfter
+	}
+	if v, ok := l.env("HINT_COMPLETION_MODE"); ok {
+		if validCompletionMode(v) {
+			c.Mode = CompletionMode(v)
+		} else {
+			l.warnf("HINT_COMPLETION_MODE=%q is not a completion mode and was ignored", v)
+		}
+	}
+	if v := l.opts.Flags.Completion; v != "" {
+		if !validCompletionMode(v) {
+			return fmt.Errorf("config: --completion must be off, tab, idle or both, not %q", v)
+		}
+		c.Mode = CompletionMode(v)
+	}
+	switch {
+	case c.Mode == "":
+		c.Mode = CompletionOff
+	case !validCompletionMode(string(c.Mode)):
+		return fmt.Errorf("config: completion.mode must be off, tab, idle or both, not %q", c.Mode)
+	}
+	if c.IdleAfter <= 0 || c.WarnAfter <= 0 {
+		return errors.New("config: completion.idle_after and completion.warn_after must be positive durations")
+	}
+	if c.Profile != "" && c.Mode != CompletionOff {
+		if _, err := cfg.Usable(c.Profile, "completion"); err != nil {
+			l.warnf("completion is off: %s", strings.TrimPrefix(err.Error(), "config: "))
+			c.Mode = CompletionOff
+		}
+	}
 	return nil
+}
+
+func validCompletionMode(v string) bool {
+	switch CompletionMode(v) {
+	case CompletionOff, CompletionTab, CompletionIdle, CompletionBoth:
+		return true
+	}
+	return false
 }
 
 // overlayBool applies the environment variable and then the flag to *dst,

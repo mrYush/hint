@@ -92,7 +92,33 @@ A turn, not a message index: a client counts the questions it showed, but not th
 The fork answers with the source's profile, is open on the server like a session just opened, and its file names the source in its header; the result is the same view `session.open` returns, with `parent` set.
 A source with a turn in flight is `-32004 busy`; a turn the source does not have, or an empty source, is `-32602 invalid params`; an unknown source is `-32005 not found`.
 
-Both methods and `profile.list` were added for `v0.3` without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
+### Completion
+
+`complete` asks a model for a short continuation of what the user is typing.
+It is a plain chat request without tools, to the session's profile and model unless the configuration's `completion.profile` names another; nothing of it reaches the session file.
+
+```json
+{"jsonrpc":"2.0","id":8,"method":"complete","params":{"id":"c7","session_id":"<id>","text":"add a test for"}}
+```
+
+`id` is the client's and is echoed back, so a late answer for text that is no longer in the input is told from the one being waited for.
+`session_id` is optional; with it the session's last question goes to the model as context.
+The request runs beside the connection's other requests: `permission.reply` and `turn.cancel` are not held up while a model is thinking.
+One completion at a time per connection — a newer `complete` cancels the older, whose client no longer wants its answer.
+
+```json
+{"jsonrpc":"2.0","id":8,"result":{"id":"c7","suggestion":" the parser","usage":{"input_tokens":212,"output_tokens":4}}}
+```
+
+`suggestion` is empty when the model had nothing; `usage` is the provider's accounting, for a client that shows what completion costs.
+With `completion.mode` off the result is `{"id":"c7","disabled":true,"reason":"..."}`: a client then stops asking.
+`complete.cancel` with `{"id":"c7"}` stops the provider call; cancelling a completion that already answered is fine.
+A cancelled completion is answered with an error.
+`complete.settings` returns the completion block as the files stand: `{"mode":"tab","profile":"","model":"","idle_after_ms":600,"warn_after_ms":2000}`.
+
+`profile.models` with `{"profile":"local"}` returns `{"models":["qwen2.5:7b", ...]}`, what the profile's endpoint serves; an unknown profile is `-32005 not found`, an endpoint that does not answer `-32603`.
+
+`session.profile`, `session.fork`, `profile.list` (`v0.3`, WP1.5) and `complete`, `complete.cancel`, `complete.settings`, `profile.models` (WP1.6) were added without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
 
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.

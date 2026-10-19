@@ -60,6 +60,8 @@ func commands() []command {
 		{name: "/sessions", help: "list this directory's sessions as a tree and resume one; f forks the row", enabled: func(m model) bool { return !m.busy }},
 		{name: "/profile", help: "<name> [model]: answer with another provider profile from now on; alone, pick from the list",
 			next: profileArgs, enabled: func(m model) bool { return m.sessionID != "" && !m.busy }},
+		{name: "/completion", help: "[off|tab|idle|both]: when a model continues what you type, for this session; alone, the state and the cost so far",
+			next: fixed("off", "tab", "idle", "both")},
 		{name: "/help", help: "show this list"},
 		{name: "/exit", help: "leave (ctrl+d does too); /quit is the same"},
 	}
@@ -89,9 +91,13 @@ func configArgs(m model, prev []string) argSpec {
 		if sub == "unset" {
 			return argSpec{}
 		}
-		k, _, err := config.LookupKey(rest[0])
+		k, profile, err := config.LookupKey(rest[0])
 		if err != nil {
 			return argSpec{expected: true}
+		}
+		if field, ok := k.Profile(); ok && field == "model" {
+			// What the profile serves, once Tab has fetched it.
+			return argSpec{cands: m.modelsOf(profile), expected: true}
 		}
 		switch k.Type {
 		case config.TypeEnum:
@@ -229,19 +235,27 @@ type completion struct {
 	idx   int
 }
 
-// tab completes the input line. The first Tab extends the line to the
-// longest common prefix of the candidates, or takes the only one, and
-// lists the rest; further Tabs cycle through them.
-func (m model) tab() model {
+// tab completes the input line. On a command, the first Tab extends the
+// line to the longest common prefix of the candidates, or takes the only
+// one, and lists the rest; further Tabs cycle through them. A model
+// argument whose list the shell has not got yet is fetched first. On a
+// question, Tab is the completion by a model (suggest.go).
+func (m model) tab() (model, tea.Cmd) {
 	cur := m.ta.Value()
+	if !strings.HasPrefix(cur, "/") {
+		return m.tabOnQuestion()
+	}
 	if m.comp != nil && cur == m.comp.shown {
 		m.comp.idx = (m.comp.idx + 1) % len(m.comp.cands)
 		m.comp.shown = m.comp.cands[m.comp.idx]
 		m.ta.SetValue(m.comp.shown)
 		m.status = strings.Join(m.comp.cands, "  ")
-		return m
+		return m, nil
 	}
 	m.comp = nil
+	if profile := m.modelsNeeded(cur); profile != "" {
+		return m.loadModels(profile)
+	}
 	cands := m.complete(cur)
 	switch len(cands) {
 	case 0:
@@ -262,7 +276,7 @@ func (m model) tab() model {
 		m.comp = &completion{cands: cands, shown: m.ta.Value(), idx: -1}
 		m.status = strings.Join(cands, "  ")
 	}
-	return m
+	return m, nil
 }
 
 func commonPrefix(ss []string) string {

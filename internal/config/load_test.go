@@ -965,3 +965,80 @@ providers:
 		})
 	}
 }
+
+func TestCompletionBlockLayersAndGuards(t *testing.T) {
+	global := `
+providers:
+  - name: big
+    kind: openai
+    api_key: k
+    model: m
+  - name: small
+    kind: ollama
+    model: tiny
+default_provider: big
+completion:
+  mode: idle
+  profile: small
+  idle_after: 900ms
+`
+	t.Run("files merge key by key with the defaults behind", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), global)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "completion:\n  mode: \"off\"\n")
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := cfg.Completion
+		if c.Mode != CompletionOff || c.Profile != "small" || c.IdleAfter != 900*time.Millisecond || c.WarnAfter != DefaultCompletionWarnAfter {
+			t.Errorf("completion = %+v; want the project's off over the global idle, the global profile and pause, the default warn", c)
+		}
+	})
+	t.Run("env and flag beat the files", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), global)
+		opts.LookupEnv = lookup(map[string]string{"HINT_COMPLETION_MODE": "tab"})
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("env: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionTab {
+			t.Errorf("env: mode = %v", cfg.Completion.Mode)
+		}
+		opts.Flags.Completion = "both"
+		cfg, err = LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("flag: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionBoth || !cfg.Completion.Mode.OnTab() || !cfg.Completion.Mode.OnIdle() {
+			t.Errorf("flag: mode = %v", cfg.Completion.Mode)
+		}
+		opts.Flags.Completion = "sometimes"
+		if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "--completion") {
+			t.Errorf("a bad flag value was accepted: %v", err)
+		}
+	})
+	t.Run("an unusable completion profile switches the block off with a warning", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), strings.Replace(global, "profile: small", "profile: gone", 1))
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("a missing completion profile stopped the run: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionOff || len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "completion is off") {
+			t.Errorf("completion = %+v, warnings %v", cfg.Completion, cfg.Warnings)
+		}
+	})
+	t.Run("defaults when the block is absent", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), strings.SplitN(global, "completion:", 2)[0])
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := cfg.Completion; c.Mode != CompletionOff || c.IdleAfter != DefaultCompletionIdleAfter || c.WarnAfter != DefaultCompletionWarnAfter {
+			t.Errorf("completion = %+v", c)
+		}
+	})
+}

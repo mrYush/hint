@@ -185,23 +185,43 @@ Decisions (2026-10-18):
 - **Default TUI without a Phase 0 re-run under a model.**
   Acceptance 3 is covered by the automated TUI tests (tools and their results in the transcript, the permission dialog with the diff, `-c` history on attach, sessions) and a terminal smoke test of the default; a manual pass of the four Phase 0 scenarios through the TUI against a live provider is left to the release branch.
 
-### WP1.6 — Completion of what the user is typing
+### WP1.6 — Completion of what the user is typing — **done** (2026-10-19)
 
 **Branch:** `dev/wp1.6-input-completion`
 
-- [ ] `complete` over RPC: given the text typed so far, the core returns a short continuation from a small, fast model; cancelled by the next keystroke, never blocking the input
-- [ ] Ghost text in the TUI input: the suggestion shown dimmed after the cursor, `tab` accepts it, any other key discards it
-- [ ] A `completion:` block in the config (`enabled`, the profile or model it uses, the latency after which the warning appears) with the usual layering: `~/.config/hint/config.yaml` sets the general value, `.hint/config.yaml` in the repository overrides it, and a key the local file does not mention is inherited.
-      `enabled` is a `*bool` like `instructions.summarize`, so that an explicit `false` in the project file is told apart from silence and wins over a global `true`; off by default until the cost and the latency are measured
-- [ ] A slow or failing completion never gets in the way: the request runs beside the input, not in front of it.
-      Past the configured latency the status line shows a warning that the model is slow.
-      Any edit of the line (a character added or removed) or Esc cancels the request, and an answer that arrives after that is dropped, never shown, even if it is already on the wire; a suggestion belongs to the exact text it was asked for
-- [ ] Command arguments that depend on the configuration (models the profile serves) join the deterministic table in `internal/tui/commands.go`; profile names for `/profile` are already there since WP1.5
+- [x] `complete` over RPC: given the text typed so far, the core returns a short continuation from a model; `complete.cancel` stops it; a newer `complete` on the connection cancels the older; the request runs beside the connection's loop so `permission.reply` and `turn.cancel` are never held up (a test pins it)
+- [x] The suggestion in the TUI: shown in the status line (`tab accepts: …`), Tab accepts it, any other key discards it
+- [x] A `completion:` block in the config with the usual layering — `mode` (`off` | `tab` | `idle` | `both`), `profile`, `model`, `idle_after`, `warn_after`; `HINT_COMPLETION_MODE` and `--completion` for the mode; an explicit `off` in the project file beats a global `on`; a named profile that does not exist or cannot be used switches the block off with a warning instead of stopping the run
+- [x] A slow or failing completion never gets in the way: the request runs beside the input; an edit cancels it; a suggestion belongs to the exact text it was asked for and a late answer is dropped by its id; past `warn_after` the status line says the model is slow; three failures in a row switch it off for the session with a notice; `/completion on` tries again
+- [x] `/completion [off|tab|idle|both]` sets the trigger for the session and alone reports the mode, its source, the profile and the requests and tokens spent so far
+- [x] Command arguments that depend on the configuration: the model argument of `/profile` and the value of `/config set providers.<p>.model` complete from `profile.models`, fetched by the first Tab on it and cached for the session
 
-Rules fixed on 2026-10-18, before any code: the feature is switchable in the layered config, and it must never make typing wait.
-The cancel-on-edit rule needs a request id carried through `complete` and echoed in its reply, so the shell can recognise a late answer for text that is no longer in the input; the same id lets the core cancel the provider call.
+Decisions (2026-10-19):
 
-Why separate: the command table and Tab for commands are deterministic and live in the shell (WP1.4); a continuation is a request to a provider, so it needs a protocol method, a model choice, debouncing and a decision on what text may leave the machine on every keystroke.
+- **Three triggers instead of one.**
+  Review of the first draft (2026-10-18) found that a request on every pause is the one thing in the plan that spends tokens without a key press, against the lean-harness goal.
+  `tab` is the mode to start with: one request per Tab, nothing otherwise.
+  `idle` asks after `idle_after` and is held back by thresholds the shell owns (12 characters, two seconds between requests, three new characters); `both` is the union.
+  Off by default, as recorded before any code.
+- **The session's own profile and model answer by default.**
+  A separate small model is optional (`completion.profile`, `completion.model`), documented with the warning that on a small machine a second resident model evicts the main one; nothing extra runs unless asked for.
+- **The status line, not ghost text in the input.**
+  `bubbles/textarea` has no suggestions; drawing one under the cursor means rewriting its rendered output around wrapping and a prompt.
+  The status line costs nothing, works at every width, and the contract — see it, Tab takes it — is the same.
+  Inline ghost text is backlog, to be done only if the status line proves not enough in use.
+- **`complete` is the first method the server runs beside its loop.**
+  `conn.dispatch` is synchronous; a completion waits on a model for seconds.
+  The connection keeps a map of completions in flight by the client's id for `complete.cancel` and for the newer-cancels-older rule.
+- **The cost is visible before it is a default.**
+  `complete` returns the provider's usage; `/completion` sums requests and tokens for the session.
+  Whether any mode may ever be on by default is decided from that number and a run against a 1–3B model (backlog, with the Pi evidence format), not now.
+- **What leaves the machine.**
+  The text typed so far (its last 1000 characters) and the last question of the session (500); never files, tool results or the system prompt.
+  README says so in the first paragraph of the feature.
+- **The REPL has no completion.**
+  `--plain` has no status line to show one in; the method stays in the protocol for other clients.
+
+Backlog from the review: inline ghost text; a request budget enforced by the core when there is a second client; prefix caching of suggestions; a quality and latency measurement of small models for completions.
 
 ### WP1.7 — Secrets out of the agent's reach
 
