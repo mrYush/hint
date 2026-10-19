@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1041,4 +1042,139 @@ completion:
 			t.Errorf("completion = %+v", c)
 		}
 	})
+}
+
+func TestKeyringReferencesAndKeySources(t *testing.T) {
+	file := `
+providers:
+  - name: stored
+    kind: openai
+    api_key: "keyring:" # the account defaults to the profile's name
+    model: m
+  - name: named
+    kind: openai
+    api_key: "keyring: team-key"
+    model: m
+  - name: fromenv
+    kind: openai
+    api_key: ${MY_KEY}
+    model: m
+  - name: literal
+    kind: openai
+    api_key: sk-literal-1234567890
+    model: m
+  - name: missing
+    kind: openai
+    api_key: keyring:nope
+    model: m
+default_provider: stored
+`
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), file)
+	opts.LookupEnv = lookup(map[string]string{"MY_KEY": "sk-from-env-1234567890"})
+	opts.Keyring = MapKeyring{"stored": "sk-stored-1234567890", "team-key": "sk-team-1234567890"}
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][3]string{
+		"stored":  {"sk-stored-1234567890", KeyFromKeyring, "keyring:stored"},
+		"named":   {"sk-team-1234567890", KeyFromKeyring, "keyring:team-key"},
+		"fromenv": {"sk-from-env-1234567890", KeyFromEnv, "${MY_KEY}"},
+		"literal": {"sk-literal-1234567890", KeyFromFile, ""},
+		"missing": {"", KeyFromKeyring, "keyring:nope"},
+	}
+	for name, w := range want {
+		p, err := cfg.Profile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.APIKey != w[0] || p.KeyFrom != w[1] || p.KeyRef != w[2] {
+			t.Errorf("%s = key %q from %q ref %q; want %v", name, p.APIKey, p.KeyFrom, p.KeyRef, w)
+		}
+	}
+	// A missing entry is reported with the reference and the cause.
+	_, err = cfg.Usable("missing", "selected")
+	var noKey *NoKeyError
+	if !errors.As(err, &noKey) || noKey.Ref != "keyring:nope" || !errors.Is(err, ErrKeyringNotFound) || !strings.Contains(err.Error(), "secret store") {
+		t.Errorf("missing entry = %v", err)
+	}
+	// The variables api_key referred to are what a subprocess must not
+	// see, with the well-known ones; the secrets are every key loaded.
+	env := cfg.SecretEnv()
+	for _, name := range []string{"MY_KEY", "APIBAR_KEY", "OPENAI_API_KEY", "HINT_API_KEY"} {
+		if !slices.Contains(env, name) {
+			t.Errorf("SecretEnv lacks %s: %v", name, env)
+		}
+	}
+	if secrets := cfg.Secrets(); len(secrets) != 4 {
+		t.Errorf("Secrets = %d values, want the four keys", len(secrets))
+	}
+
+	// An overlay replaces the key and says so.
+	opts.LookupEnv = lookup(map[string]string{"MY_KEY": "x", "HINT_API_KEY": "sk-overlay-1234567890"})
+	cfg, err = LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.Profile("stored"); p.APIKey != "sk-overlay-1234567890" || p.KeyFrom != KeyFromOverlay || p.KeyRef != "" {
+		t.Errorf("overlay: %+v", p)
+	}
+	// No store in the process: a reference yields nothing, and says why.
+	opts.Keyring = nil
+	cfg, err = LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.Profile("named"); p.APIKey != "" || p.KeyError == nil || !strings.Contains(p.KeyError.Error(), "no secret store") {
+		t.Errorf("without a keyring: %+v, %v", p, p.KeyError)
+	}
+}
+
+func TestFilterEnviron(t *testing.T) {
+	env := []string{"PATH=/bin", "APIBAR_KEY=sk-1", "MY_KEY=sk-2", "COPY=sk-2", "EMPTY=", "PLAIN=hello", "NOEQ"}
+	got := FilterEnviron(env, []string{"APIBAR_KEY", "MY_KEY"}, []string{"sk-2", ""})
+	want := []string{"PATH=/bin", "EMPTY=", "PLAIN=hello", "NOEQ"}
+	if !slices.Equal(got, want) {
+		t.Errorf("FilterEnviron = %v, want %v", got, want)
+	}
+}
+
+func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), "providers:\n  - name: p\n    kind: openai\n    api_key: k-1234567890\n    model: m\nsecrets:\n  store: file\n")
+	cfg, err := LoadFrom(opts)
+	if err != nil || cfg.SecretStore.Store != StoreFile {
+		t.Errorf("store = %v, %v", cfg.SecretStore.Store, err)
+	}
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "secrets:\n  store: vault\n")
+	if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "secrets.store") {
+		t.Errorf("a bad store was accepted: %v", err)
+	}
+	if !KeyringAvailable(MapKeyring{}) || KeyringAvailable(nil) || KeyringAvailable(failingKeyring{}) {
+		t.Error("KeyringAvailable misjudges a store")
+	}
+	m := MapKeyring{}
+	if err := m.Set("a", "s"); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := m.Get("a"); err != nil || v != "s" {
+		t.Errorf("MapKeyring round trip: %q, %v", v, err)
+	}
+	if err := m.Delete("a"); err != nil || m.Delete("a") == nil {
+		t.Error("MapKeyring delete")
+	}
+}
+
+// failingKeyring is a store that does not answer: no Secret Service.
+type failingKeyring struct{}
+
+func (failingKeyring) Get(string) (string, error) {
+	return "", errors.New("config: secret store: no D-Bus session")
+}
+func (failingKeyring) Set(string, string) error {
+	return errors.New("config: secret store: no D-Bus session")
+}
+func (failingKeyring) Delete(string) error {
+	return errors.New("config: secret store: no D-Bus session")
 }

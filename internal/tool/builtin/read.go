@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/mrYush/hint/internal/tool"
@@ -76,7 +75,7 @@ func (t *readFile) Run(ctx context.Context, callID string, args json.RawMessage)
 	}
 	rel := t.root.Rel(abs)
 
-	f, err := os.Open(abs)
+	f, err := t.root.Open(abs)
 	if err != nil {
 		return agentapi.ErrorResult(callID, readFileName, pathError(t.root, abs, err)), nil
 	}

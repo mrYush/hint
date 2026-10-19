@@ -187,6 +187,7 @@ func TestSchemaCoversTheLoader(t *testing.T) {
 	collect(reflect.TypeOf(fileInstructions{}), "instructions.")
 	collect(reflect.TypeOf(fileOverview{}), "overview.")
 	collect(reflect.TypeOf(fileCompletion{}), "completion.")
+	collect(reflect.TypeOf(fileSecrets{}), "secrets.")
 	for _, top := range []string{"default_provider", "fallback_provider"} {
 		read[top] = true
 	}

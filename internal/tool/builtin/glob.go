@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -38,13 +37,14 @@ type globArgs struct {
 var globSchema = tool.MustSchema(globArgs{})
 
 type globTool struct {
-	root  tool.Root
-	rg    string
-	rules project.Rules
+	root    tool.Root
+	rg      string
+	rules   project.Rules
+	environ func() []string
 }
 
 func newGlob(root tool.Root, o options) agentapi.Tool {
-	return tool.WithLimits(&globTool{root: root, rg: o.rg, rules: o.rules()}, o.limits)
+	return tool.WithLimits(&globTool{root: root, rg: o.rg, rules: o.rules(), environ: o.env}, o.limits)
 }
 
 func (*globTool) Name() string                 { return globName }
@@ -73,7 +73,7 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	if err != nil {
 		return agentapi.ErrorResult(callID, globName, err.Error()), nil
 	}
-	if info, err := os.Stat(dir); err != nil {
+	if info, err := t.root.Stat(dir); err != nil {
 		return agentapi.ErrorResult(callID, globName, pathError(t.root, dir, err)), nil
 	} else if !info.IsDir() {
 		return agentapi.ErrorResult(callID, globName, fmt.Sprintf("%s is not a directory", t.root.Rel(dir))), nil
@@ -88,7 +88,7 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		// reference behaviour anyway.
 		// See listDir.Run for why a git failure is not reported here.
 		ig, _ := t.rules.Ignorer(ctx, dir)
-		paths, err = globWalk(ctx, dir, matcher, ig)
+		paths, err = globWalk(ctx, t.root, dir, matcher, ig)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -103,7 +103,7 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	}
 	hits := make([]hit, 0, len(paths))
 	for _, p := range paths {
-		info, err := os.Stat(p)
+		info, err := t.root.Stat(p)
 		if err != nil {
 			continue
 		}
@@ -133,9 +133,10 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 // Ripgrep reads .gitignore itself; the Go walk gets the same answer from
 // project.Rules, so the two agree inside a repository.
 func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]string, error) {
-	args := append([]string{"--files", "--null", "--glob", pattern}, rgExcludeArgs()...)
+	args := append([]string{"--files", "--null", "--glob", pattern}, rgExcludeArgs(t.root, dir)...)
 	cmd := exec.CommandContext(ctx, t.rg, args...)
 	cmd.Dir = dir
+	cmd.Env = t.environ()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -157,9 +158,9 @@ func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]stri
 
 // globWalk is the pure-Go listing: every regular file under dir that ig
 // keeps, whose path relative to dir matches.
-func globWalk(ctx context.Context, dir string, m *glob.Matcher, ig project.Ignorer) ([]string, error) {
+func globWalk(ctx context.Context, root tool.Root, dir string, m *glob.Matcher, ig project.Ignorer) ([]string, error) {
 	var out []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := root.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == dir {
 				return err
@@ -174,12 +175,12 @@ func globWalk(ctx context.Context, dir string, m *glob.Matcher, ig project.Ignor
 		}
 		rel := relSlash(dir, path)
 		if d.IsDir() {
-			if ig.Ignored(rel, true) {
+			if ig.Ignored(rel, true) || root.Denied(path) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if ig.Ignored(rel, false) || !d.Type().IsRegular() {
+		if ig.Ignored(rel, false) || !d.Type().IsRegular() || root.Denied(path) {
 			return nil
 		}
 		if m.Match(rel) {
