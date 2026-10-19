@@ -30,7 +30,7 @@ providers:
     #                                                machine); for ollama: http://localhost:11434/v1
     api_key: ${VLLM_API_KEY} # required for openai; $VAR and ${VAR} are expanded from the
     #                          environment. A literal key works too (global file only).
-    #                          A vLLM started without --api-key accepts any value
+    #                          A vLLM started without a key accepts any value here
     model: Qwen/Qwen2.5-Coder-32B-Instruct # required: a model the server serves (`hint models`
     #                                        lists them). There is no default for either kind;
     #                                        a server serves what was loaded into it

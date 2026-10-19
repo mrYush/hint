@@ -468,8 +468,8 @@ providers:
   - name: vllm
     kind: openai                                # OpenAI Chat Completions dialect
     base_url: http://inference.example.net:8000/v1   # hint appends /chat/completions
-    api_key: ${VLLM_API_KEY}                    # $VAR / ${VAR} references are expanded;
-                                                # vLLM without --api-key accepts any value
+    api_key: ${VLLM_API_KEY}                    # $VAR / ${VAR} references are expanded; a vLLM
+                                                # started without a key accepts any value here
     model: Qwen/Qwen2.5-Coder-32B-Instruct      # a model the server serves (hint models lists them)
     context_window: 32768                       # tokens; sizes the compaction (optional)
   - name: local
