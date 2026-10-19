@@ -20,12 +20,18 @@ func Mask(s string) string {
 	return s[:6] + "…" + s[len(s)-3:]
 }
 
-// Redact replaces every occurrence of every non-empty secret in text with
-// "***". The debug logger (WP0.9) must pass all output through it with
-// Config.Secrets() before writing.
+// redactMinLen is the shortest secret Redact replaces. A shorter one is
+// not a credential any provider issues, and replacing a few characters
+// everywhere they occur would garble ordinary text.
+const redactMinLen = 8
+
+// Redact replaces every occurrence of every secret of at least
+// redactMinLen characters in text with "***". The debug logger passes
+// all output through it with Config.Secrets() before writing, and every
+// tool result goes through it before the model sees it (WP1.7).
 func Redact(text string, secrets []string) string {
 	for _, s := range secrets {
-		if s == "" {
+		if len(s) < redactMinLen {
 			continue
 		}
 		text = strings.ReplaceAll(text, s, "***")

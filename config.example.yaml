@@ -87,3 +87,12 @@ completion:
   model: "" # a model of that profile for completions; empty keeps the profile's
   idle_after: 600ms # the pause that triggers a request in the idle mode
   warn_after: 2s # after this long the status line says the completion model is slow
+
+# Where `hint setup` and /setup put an API key. The OS secret store (Secret
+# Service on Linux, Keychain on macOS, Credential Manager on Windows) keeps it
+# out of every file; the config then says `api_key: keyring:<profile>`.
+secrets:
+  store: auto # auto: the secret store when it answers, else this file (mode 0600)
+  #             with a warning | keyring: insist on the store | file: never use it
+  #             (a server, a container, CI). `hint config show-key <profile>` is the
+  #             one way to see a stored key again

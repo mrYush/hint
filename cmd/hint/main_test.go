@@ -45,7 +45,7 @@ func TestToolRegistry_AllBehindPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg, err := toolRegistry(root, nil)
+	reg, err := toolRegistry(root, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

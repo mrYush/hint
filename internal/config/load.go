@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,9 @@ type Options struct {
 	WorkingDir string
 	LookupEnv  func(string) (string, bool)
 	Flags      Flags
+	// Keyring resolves api_key: keyring:<account> references. Nil means
+	// no secret store in this process: such a reference yields no key.
+	Keyring Keyring
 }
 
 // Load resolves configuration against the real process environment.
@@ -64,6 +68,7 @@ func Load(flags Flags) (*Config, error) {
 		WorkingDir: wd,
 		LookupEnv:  os.LookupEnv,
 		Flags:      flags,
+		Keyring:    OSKeyring{},
 	})
 }
 
@@ -100,11 +105,14 @@ func LoadFrom(opts Options) (*Config, error) {
 	}
 	for _, p := range merged.Providers {
 		prof := Profile{
-			Name:    p.Name,
-			Kind:    Kind(p.Kind),
-			BaseURL: p.BaseURL,
-			APIKey:  p.APIKey,
-			Model:   p.Model,
+			Name:     p.Name,
+			Kind:     Kind(p.Kind),
+			BaseURL:  p.BaseURL,
+			APIKey:   p.APIKey,
+			Model:    p.Model,
+			KeyFrom:  p.keyFrom,
+			KeyRef:   p.keyRef,
+			KeyError: p.keyErr,
 		}
 		if p.ContextWindow != nil {
 			prof.ContextWindow = *p.ContextWindow
@@ -144,6 +152,8 @@ func LoadFrom(opts Options) (*Config, error) {
 type loader struct {
 	opts     Options
 	warnings []string
+	// keyEnv collects the ${VAR} names api_key values referred to.
+	keyEnv []string
 }
 
 func (l *loader) warnf(format string, args ...any) {
@@ -173,6 +183,7 @@ type fileConfig struct {
 	Instructions fileInstructions `yaml:"instructions"`
 	Overview     fileOverview     `yaml:"overview"`
 	Completion   fileCompletion   `yaml:"completion"`
+	Secrets      fileSecrets      `yaml:"secrets"`
 
 	// Legacy flat schema (pre-WP0.2).
 	APIURL string `yaml:"api_url"`
@@ -190,6 +201,10 @@ type fileProfile struct {
 	// HeaderTimeout is a Go duration string ("90s", "15m"); yaml.v3
 	// refuses a bare number for a time.Duration, so units are mandatory.
 	HeaderTimeout *time.Duration `yaml:"header_timeout"`
+	// keyFrom, keyRef and keyErr are filled by expand: where APIKey came
+	// from, and why a reference yielded nothing.
+	keyFrom, keyRef string
+	keyErr          error
 }
 
 type fileInstructions struct {
@@ -200,6 +215,10 @@ type fileInstructions struct {
 type fileOverview struct {
 	Depth      *int `yaml:"depth"`
 	MaxEntries *int `yaml:"max_entries"`
+}
+
+type fileSecrets struct {
+	Store string `yaml:"store"`
 }
 
 type fileCompletion struct {
@@ -403,6 +422,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	if project.Completion.WarnAfter != nil {
 		out.Completion.WarnAfter = project.Completion.WarnAfter
 	}
+	if project.Secrets.Store != "" {
+		out.Secrets.Store = project.Secrets.Store
+	}
 	return out
 }
 
@@ -411,12 +433,48 @@ func mergeFiles(global, project fileConfig) fileConfig {
 // the shell, which has already done its own expansion.
 func (l *loader) expand(fc *fileConfig) {
 	for i := range fc.Providers {
-		fc.Providers[i].BaseURL = expandValue(fc.Providers[i].BaseURL, l.opts.LookupEnv)
-		fc.Providers[i].APIKey = expandValue(fc.Providers[i].APIKey, l.opts.LookupEnv)
-		fc.Providers[i].Model = expandValue(fc.Providers[i].Model, l.opts.LookupEnv)
+		p := &fc.Providers[i]
+		p.BaseURL = expandValue(p.BaseURL, l.opts.LookupEnv)
+		p.APIKey, p.keyFrom, p.keyRef, p.keyErr = l.resolveKey(p.Name, p.APIKey)
+		p.Model = expandValue(p.Model, l.opts.LookupEnv)
 	}
 	fc.DefaultProvider = expandValue(fc.DefaultProvider, l.opts.LookupEnv)
 	fc.FallbackProvider = expandValue(fc.FallbackProvider, l.opts.LookupEnv)
+}
+
+// envRefs matches the $VAR and ${VAR} references os.Expand understands.
+var envRefs = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
+
+// resolveKey turns an api_key value into the key and says where it came
+// from: a keyring:<account> reference is read from the secret store (the
+// profile's name when the account is empty), a ${VAR} reference from the
+// environment — and its name is remembered, so no tool subprocess sees
+// it — and anything else is the key itself.
+func (l *loader) resolveKey(profile, value string) (key, from, ref string, err error) {
+	if value == "" {
+		return "", "", "", nil
+	}
+	if account, ok := KeyringRef(value); ok {
+		if account == "" {
+			account = profile
+		}
+		ref = KeyringValue(account)
+		if l.opts.Keyring == nil {
+			return "", KeyFromKeyring, ref, errors.New("no secret store in this process")
+		}
+		key, err := l.opts.Keyring.Get(account)
+		if err != nil {
+			return "", KeyFromKeyring, ref, err
+		}
+		return key, KeyFromKeyring, ref, nil
+	}
+	if names := envRefs.FindAllStringSubmatch(value, -1); len(names) > 0 {
+		for _, m := range names {
+			l.keyEnv = append(l.keyEnv, m[1])
+		}
+		return expandValue(value, l.opts.LookupEnv), KeyFromEnv, value, nil
+	}
+	return value, KeyFromFile, "", nil
 }
 
 // applyEnvScalars overlays the HINT_* variables that are not tied to a
@@ -512,7 +570,7 @@ func (l *loader) overlaySelected(cfg *Config) error {
 		p.BaseURL = v
 	}
 	if v, ok := l.env("HINT_API_KEY"); ok {
-		p.APIKey = v
+		p.APIKey, p.KeyFrom, p.KeyRef, p.KeyError = v, KeyFromOverlay, "", nil
 	}
 	if v, ok := l.env("HINT_MODEL"); ok {
 		p.Model = v
@@ -521,7 +579,7 @@ func (l *loader) overlaySelected(cfg *Config) error {
 		p.BaseURL = l.opts.Flags.APIURL
 	}
 	if l.opts.Flags.APIKey != "" {
-		p.APIKey = l.opts.Flags.APIKey
+		p.APIKey, p.KeyFrom, p.KeyRef, p.KeyError = l.opts.Flags.APIKey, KeyFromOverlay, "", nil
 	}
 	if l.opts.Flags.Model != "" {
 		p.Model = l.opts.Flags.Model
@@ -571,7 +629,19 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if cfg.Overview.MaxEntries <= 0 {
 		cfg.Overview.MaxEntries = DefaultOverviewEntries
 	}
-	return l.resolveCompletion(cfg, files.Completion)
+	if err := l.resolveCompletion(cfg, files.Completion); err != nil {
+		return err
+	}
+	cfg.keyEnv = append([]string(nil), l.keyEnv...)
+	cfg.SecretStore.Store = SecretStore(files.Secrets.Store)
+	switch cfg.SecretStore.Store {
+	case "":
+		cfg.SecretStore.Store = StoreAuto
+	case StoreAuto, StoreKeyring, StoreFile:
+	default:
+		return fmt.Errorf("config: secrets.store must be auto, keyring or file, not %q", cfg.SecretStore.Store)
+	}
+	return nil
 }
 
 // resolveCompletion settles the completion: block: the merged files, then

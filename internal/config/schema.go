@@ -99,6 +99,8 @@ var keys = []Key{
 		Help: "the pause in typing that triggers a request in the idle mode"},
 	{Path: "completion.warn_after", Type: TypeDuration, Default: DefaultCompletionWarnAfter.String(),
 		Help: "how long a completion may take before the TUI says the model is slow"},
+	{Path: "secrets.store", Type: TypeEnum, Enum: []string{string(StoreAuto), string(StoreKeyring), string(StoreFile)}, Default: string(StoreAuto),
+		Help: "where setup puts an API key: the OS secret store when it answers, else the 0600 config file (auto); keyring or file insist"},
 }
 
 // Keys returns the table of config keys. The slice is a copy.

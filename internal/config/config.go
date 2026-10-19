@@ -10,6 +10,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -65,13 +66,32 @@ type Profile struct {
 	// which on a small board takes minutes. Zero keeps the client's
 	// built-in default.
 	HeaderTimeout time.Duration
+	// KeyFrom says where APIKey came from: KeyFromFile for a literal in
+	// a config file, KeyFromEnv for a ${VAR} reference, KeyFromKeyring
+	// for a keyring:<account> reference, KeyFromOverlay for HINT_API_KEY
+	// or --api-key, or "" for no key. Setup uses it to say where a key
+	// is and whether it could be moved into the secret store.
+	KeyFrom string
+	// KeyRef is the unexpanded api_key value when it was a reference
+	// (${VAR} or keyring:<account>); empty for a literal. KeyError is
+	// why a keyring reference yielded nothing.
+	KeyRef   string
+	KeyError error
 }
+
+// The sources of a profile's key, for Profile.KeyFrom.
+const (
+	KeyFromFile    = "file"
+	KeyFromEnv     = "env"
+	KeyFromKeyring = "keyring"
+	KeyFromOverlay = "overlay"
+)
 
 // String implements fmt.Stringer with the API key masked, so a Profile
 // printed via %v/%+v/%s can never leak the secret.
 func (p Profile) String() string {
-	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s ContextWindow:%d HeaderTimeout:%s}",
-		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model, p.ContextWindow, p.HeaderTimeout)
+	return fmt.Sprintf("{Name:%s Kind:%s BaseURL:%s APIKey:%s Model:%s ContextWindow:%d HeaderTimeout:%s KeyFrom:%s}",
+		p.Name, p.Kind, p.BaseURL, Mask(p.APIKey), p.Model, p.ContextWindow, p.HeaderTimeout, p.KeyFrom)
 }
 
 // Built-in defaults of the project-context limits, applied by the loader
@@ -116,6 +136,26 @@ type OverviewSettings struct {
 	// loading.
 	MaxEntries int
 }
+
+// SecretStore says where setup puts an API key (WP1.7).
+type SecretStore string
+
+// The secret stores. Auto is the OS secret store when it answers and the
+// 0600 config file otherwise, with a warning; the other two insist.
+const (
+	StoreAuto    SecretStore = "auto"
+	StoreKeyring SecretStore = "keyring"
+	StoreFile    SecretStore = "file"
+)
+
+// SecretsSettings is the secrets: block of the config files.
+type SecretsSettings struct {
+	Store SecretStore
+}
+
+// wellKnownKeyEnv are the variables the zero-config path reads a key
+// from; a tool subprocess never sees them.
+var wellKnownKeyEnv = []string{"APIBAR_KEY", "APIBAR_TOKEN", "API_BAR_KEY", "OPENAI_API_KEY", "HINT_API_KEY"}
 
 // CompletionMode says when the shell asks a model to continue what the
 // user is typing (WP1.6).
@@ -176,6 +216,11 @@ type Config struct {
 	Overview     OverviewSettings
 	// Completion is the completion: block (WP1.6).
 	Completion CompletionSettings
+	// SecretStore is the secrets: block (WP1.7).
+	SecretStore SecretsSettings
+	// keyEnv are the variables the files' api_key values referred to
+	// (${VAR}); SecretEnv adds the well-known ones.
+	keyEnv []string
 	// Warnings collects non-fatal findings (legacy paths, migrated flat
 	// keys, ignored values). The CLI prints them to stderr once per run.
 	Warnings []string
@@ -210,7 +255,7 @@ func (c *Config) Usable(name, role string) (Profile, error) {
 		return Profile{}, err
 	}
 	if p.Kind == KindOpenAI && p.APIKey == "" {
-		return Profile{}, &NoKeyError{Role: role, Profile: p.Name}
+		return Profile{}, &NoKeyError{Role: role, Profile: p.Name, Ref: p.KeyRef, Cause: p.KeyError}
 	}
 	if p.Model == "" {
 		return Profile{}, &NoModelError{Role: role, Profile: p.Name}
@@ -248,17 +293,65 @@ func (c *Config) Secrets() []string {
 	return out
 }
 
+// SecretEnv returns the names of the environment variables that hold, or
+// may hold, an API key: every ${VAR} an api_key referred to, and the
+// well-known ones the zero-config path reads. A tool subprocess runs
+// without them (see FilterEnviron).
+func (c *Config) SecretEnv() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, name := range append(append([]string{}, c.keyEnv...), wellKnownKeyEnv...) {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+// FilterEnviron returns environ (KEY=value lines, as os.Environ gives
+// them) without the variables named in names and without any variable
+// whose value is one of values: a key under its own name, and a copy of
+// it under another.
+func FilterEnviron(environ, names, values []string) []string {
+	drop := make(map[string]bool, len(names))
+	for _, n := range names {
+		drop[n] = true
+	}
+	secret := make(map[string]bool, len(values))
+	for _, v := range values {
+		if v != "" {
+			secret[v] = true
+		}
+	}
+	out := make([]string, 0, len(environ))
+	for _, kv := range environ {
+		name, value, _ := strings.Cut(kv, "=")
+		if drop[name] || secret[value] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 // ErrNoProvider is what loading returns when nothing says which provider
 // to use: no file, no key in the environment, no flag. A shell that can
 // ask questions answers it with the interactive setup.
 var ErrNoProvider = errors.New("config: no provider configured: run `hint setup`, set APIBAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
 
 // NoKeyError is a profile the run needs that has no API key — none in
-// the file, or a ${VAR} that expands to nothing.
+// the file, a ${VAR} that expands to nothing, or a keyring:<account>
+// the secret store has no entry for (Ref and Cause say which).
 type NoKeyError struct {
-	// Role is "default" or "fallback".
+	// Role is "default", "fallback" or "selected".
 	Role    string
 	Profile string
+	// Ref is the api_key reference that yielded nothing, if any.
+	Ref string
+	// Cause is why a keyring reference yielded nothing.
+	Cause error
 }
 
 // NoModelError is a profile the run needs that names no model. A server
@@ -274,5 +367,14 @@ func (e *NoModelError) Error() string {
 }
 
 func (e *NoKeyError) Error() string {
+	switch {
+	case e.Cause != nil:
+		return fmt.Sprintf("config: %s profile %q refers to the secret store (%s) but no key came back: %v; run `hint setup` to store one", e.Role, e.Profile, e.Ref, e.Cause)
+	case e.Ref != "":
+		return fmt.Sprintf("config: %s profile %q needs an API key: %s expands to nothing; export it, or run `hint setup`", e.Role, e.Profile, e.Ref)
+	}
 	return fmt.Sprintf("config: %s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${VLLM_API_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
 }
+
+// Unwrap exposes the secret store's error.
+func (e *NoKeyError) Unwrap() error { return e.Cause }

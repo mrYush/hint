@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -40,12 +39,13 @@ var bashSchema = tool.MustSchema(bashArgs{})
 type bash struct {
 	root      tool.Root
 	maxOutput int
+	environ   func() []string
 }
 
 func newBash(root tool.Root, o options) agentapi.Tool {
 	// No decorator timeout: the tool enforces its own per-call one, which
 	// can legitimately exceed the default limit for a long build.
-	return tool.WithLimits(&bash{root: root, maxOutput: o.limits.MaxOutput},
+	return tool.WithLimits(&bash{root: root, maxOutput: o.limits.MaxOutput, environ: o.env},
 		tool.Limits{Timeout: 0, MaxOutput: o.limits.MaxOutput})
 }
 
@@ -115,7 +115,9 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 		return agentapi.ToolResult{}, fmt.Errorf("bash: %w", err)
 	}
 	cmd.Dir = t.root.Dir()
-	cmd.Env = os.Environ()
+	// Without hint's API keys: a subprocess that prints its environment
+	// must not hand them to the model (WP1.7).
+	cmd.Env = t.environ()
 	cmd.WaitDelay = bashWaitDelay
 	cmd.Cancel = func() error { return killProcessTree(cmd) }
 

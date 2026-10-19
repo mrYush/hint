@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -51,13 +50,14 @@ type grepMatch struct {
 }
 
 type grepTool struct {
-	root  tool.Root
-	rg    string
-	rules project.Rules
+	root    tool.Root
+	rg      string
+	rules   project.Rules
+	environ func() []string
 }
 
 func newGrep(root tool.Root, o options) agentapi.Tool {
-	return tool.WithLimits(&grepTool{root: root, rg: o.rg, rules: o.rules()}, o.limits)
+	return tool.WithLimits(&grepTool{root: root, rg: o.rg, rules: o.rules(), environ: o.env}, o.limits)
 }
 
 func (*grepTool) Name() string                 { return grepName }
@@ -96,7 +96,7 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	if err != nil {
 		return agentapi.ErrorResult(callID, grepName, err.Error()), nil
 	}
-	if _, err := os.Stat(target); err != nil {
+	if _, err := t.root.Stat(target); err != nil {
 		return agentapi.ErrorResult(callID, grepName, pathError(t.root, target, err)), nil
 	}
 
@@ -158,11 +158,12 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 	if in.Include != "" {
 		args = append(args, "--glob", in.Include)
 	}
-	args = append(args, rgExcludeArgs()...)
+	args = append(args, rgExcludeArgs(t.root, t.root.Dir())...)
 	args = append(args, "--regexp", in.Pattern, "--", t.root.Rel(target))
 
 	cmd := exec.CommandContext(ctx, t.rg, args...)
 	cmd.Dir = t.root.Dir()
+	cmd.Env = t.environ()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -223,7 +224,7 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {
 			return nil
 		}
-		found, err := grepFile(path, re, maxGrepMatches+1-len(matches))
+		found, err := grepFile(root, path, re, maxGrepMatches+1-len(matches))
 		if err != nil {
 			return nil //nolint:nilerr // unreadable or binary: skip the file, keep searching
 		}
@@ -234,14 +235,14 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		return nil
 	}
 
-	info, err := os.Stat(target)
+	info, err := root.Stat(target)
 	if err != nil {
 		return nil, err
 	}
 	if !info.IsDir() {
 		return matches, visit(target)
 	}
-	err = filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
+	err = root.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == target {
 				return err
@@ -253,12 +254,12 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		}
 		rel := relSlash(target, path)
 		if d.IsDir() {
-			if ig.Ignored(rel, true) {
+			if ig.Ignored(rel, true) || root.Denied(path) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if ig.Ignored(rel, false) || !d.Type().IsRegular() {
+		if ig.Ignored(rel, false) || !d.Type().IsRegular() || root.Denied(path) {
 			return nil
 		}
 		return visit(path)
@@ -268,8 +269,8 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 
 // grepFile returns up to limit matching lines of one file, or an error for
 // a binary or unreadable one.
-func grepFile(path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
-	f, err := os.Open(path)
+func grepFile(root tool.Root, path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
+	f, err := root.Open(path)
 	if err != nil {
 		return nil, err
 	}
