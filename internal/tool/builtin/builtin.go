@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"os"
 	"os/exec"
 
 	"github.com/mrYush/hint/internal/project"
@@ -19,6 +20,17 @@ type options struct {
 	git    string
 	gitSet bool
 	todos  *TodoList
+	// environ is what a subprocess (bash, ripgrep) is started with; nil
+	// means the process's own environment, keys and all.
+	environ func() []string
+}
+
+// env returns the environment for a subprocess.
+func (o options) env() []string {
+	if o.environ != nil {
+		return o.environ()
+	}
+	return os.Environ()
 }
 
 // rules returns the ignore rules the pure-Go walks of list_dir, glob and
@@ -47,6 +59,14 @@ func WithRipgrep(path string) Option {
 // up in PATH once at construction.
 func WithGit(path string) Option {
 	return func(o *options) { o.git, o.gitSet = path, true }
+}
+
+// WithEnviron sets what every subprocess the tools start — bash, and
+// ripgrep behind glob and grep — is given as its environment, in place of
+// the process's own. The caller strips the API keys there (WP1.7); it is
+// a function because the set of keys can change with a config reload.
+func WithEnviron(environ func() []string) Option {
+	return func(o *options) { o.environ = environ }
 }
 
 // WithTodoList makes the todo tool write into list instead of a fresh one,

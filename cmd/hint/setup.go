@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strings"
 
@@ -33,6 +34,10 @@ type setupInfo struct {
 	// the effective configuration resolves the same layers.
 	cwd   string
 	flags config.Flags
+	// store is where a key goes (secrets.store); keyring is the secret
+	// store it goes into, nil for none in this process.
+	store   config.SecretStore
+	keyring config.Keyring
 }
 
 // needsKey says whether the profile has no key yet, so that an empty
@@ -48,10 +53,13 @@ func newSetupInfo(cfg *config.Config, cwd string, flags config.Flags) *setupInfo
 	if err != nil {
 		home = ""
 	}
-	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv), cwd: cwd, flags: flags}
+	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv), cwd: cwd, flags: flags, store: config.StoreAuto, keyring: config.OSKeyring{}}
 	if cfg != nil {
 		if p, err := cfg.Default(); err == nil {
 			s.profile = p
+		}
+		if cfg.SecretStore.Store != "" {
+			s.store = cfg.SecretStore.Store
 		}
 	}
 	if s.profile.Name == "" {
@@ -88,11 +96,25 @@ func (s *setupInfo) save(profile string, values map[string]string) (string, erro
 	if s.locs.Global == "" {
 		return "", errNowhere
 	}
+	values = maps.Clone(values)
+	key := values["api_key"]
+	stored, storeErr := s.storeKey(profile, key)
+	if storeErr != nil && s.store == config.StoreKeyring {
+		return "", storeErr
+	}
+	if stored {
+		values["api_key"] = config.KeyringValue(profile)
+	}
 	if err := config.WriteProfile(s.locs.Global, profile, values); err != nil {
 		return "", err
 	}
-	key := values["api_key"]
 	msg := "saved to " + s.locs.Global
+	switch {
+	case stored:
+		msg = "the API key is in the OS secret store (hint config show-key " + profile + " shows it again); " + msg
+	case storeErr != nil:
+		msg += "; no secret store answered (" + strings.TrimPrefix(storeErr.Error(), "config: ") + "), so the key is in that file, mode 0600: anyone running as you can read it"
+	}
 	if name, ok := envReference(key); ok {
 		if _, set := os.LookupEnv(name); !set {
 			msg += "; " + name + " is not set in this shell: export it before starting hint"
@@ -104,6 +126,70 @@ func (s *setupInfo) save(profile string, values map[string]string) (string, erro
 		}
 	}
 	return msg, nil
+}
+
+// storeKey puts a literal key into the secret store under the profile's
+// name, when the store policy and the store allow. A reference (${VAR},
+// keyring:) or an empty key is written as it is.
+func (s *setupInfo) storeKey(profile, key string) (bool, error) {
+	if key == "" || s.store == config.StoreFile {
+		return false, nil
+	}
+	if _, ok := envReference(key); ok {
+		return false, nil
+	}
+	if _, ok := config.KeyringRef(key); ok {
+		return false, nil
+	}
+	if s.keyring == nil {
+		return false, errors.New("no secret store in this process")
+	}
+	if err := s.keyring.Set(profile, key); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// showKey is `hint config show-key`: the one way to see a profile's key
+// again. It asks first, and prints the key masked unless reveal; it is
+// not reachable over RPC or from a tool, by construction.
+func showKey(cfg *config.Config, name string, reveal bool, in setupIO, out io.Writer) error {
+	p, err := cfg.Profile(name)
+	if err != nil {
+		return err
+	}
+	if p.APIKey == "" {
+		if p.KeyError != nil {
+			return fmt.Errorf("profile %q has no key: %s (%w)", name, p.KeyRef, p.KeyError)
+		}
+		return fmt.Errorf("profile %q has no key", name)
+	}
+	where := "a config file"
+	switch p.KeyFrom {
+	case config.KeyFromKeyring:
+		where = "the OS secret store (" + p.KeyRef + ")"
+	case config.KeyFromEnv:
+		where = "the environment (" + p.KeyRef + ")"
+	case config.KeyFromOverlay:
+		where = "HINT_API_KEY or --api-key"
+	}
+	what := "masked"
+	if reveal {
+		what = "in full"
+	}
+	answer, err := in.Line(context.Background(), fmt.Sprintf("Show the API key of profile %q from %s, %s? [y/N]: ", name, where, what))
+	if err != nil {
+		return err
+	}
+	if console.Answer(answer) != "y" {
+		return errors.New("not shown")
+	}
+	if reveal {
+		fmt.Fprintln(out, p.APIKey)
+	} else {
+		fmt.Fprintln(out, config.Mask(p.APIKey))
+	}
+	return nil
 }
 
 // envReference returns the variable name of a ${NAME} or $NAME key.

@@ -223,30 +223,55 @@ Decisions (2026-10-19):
 
 Backlog from the review: inline ghost text; a request budget enforced by the core when there is a second client; prefix caching of suggestions; and the quality, latency and cost measurement of small models for completions, written up as [`completion-quality-eval.md`](completion-quality-eval.md) with its pass criteria — nothing but `off` is a default until it has run.
 
-### WP1.7 — Secrets out of the agent's reach
+### WP1.7 — Secrets out of the agent's reach — **done** (2026-10-19)
 
 **Branch:** `dev/wp1.7-secrets`
 
 Once entered, an API key must not be readable by the agent: not by its tools, not in what goes to the model, not in a session file.
 Only the user sees it again, through a command that exists for that and is not reachable over RPC or from a tool.
 
-Where it leaks today (2026-10-18):
-the `bash` tool inherits the whole environment (`internal/tool/builtin/bash.go`, `cmd.Env = os.Environ()`), so `env` prints `APIBAR_KEY`;
-`~/.config/hint/config.yaml` is mode 0600 but owned by the same user, so `cat` reads it;
-the file tools are confined to the project root, which is the home directory when `hint` runs there;
-tool results reach the model and the session file unmasked — only the `--debug` trace is redacted.
+Where it leaked before this package (2026-10-18):
+the `bash` tool inherited the whole environment, so `env` printed `APIBAR_KEY`;
+`~/.config/hint/config.yaml` was mode 0600 but owned by the same user, so `cat` read it;
+the file tools were confined to the project root, which is the home directory when `hint` runs there;
+tool results reached the model and the session file unmasked — only the `--debug` trace was redacted.
 
-- [ ] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
-      A headless Linux box without a Secret Service needs a decided fallback (the 0600 file as today, with a warning), not a silent one
-- [ ] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
-- [ ] Tool subprocesses run without the keys: `bash` gets the environment minus every variable a profile's `${VAR}` names and the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`, `API_BAR_KEY`, `OPENAI_API_KEY`, `HINT_API_KEY`)
-- [ ] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — the catch-all for a key that leaked some other way
-- [ ] The file tools refuse the config directory and the session directory even when the project root contains them
-- [ ] `tool.Root` opens files through `os.Root` (Go 1.24; the floor is 1.26 since WP1.4), which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
-- [ ] Tests that pin each path: `env`, `cat` of the config, `read_file` from a root at `$HOME`, a tool output that contains the key
+- [x] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
+      `secrets.store: auto | keyring | file` decides: `auto` uses the store when it answers and falls back to the 0600 file with the fallback named in the save message; `keyring` insists; `file` never asks (a server, a container, CI)
+- [x] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
+- [x] Tool subprocesses run without the keys: `bash`, and ripgrep behind `glob` and `grep`, get the environment minus every variable a profile's `${VAR}` names, the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`, `API_BAR_KEY`, `OPENAI_API_KEY`, `HINT_API_KEY`) and any variable whose value equals a configured key
+- [x] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — one decorator at the registry, since the agent loop is the only reader of a result
+- [x] The file tools refuse the config directory, the session directory and the project's `.hint/config.yaml` even when the project root contains them; `.hint/rules` stays readable; the walks skip them and ripgrep is told to
+- [x] `tool.Root` opens files through `os.Root`, which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
+- [x] Tests that pin each path: `env`, a tool output that contains the key (the model, the terminal and the session file), `read_file` from a root at `$HOME`, the symlink swap, setup with a store, without one and under each policy, `show-key`
+- [x] A profile that keeps a literal key in a file while a store answers gets one warning at start; nothing migrates a key behind the user's back
+
+Decisions (2026-10-19):
+
+- **`github.com/zalando/go-keyring` for the secret store.**
+  No cgo: the Secret Service over D-Bus (`godbus/dbus`, pure Go), the macOS `security` binary, Windows credential syscalls (`danieljoos/wincred`).
+  The alternatives were a heavier `99designs/keyring` or a D-Bus client of our own.
+  The loader reads the store through a `Keyring` interface, so tests use a map and never touch the machine's store; macOS and Windows are not exercised here and are called out in the PR.
+- **The key's source is remembered.**
+  `Profile.KeyFrom` (file, env, keyring, overlay) and `KeyRef` let setup, `show-key` and the start-up warning say where a key is without re-reading the file, and let a missing store entry be reported with its reference and cause instead of a generic "needs an API key".
+- **The environment is filtered by name and by value.**
+  The name catches `${VAR}`; the value catches a copy of the key under another name.
+  The filter is a function on the engine, so a configuration reloaded by a profile switch is what the tools see.
+- **Redaction is one decorator, with a floor of eight characters.**
+  `tool.Redacting` wraps every registered tool; a secret shorter than eight characters is not one, and replacing it would eat ordinary words.
+  The model's own text — the arguments it sends, the question the user typed — is not scrubbed: a key there was the user's or the model's to begin with.
+- **Who is denied what.**
+  The file tools (`read_file`, `list_dir`, `glob`, `grep`, `write_file`, `edit_file`) are the agent's hands; they are refused hint's own files.
+  The engine, setup and `hint config` read those files themselves, and the `instructions` tool reads the global `HINT.md` under the config directory by the path the engine discovered, not through the root.
+  The project's `.hint/config.yaml` is denied too: by policy it holds only `${VAR}` references, but a hand-pasted key would otherwise be one `read_file` away, and the file sits inside every project root.
+- **`os.Root` holds; `Resolve` explains.**
+  `Resolve` keeps the lexical and symlink checks because they give the model a readable refusal and carry the denied paths; the open, stat, write, rename and walk then go through `os.Root`, which resolves each component under the directory at the moment of use.
+  `os.Root` refuses a symlink with an absolute target even inside the root, which `Resolve` allowed; the root resolves such a link first and hands `os.Root` the target, so a link that pointed inside when it was looked at is what gets opened and a component that turns into a link to the outside afterwards is still refused.
+  This is why the refactor is right rather than belt-and-braces: the lexical check is advisory, the kernel's resolution is the enforcement.
 
 Limits to state, not to hide: a process running as the same user can ask the secret store itself (`secret-tool lookup`, `security find-generic-password`), and a determined model can transform a value before printing it, which defeats redaction.
 Closing that needs a sandbox for `bash` (bubblewrap or Landlock on Linux, `sandbox-exec` on macOS), which is its own work package; this one removes every accidental path and the easy deliberate ones.
+With the file fallback (`secrets.store: file`, or `auto` without a store) `cat ~/.config/hint/config.yaml` still works through `bash`, and the save message says so.
 
 ## Acceptance criteria
 

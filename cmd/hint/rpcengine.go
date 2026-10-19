@@ -45,6 +45,10 @@ type assembly struct {
 	// keeps cfg for the life of the engine, which is what a test with a
 	// hand-made config wants.
 	reload func() (*config.Config, error)
+	// denied are the paths the file tools refuse inside the working
+	// directory: the configuration and session directories (WP1.7). The
+	// project's own .hint/config.yaml is denied regardless.
+	denied []string
 }
 
 // rpcEngine is the core every entry point serves: one working directory,
@@ -139,16 +143,19 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	if dir := config.GlobalDir(home, os.LookupEnv); dir != "" {
 		global = filepath.Join(dir, project.InstructionNames[0])
 	}
+	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
+	warnFileKeys(cfg, notices)
 	eng, err := newEngine(ctx, assembly{
 		chat:    chat,
 		cfg:     cfg,
 		opts:    opts,
 		cwd:     cwd,
-		store:   session.NewStore(session.DefaultDir(home, os.LookupEnv)),
+		store:   store,
 		global:  global,
 		trace:   trace,
 		notices: notices,
 		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
+		denied:  []string{config.GlobalDir(home, os.LookupEnv), store.Dir()},
 	})
 	if err != nil {
 		cleanup()
@@ -165,6 +172,11 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("working directory: %w", err)
 	}
+	// hint's own files are off limits to the file tools even when the
+	// working directory holds them (a run from $HOME, or the project's
+	// .hint/config.yaml): a key must not reach the model through
+	// read_file. The engine reads them itself, not through the tools.
+	root = root.Deny(append([]string{filepath.Join(root.Dir(), ".hint", "config.yaml")}, as.denied...)...)
 
 	// The project context is this run's view of the directory: the
 	// instruction files, the overview and git's ignore rules, bounded by
@@ -180,11 +192,6 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	for _, w := range pc.Warnings {
 		fmt.Fprintf(as.notices, "hint: warning: %s\n", w)
 	}
-	registry, err := toolRegistry(root, pc.InstructionPaths)
-	if err != nil {
-		return nil, fmt.Errorf("registering tools: %w", err)
-	}
-
 	// A profile that states its context window sizes proactive
 	// compaction; the fallback profile keeps the same limits, and a
 	// smaller window there is caught by its own overflow error.
@@ -200,11 +207,10 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		as.trace.Printf("default %s fallback %q mode %s window %d", as.cfg.DefaultProvider, as.cfg.FallbackProvider, as.opts.mode, limits.MaxContextTokens)
 		debugLog = func(line string) { as.trace.Printf("%s", line) }
 	}
-	return &rpcEngine{
+	e := &rpcEngine{
 		cwd:       root.Dir(),
 		store:     as.store,
 		chat:      as.chat,
-		registry:  registry,
 		pc:        pc,
 		mode:      as.opts.mode,
 		limits:    limits,
@@ -215,7 +221,49 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		cfg:       as.cfg,
 		reload:    as.reload,
 		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
-	}, nil
+	}
+	// The tools read the secrets and the environment through the engine,
+	// so a configuration reloaded by a profile switch is what they see.
+	registry, err := toolRegistry(root, pc.InstructionPaths, e.secrets, e.environ)
+	if err != nil {
+		return nil, fmt.Errorf("registering tools: %w", err)
+	}
+	e.registry = registry
+	return e, nil
+}
+
+// secrets is every configured API key, for the redaction of tool results.
+func (e *rpcEngine) secrets() []string {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	return e.cfg.Secrets()
+}
+
+// environ is the process environment without the API keys: what bash and
+// ripgrep are started with.
+func (e *rpcEngine) environ() []string {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	return config.FilterEnviron(os.Environ(), e.cfg.SecretEnv(), e.cfg.Secrets())
+}
+
+// warnFileKeys says once, at start, which profiles keep a literal key in
+// a config file while the OS secret store would take it — the way to
+// move it is hint setup, which is never done behind the user's back.
+func warnFileKeys(cfg *config.Config, notices io.Writer) {
+	if cfg.SecretStore.Store == config.StoreFile {
+		return
+	}
+	var names []string
+	for _, p := range cfg.Providers {
+		if p.KeyFrom == config.KeyFromFile {
+			names = append(names, p.Name)
+		}
+	}
+	if len(names) == 0 || !config.KeyringAvailable(config.OSKeyring{}) {
+		return
+	}
+	fmt.Fprintf(notices, "hint: warning: profile %s keeps its API key in a config file; hint setup moves it into the OS secret store\n", strings.Join(names, ", "))
 }
 
 // limitsFor is the agent's limits under profile p: the built-in ones,
@@ -570,8 +618,18 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 // instructions tool over the instruction files this run discovered. They
 // are only safe to register because adopt() puts the agent behind a
 // permission.Gate; main_test.go pins both halves of that.
-func toolRegistry(root tool.Root, instructionPaths []string) (*tool.Registry, error) {
-	return tool.NewRegistry(append(builtin.All(root), builtin.NewInstructions(instructionPaths))...)
+func toolRegistry(root tool.Root, instructionPaths []string, secrets func() []string, environ func() []string) (*tool.Registry, error) {
+	var opts []builtin.Option
+	if environ != nil {
+		opts = append(opts, builtin.WithEnviron(environ))
+	}
+	tools := append(builtin.All(root, opts...), builtin.NewInstructions(instructionPaths))
+	for i, t := range tools {
+		// Every result passes the redaction, so a key that leaked some
+		// other way never reaches the model, an event or the session.
+		tools[i] = tool.Redacting(t, secrets)
+	}
+	return tool.NewRegistry(tools...)
 }
 
 // systemPrompt assembles the run's system message: the assistant's
