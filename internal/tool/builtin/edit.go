@@ -91,7 +91,7 @@ func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res ag
 	}
 	p = editPlan{abs: abs, rel: t.root.Rel(abs)}
 
-	data, _, err := readWhole(abs, maxEditSize)
+	data, _, err := readWhole(t.root, abs, maxEditSize)
 	switch {
 	case errors.Is(err, os.ErrNotExist) && in.OldStr == "":
 		// The empty-old_str case the Aider edit-block format defines: a
@@ -131,11 +131,11 @@ func (t *editFile) Run(_ context.Context, callID string, args json.RawMessage) (
 		return res, nil
 	}
 	if p.kind == editCreate {
-		if err := os.MkdirAll(filepath.Dir(p.abs), 0o755); err != nil {
+		if err := t.root.MkdirAll(filepath.Dir(p.abs), 0o755); err != nil {
 			return agentapi.ErrorResult(callID, editFileName, pathError(t.root, p.abs, err)), nil
 		}
 	}
-	if err := writeAtomic(p.abs, []byte(p.after), 0o644); err != nil {
+	if err := writeAtomic(t.root, p.abs, []byte(p.after), 0o644); err != nil {
 		return agentapi.ErrorResult(callID, editFileName, pathError(t.root, p.abs, err)), nil
 	}
 

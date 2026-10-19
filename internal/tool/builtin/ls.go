@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -59,7 +58,7 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 	}
 	rel := t.root.Rel(abs)
 
-	info, err := os.Stat(abs)
+	info, err := t.root.Stat(abs)
 	if err != nil {
 		return agentapi.ErrorResult(callID, listDirName, pathError(t.root, abs, err)), nil
 	}
@@ -77,7 +76,7 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 	fmt.Fprintf(&b, "%s%c\n", rel, filepath.Separator)
 	entries := 0
 	truncated := false
-	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
+	walkErr := t.root.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
 		if path == abs {
 			return err
 		}
@@ -91,7 +90,7 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if ig.Ignored(relSlash(abs, path), d.IsDir()) {
+		if ig.Ignored(relSlash(abs, path), d.IsDir()) || t.root.Denied(path) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

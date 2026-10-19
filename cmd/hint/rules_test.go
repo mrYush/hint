@@ -41,7 +41,7 @@ func TestPreamble_LoadsRuleOnTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := toolRegistry(root, pc.InstructionPaths)
+	registry, err := toolRegistry(root, pc.InstructionPaths, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

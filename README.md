@@ -326,12 +326,14 @@ stopping the run. Completions are never written to the session file.
 
 ### Configuration setup
 
-`hint setup` asks for the profile, base URL, model and the name of the
-environment variable that holds the API key, and writes them to
-`~/.config/hint/config.yaml` (mode 0600, comments kept). When a provider
-rejects the key, `hint` says which config files it is using and offers
-the same questions (in the TUI: `/setup`, with the key masked). A project
-`.hint/config.yaml` is never written, so a key does not end up in git.
+`hint setup` asks for the profile, base URL, model and the API key, and
+writes them to `~/.config/hint/config.yaml` (mode 0600, comments kept);
+the key itself goes into the OS secret store when there is one, and the
+file only points at it (see [API keys](#api-keys-and-what-the-agent-can-see)).
+When a provider rejects the key, `hint` says which config files it is
+using and offers the same questions (in the TUI: `/setup`, with the key
+masked). A project `.hint/config.yaml` is never written, so a key does
+not end up in git.
 A running session switches to the saved profile at once, so the next
 question goes out with the new key; `hint setup` on its own is picked up
 by the next start.
@@ -353,6 +355,53 @@ completing the subcommand, the key and, where there is a closed set, the
 value; `/setup` edits every field of a provider profile in one form. An
 API key is set through `/setup` or `hint setup` only, where it is masked,
 and never as a literal into the project file.
+
+### API keys and what the agent can see
+
+Once entered, an API key is kept out of the agent's reach: not readable
+by its tools, not in what goes to the model, not in a session file. Only
+you see it again, through one command made for that.
+
+**Where the key lives.** `hint setup` and `/setup` put the key into the
+OS secret store — the Secret Service on Linux (GNOME Keyring, KWallet),
+the Keychain on macOS, the Credential Manager on Windows — and write
+`api_key: keyring:<profile>` into the config file, so the file holds no
+secret. A key given as `${VAR}` stays a reference to the environment, as
+before. `secrets.store` in the config picks the policy: `auto` (the
+default) uses the store when it answers and falls back to the 0600 file
+with a warning in the save message; `keyring` insists and fails without
+a store; `file` never asks — the choice for a server, a container or CI,
+where no Secret Service runs. A profile that keeps a literal key in a
+file while a store is available gets one warning at start; `hint setup`
+moves it, nothing moves it behind your back.
+
+```bash
+hint config show-key vllm            # the one way to see a key again: asks, prints it masked
+hint config show-key vllm --reveal   # in full; terminal only, no RPC method, no tool
+```
+
+**What the agent cannot do.** The `bash` tool and ripgrep behind `glob`
+and `grep` start without the key variables: every `${VAR}` a profile
+refers to, the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`,
+`OPENAI_API_KEY`, `HINT_API_KEY`) and any variable whose value equals a
+configured key, so `env` shows none of them. The file tools refuse
+`~/.config/hint`, the session directory and the project's own
+`.hint/config.yaml` even when the working directory contains them (a run
+from your home directory); `.hint/rules` stays readable. Every tool
+result is scrubbed against the configured keys before the model, the
+transcript or the session file sees it, so a key that leaks some other
+way arrives as `***`. The file tools open everything through `os.Root`,
+so a symlink swapped in between the check and the open cannot lead
+outside the working directory either.
+
+**What stays open, and why.** `bash` is not sandboxed: a command that
+reads a 0600 file you own, or asks the secret store itself
+(`secret-tool lookup`, `security find-generic-password`), works, because
+it runs as you. With the key in the secret store the config file has
+nothing to read; with the file fallback it does, which is what the
+warning says. A model can also transform a value before printing it,
+which defeats scrubbing. Closing those needs a sandbox for `bash`, which
+is its own work package.
 
 ### Models
 

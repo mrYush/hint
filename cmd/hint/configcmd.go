@@ -103,6 +103,7 @@ func (s *setupInfo) show() (string, error) {
 		"completion.model":       cfg.Completion.Model,
 		"completion.idle_after":  cfg.Completion.IdleAfter.String(),
 		"completion.warn_after":  cfg.Completion.WarnAfter.String(),
+		"secrets.store":          string(cfg.SecretStore.Store),
 	}
 	for _, k := range config.Keys() {
 		if _, ok := k.Profile(); !ok {
@@ -112,6 +113,11 @@ func (s *setupInfo) show() (string, error) {
 	for _, p := range cfg.Providers {
 		fields := map[string]string{
 			"kind": string(p.Kind), "base_url": p.BaseURL, "api_key": config.Mask(p.APIKey), "model": p.Model,
+		}
+		// A reference that yielded no key is shown as the reference, so
+		// the user sees what the file says and that it did not resolve.
+		if p.APIKey == "" && p.KeyRef != "" {
+			fields["api_key"] = p.KeyRef + " (no key came back)"
 		}
 		if p.ContextWindow > 0 {
 			fields["context_window"] = strconv.Itoa(p.ContextWindow)
@@ -257,5 +263,28 @@ or config.example.yaml in the repository.`,
 		c.Flags().BoolVar(&project, "project", false, "Change the repository's .hint/config.yaml instead of the global file")
 		cmd.AddCommand(c)
 	}
+	var reveal bool
+	showKeyCmd := &cobra.Command{
+		Use:   "show-key <profile>",
+		Short: "Show a profile's API key again, masked unless --reveal; asks first, terminal only",
+		Long: `hint config show-key is the one way to see an API key hint holds, wherever
+it is: the OS secret store, the environment or a config file. It asks
+before printing, prints the key masked unless --reveal, and works only
+on a terminal. No RPC method and no tool reaches it.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SilenceUsage, cmd.SilenceErrors = true, true
+			if !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
+				return errors.New("show-key prints a secret: it needs a terminal on stdin and stdout")
+			}
+			cfg, err := config.Load(*flags)
+			if err != nil {
+				return err
+			}
+			return showKey(cfg, args[0], reveal, newTTYIO(os.Stdin, os.Stderr), os.Stdout)
+		},
+	}
+	showKeyCmd.Flags().BoolVar(&reveal, "reveal", false, "Print the key in full instead of masked")
+	cmd.AddCommand(showKeyCmd)
 	return cmd
 }
