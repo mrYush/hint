@@ -113,6 +113,8 @@ func LoadFrom(opts Options) (*Config, error) {
 			KeyFrom:  p.keyFrom,
 			KeyRef:   p.keyRef,
 			KeyError: p.keyErr,
+
+			MaxTokensField: p.MaxTokensField,
 		}
 		if p.ContextWindow != nil {
 			prof.ContextWindow = *p.ContextWindow
@@ -200,7 +202,8 @@ type fileProfile struct {
 	ContextWindow *int   `yaml:"context_window"`
 	// HeaderTimeout is a Go duration string ("90s", "15m"); yaml.v3
 	// refuses a bare number for a time.Duration, so units are mandatory.
-	HeaderTimeout *time.Duration `yaml:"header_timeout"`
+	HeaderTimeout  *time.Duration `yaml:"header_timeout"`
+	MaxTokensField string         `yaml:"max_tokens_field"`
 	// keyFrom, keyRef and keyErr are filled by expand: where APIKey came
 	// from, and why a reference yielded nothing.
 	keyFrom, keyRef string
@@ -378,6 +381,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 			}
 			if pp.HeaderTimeout != nil {
 				out.Providers[i].HeaderTimeout = pp.HeaderTimeout
+			}
+			if pp.MaxTokensField != "" {
+				out.Providers[i].MaxTokensField = pp.MaxTokensField
 			}
 			merged = true
 			break
@@ -795,6 +801,11 @@ func (l *loader) validate(cfg *Config) error {
 		}
 		if p.HeaderTimeout < 0 {
 			return fmt.Errorf("config: profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
+		}
+		switch p.MaxTokensField {
+		case "", FieldMaxTokens, FieldMaxCompletionTokens:
+		default:
+			return fmt.Errorf("config: profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
 		}
 	}
 	if cfg.DefaultProvider == "" {

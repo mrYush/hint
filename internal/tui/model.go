@@ -83,8 +83,11 @@ type model struct {
 	// on, the wheel scrolls and a click copies the block under it.
 	mouse bool
 	// status is a one-line remark under the transcript until the next key.
-	status   string
-	quitting bool
+	status string
+	// quitArmed is a ctrl+c on an empty input; the next key decides
+	// whether it was the first of two.
+	quitArmed bool
+	quitting  bool
 }
 
 func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
@@ -255,6 +258,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // otherwise to the shell's own bindings and then to the input.
 func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.status = ""
+	k = usChord(k)
+	// A second ctrl+c quits only if it is the very next key.
+	armed := m.quitArmed
+	m.quitArmed = false
 	if m.setupForm != nil {
 		return m.setupKey(k)
 	}
@@ -292,6 +299,18 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			m.cancelTurn()
 			m.status = "stopping the answer…"
+			return m, nil
+		}
+		// A line being typed is cleared first; on an empty input the
+		// first press warns and the second leaves.
+		if m.ta.Value() != "" {
+			m.ta.Reset()
+			m.comp = nil
+			return m.typed()
+		}
+		if !armed {
+			m.quitArmed = true
+			m.status = "press ctrl+c again to exit (or ctrl+d)"
 			return m, nil
 		}
 		return m.quit()

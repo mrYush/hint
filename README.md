@@ -600,6 +600,8 @@ A local server like `llama-server` sends them only after it has processed
 the whole prompt, which on a Raspberry Pi takes minutes, so raise it for
 such profiles.
 
+`max_tokens_field: max_completion_tokens` is for OpenAI's reasoning models (o-series, gpt-5), which refuse `max_tokens`; the default `max_tokens` is what local servers understand.
+
 ### Environment variables
 
 ```bash

@@ -204,3 +204,24 @@ func keyName(k tea.KeyPressMsg) string {
 	}
 	return s
 }
+
+// usChord rewrites a ctrl or alt chord pressed in another layout as the
+// chord on the same US key: ctrl+с on the key of "c" in a Cyrillic layout
+// is ctrl+c. A terminal with the kitty protocol says which key it was
+// (BaseCode); without it the Cyrillic table does. A terminal that sends
+// the control byte itself (most do for ctrl) needs neither.
+func usChord(k tea.KeyPressMsg) tea.KeyPressMsg {
+	if k.Mod&(tea.ModCtrl|tea.ModAlt) == 0 || k.Code <= unicode.MaxASCII {
+		return k
+	}
+	switch q := console.QWERTYRune(k.Code); {
+	case k.BaseCode > 0 && k.BaseCode < unicode.MaxASCII:
+		k.Code = k.BaseCode
+	case q != k.Code:
+		k.Code = unicode.ToLower(q)
+	default:
+		return k
+	}
+	k.Text, k.ShiftedCode = "", 0
+	return k
+}
