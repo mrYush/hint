@@ -1,6 +1,6 @@
 # Phase 1 — Core as a service + TUI
 
-> Status: In progress · Target release: **v0.3** · Estimate: 4–6 weeks (part-time)
+> Status: Scope complete, release pending · Target release: **v0.3** · Estimate: 4–6 weeks (part-time)
 > Depends on: Phase 0 (`v0.2.0` shipped) · Does not wait on: WP0.14 (install indexes; that track runs in parallel)
 
 ## Goal
@@ -98,7 +98,7 @@ References — Crush (reading only: its license is FSL-1.1-MIT, so no code is bo
 - [x] Scrolling without the mouse: ↑ on the input's first line and ↓ on its last move the transcript (so does a wheel, which a terminal without mouse reporting sends as arrows), shift+↑↓ by line, pgup/pgdn by page, ctrl+home/end to the ends, and the header says how many lines are below
 - [x] A message browser: esc in an empty input (or ctrl+↑) selects a block, marked by a bar and not a fill; ↑↓/j/k move, `y` copies, `f` is the hook for the fork, esc returns; every transcript entry knows its turn
 - [x] One-letter answers and commands work in any layout: the TUI takes the US key the kitty protocol reports (`BaseCode`), and a table of the Cyrillic layouts (`internal/console.QWERTY`) covers terminals without it and the line prompts; text typed into the input is never rewritten
-- [ ] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL — the last step, once the Phase 0 scenarios pass through the TUI (acceptance 3)
+- [x] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL (shipped by WP1.5; the Phase 0 scenarios passed through the TUI on 2026-10-20, acceptance 3)
 
 Merged under the scope exception of [README.md](README.md) ("Branch per work package"), 2026-10-18: interactive configuration (`hint setup`, `hint config`, `/config`, `internal/config` schema and in-place writes) grew inside this branch because a rejected key in the TUI needed it, and the branch also wrote down WP1.6 and WP1.7.
 Splitting it after review had started would have cost a rebase of reviewed commits for no gain in what `develop` receives.
@@ -282,4 +282,12 @@ With the file fallback (`secrets.store: file`, or `auto` without a store) `cat ~
    does and continues its session from a second `--connect` shell).
 2. An external script drives a full agentic turn (incl. answering a
    permission request) through `hint --mode rpc` with JSON only.
+   **Met 2026-10-20**: a Python script over stdin/stdout (`hello`,
+   `session.open`, `turn.start`, `permission.reply` to the `permission`
+   event, `turn.done`) had `write_file` create a file after the allow;
+   every line read back was JSON. `TestPermissionOverRPC` in `cmd/hint`
+   pins the same path in Go.
 3. All Phase 0 acceptance scenarios pass through the TUI.
+   **Met 2026-10-20**: scenarios 1–4 run by hand in the default TUI
+   (`hint` on a terminal), 3 against a local fallback profile.
+   Scenario 5 is the hardware record and is not re-run per client.

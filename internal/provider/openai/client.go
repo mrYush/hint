@@ -128,6 +128,9 @@ func (c *Client) Stream(ctx context.Context, req agentapi.ChatRequest) (<-chan a
 	if err != nil {
 		return nil, c.attributed(err)
 	}
+	if c.profile.MaxTokensField == config.FieldMaxCompletionTokens {
+		wire.MaxCompletionTokens, wire.MaxTokens = wire.MaxTokens, 0
+	}
 	body, err := json.Marshal(wire)
 	if err != nil {
 		return nil, c.attributed(agentapi.WrapError(agentapi.ErrInvalidRequest, err, "encode request"))

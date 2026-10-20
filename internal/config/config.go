@@ -28,6 +28,15 @@ const (
 	KindOllama Kind = "ollama"
 )
 
+// The request fields that can carry a reply's token limit, for
+// Profile.MaxTokensField. OpenAI's reasoning models (o-series, gpt-5)
+// refuse max_tokens and take max_completion_tokens; local servers know
+// max_tokens.
+const (
+	FieldMaxTokens           = "max_tokens"
+	FieldMaxCompletionTokens = "max_completion_tokens"
+)
+
 // Built-in defaults applied to profiles after all overlays, when a field is
 // still empty. An openai profile that names no endpoint is taken to be a
 // model served on this machine the way vLLM serves one (decided
@@ -66,6 +75,10 @@ type Profile struct {
 	// which on a small board takes minutes. Zero keeps the client's
 	// built-in default.
 	HeaderTimeout time.Duration
+	// MaxTokensField names the request field a reply's token limit goes
+	// in (`max_tokens_field`): FieldMaxTokens or FieldMaxCompletionTokens.
+	// Empty is FieldMaxTokens.
+	MaxTokensField string
 	// KeyFrom says where APIKey came from: KeyFromFile for a literal in
 	// a config file, KeyFromEnv for a ${VAR} reference, KeyFromKeyring
 	// for a keyring:<account> reference, KeyFromOverlay for HINT_API_KEY

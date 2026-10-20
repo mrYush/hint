@@ -111,7 +111,8 @@ One completion at a time per connection — a newer `complete` cancels the older
 ```
 
 `suggestion` is empty when the model had nothing; `usage` is the provider's accounting, for a client that shows what completion costs.
-With `completion.mode` off the result is `{"id":"c7","disabled":true,"reason":"..."}`: a client then stops asking.
+`completion.mode` is when a client asks, not whether the core answers: a shell that turned completion on for a session (`/completion tab`) is answered while the configuration says `off`.
+When `completion.profile` names a profile that cannot be used, the result is `{"id":"c7","disabled":true,"reason":"..."}`: a client then stops asking.
 `complete.cancel` with `{"id":"c7"}` stops the provider call; cancelling a completion that already answered is fine.
 A cancelled completion is answered with an error.
 `complete.settings` returns the completion block as the files stand: `{"mode":"tab","profile":"","model":"","idle_after_ms":600,"warn_after_ms":2000}`.
