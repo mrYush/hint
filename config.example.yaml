@@ -37,6 +37,9 @@ providers:
     context_window: 32768 # tokens; sizes the compaction. Default: unknown, a built-in window
     header_timeout: 60s # how long to wait for response headers, a Go duration with units.
     #                     Default 60s; raise it for a local server on a small board
+    max_tokens_field: max_tokens # the request field for a reply's token limit:
+    #                              max_tokens (the default) | max_completion_tokens,
+    #                              which OpenAI's reasoning models (o-series, gpt-5) require
 
   - name: local
     kind: ollama # needs no key

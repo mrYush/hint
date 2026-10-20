@@ -39,11 +39,18 @@ const completionSystem = "You complete what a developer is typing to a coding as
 
 // Complete asks the completion provider for a continuation of req.Text.
 func (e *rpcEngine) Complete(ctx context.Context, req rpc.CompleteRequest) (rpc.CompleteResult, error) {
+	// completion.mode is when a client asks, not whether the core answers:
+	// /completion turns it on for a session over a configured off. Only a
+	// completion profile that cannot be used is a refusal.
 	e.cfgMu.Lock()
 	settings := e.cfg.Completion
+	var unusable error
+	if settings.Profile != "" {
+		_, unusable = e.cfg.Usable(settings.Profile, "completion")
+	}
 	e.cfgMu.Unlock()
-	if settings.Mode == config.CompletionOff {
-		return rpc.CompleteResult{Disabled: true, Reason: "completion.mode is off; set it to tab, idle or both"}, nil
+	if unusable != nil {
+		return rpc.CompleteResult{Disabled: true, Reason: strings.TrimPrefix(unusable.Error(), "config: ")}, nil
 	}
 	chat, question, err := e.completionSource(req.SessionID, settings)
 	if err != nil {

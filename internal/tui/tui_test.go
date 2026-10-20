@@ -524,9 +524,10 @@ func TestPermissionDialog(t *testing.T) {
 	}
 }
 
-// TestCtrlCCancelsTheTurn pins the two meanings of ctrl+c: during a turn
-// it cancels the turn, which the transcript reports as interrupted; at
-// rest it quits the shell.
+// TestCtrlCCancelsTheTurn pins the meanings of ctrl+c: during a turn it
+// cancels the turn, which the transcript reports as interrupted; at rest
+// it clears a typed line, and on an empty input it warns once and quits
+// on the next press.
 func TestCtrlCCancelsTheTurn(t *testing.T) {
 	// The turn hangs until it is cancelled, as a slow model would.
 	eng := &fakeEngine{script: func(ctx context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
@@ -545,10 +546,54 @@ func TestCtrlCCancelsTheTurn(t *testing.T) {
 		t.Errorf("turn not reported as interrupted:\n%s", v)
 	}
 
-	// Idle, ctrl+c leaves.
+	// Idle, ctrl+c clears what is typed.
+	h.typeText("half a question")
+	h.press("ctrl+c")
+	if h.m.quitting || h.m.ta.Value() != "" {
+		t.Fatalf("ctrl+c on a typed line: quitting=%v, input %q; want the input cleared", h.m.quitting, h.m.ta.Value())
+	}
+
+	// On an empty input the first press warns, another key disarms it.
+	h.press("ctrl+c")
+	if h.m.quitting || !strings.Contains(h.view(), "press ctrl+c again to exit") {
+		t.Fatalf("first ctrl+c on an empty input must warn, not quit:\n%s", h.view())
+	}
+	h.press("x", "backspace", "ctrl+c")
+	if h.m.quitting {
+		t.Fatal("a ctrl+c after another key quit without a fresh warning")
+	}
 	h.press("ctrl+c")
 	if !h.m.quitting {
-		t.Error("ctrl+c at rest did not quit")
+		t.Error("the second ctrl+c in a row did not quit")
+	}
+}
+
+// TestCtrlCInAnyLayout pins that a chord pressed in a Cyrillic layout is
+// the chord on the same US key, with and without the kitty protocol.
+func TestCtrlCInAnyLayout(t *testing.T) {
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'с', Mod: tea.ModCtrl},
+		{Code: 'с', Mod: tea.ModCtrl, BaseCode: 'c'},
+		{Code: 'С', Mod: tea.ModCtrl | tea.ModShift, ShiftedCode: 'С'},
+	} {
+		got := usChord(k).String()
+		want := "ctrl+c"
+		if k.Mod&tea.ModShift != 0 {
+			want = "ctrl+shift+c"
+		}
+		if got != want {
+			t.Errorf("usChord(%q) = %q, want %q", k.String(), got, want)
+		}
+	}
+	if got := usChord(tea.KeyPressMsg{Code: 'с', Text: "с"}).String(); got != "с" {
+		t.Errorf("a letter without ctrl or alt became %q", got)
+	}
+
+	h := newHarness(t, &fakeEngine{}, Options{})
+	h.typeText("привет")
+	h.update(tea.KeyPressMsg{Code: 'с', Mod: tea.ModCtrl})
+	if h.m.ta.Value() != "" {
+		t.Errorf("ctrl+с did not clear the input: %q", h.m.ta.Value())
 	}
 }
 
