@@ -69,8 +69,9 @@ type CompleteRequest struct {
 
 // CompleteResult is the answer to complete. Suggestion is the
 // continuation, empty when the model had none. Disabled says the
-// configuration has completion off, with Reason; a client then stops
-// asking. Usage is the provider's accounting, so a client can show what
+// configured completion profile cannot be used, with Reason; a client
+// then stops asking. completion.mode is the client's trigger and does
+// not disable the method. Usage is the provider's accounting, so a client can show what
 // completion costs.
 type CompleteResult struct {
 	ID         string          `json:"id"`

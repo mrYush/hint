@@ -31,6 +31,9 @@ func (s *setupInfo) currentValues() map[string]string {
 	if p.HeaderTimeout > 0 {
 		v["header_timeout"] = p.HeaderTimeout.String()
 	}
+	if p.MaxTokensField != "" {
+		v["max_tokens_field"] = p.MaxTokensField
+	}
 	return v
 }
 
@@ -124,6 +127,9 @@ func (s *setupInfo) show() (string, error) {
 		}
 		if p.HeaderTimeout > 0 {
 			fields["header_timeout"] = p.HeaderTimeout.String()
+		}
+		if p.MaxTokensField != "" {
+			fields["max_tokens_field"] = p.MaxTokensField
 		}
 		for _, k := range config.ProfileKeys() {
 			field, _ := k.Profile()

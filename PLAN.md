@@ -95,8 +95,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
   Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
   The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
-  WP1.4, the TUI, is in progress behind `--tui`; it becomes the default on a terminal once the Phase 0 scenarios pass through it.
-  Profile switching and session branching moved to WP1.5, since both need the protocol and the core before any UI.
+  WP1.4–WP1.7 are in the tree: the TUI is the default on a terminal (`--plain` keeps the REPL), profile switch and fork go over RPC, completion is behind `completion.mode`, keys live in the OS secret store.
+  The three Phase 1 acceptance criteria are met (2026-10-20); what remains before the `v0.3` tag is the release work in step 12 (apt signing key, Pages).
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It does not block `v0.3`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.

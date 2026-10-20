@@ -52,13 +52,20 @@ func TestCompleteAsksTheSessionProviderWithoutTools(t *testing.T) {
 		t.Errorf("session has %d messages after a completion, want 2", len(again.Messages))
 	}
 
-	// Off in the configuration is an answer, not an error; an unknown
-	// session is not found.
+	// Off in the configuration is the client's trigger, not a refusal: a
+	// session that turned completion on with /completion is answered. A
+	// completion profile that cannot be used is a refusal, not an error.
 	as.cfg.Completion.Mode = config.CompletionOff
 	_, cl2 := testEngine(t, as)
-	if res, err := cl2.Complete(ctx, rpc.CompleteRequest{ID: "c2", Text: "x"}); err != nil || !res.Disabled || !strings.Contains(res.Reason, "completion.mode") {
-		t.Errorf("off = %+v, %v", res, err)
+	if res, err := cl2.Complete(ctx, rpc.CompleteRequest{ID: "c2", Text: "x"}); err != nil || res.Disabled {
+		t.Errorf("off = %+v, %v; want an answer", res, err)
 	}
+	as.cfg.Completion.Profile = "ghost"
+	_, cl2 = testEngine(t, as)
+	if res, err := cl2.Complete(ctx, rpc.CompleteRequest{ID: "c2", Text: "x"}); err != nil || !res.Disabled || !strings.Contains(res.Reason, "ghost") {
+		t.Errorf("unusable completion profile = %+v, %v; want disabled naming it", res, err)
+	}
+	as.cfg.Completion.Profile = ""
 	as.cfg.Completion.Mode = config.CompletionIdle
 	_, cl3 := testEngine(t, as)
 	var rpcErr *rpc.Error
