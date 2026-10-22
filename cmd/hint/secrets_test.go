@@ -67,6 +67,9 @@ func TestBashRunsWithoutTheKeys(t *testing.T) {
 	// A configuration loaded from a file, so the loader records which
 	// variable the key came from.
 	home := t.TempDir()
+	// XDG_CONFIG_HOME beats HomeDir in the loader; a runner that sets it
+	// would send the loader past the file written below.
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if err := os.MkdirAll(filepath.Join(home, ".config", "hint"), 0o700); err != nil {
 		t.Fatal(err)
 	}
