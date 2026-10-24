@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -383,7 +384,7 @@ func (c *conn) sessionFork(req request) {
 		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "id is required; turn is counted from 1, or 0 for the whole conversation"))
 		return
 	}
-	if c.srv.busy(opts.ID) {
+	if c.srv.busyPrefix(opts.ID) {
 		_ = c.writeError(req.ID, errCode(CodeBusy, "session %s has a turn in flight; fork after turn.done", opts.ID))
 		return
 	}
@@ -467,21 +468,26 @@ func (c *conn) completeSettings(req request) {
 	_ = c.writeResult(req.ID, s)
 }
 
+// profileModels runs beside the connection's loop, as complete does: the
+// listing is a request to the profile's endpoint, and permission.reply
+// and turn.cancel must not wait for it.
 func (c *conn) profileModels(req request) {
 	var p modelsParams
 	if err := unmarshalParams(req.Params, &p); err != nil || p.Profile == "" {
 		_ = c.writeError(req.ID, errCode(CodeInvalidParams, "profile is required"))
 		return
 	}
-	models, err := c.srv.Engine.Models(c.ctx, p.Profile)
-	if err != nil {
-		_ = c.writeError(req.ID, engineError(err))
-		return
-	}
-	if models == nil {
-		models = []string{}
-	}
-	_ = c.writeResult(req.ID, modelsResult{Models: models})
+	go func() {
+		models, err := c.srv.Engine.Models(c.ctx, p.Profile)
+		if err != nil {
+			_ = c.writeError(req.ID, engineError(err))
+			return
+		}
+		if models == nil {
+			models = []string{}
+		}
+		_ = c.writeResult(req.ID, modelsResult{Models: models})
+	}()
 }
 
 func (c *conn) profileList(req request) {
@@ -568,6 +574,12 @@ func (c *conn) pump(lt *liveTurn, events <-chan agentapi.Event) {
 			Method:  "event",
 			Params:  eventParams{TurnID: lt.id, SessionID: lt.sessionID, Event: ev},
 		}); err != nil {
+			// Nobody hears the rest, but the session's goroutines send
+			// until the turn ends: read them out, and only then let the
+			// session take another turn.
+			lt.cancel()
+			for range events {
+			}
 			c.srv.finishTurn(lt.id)
 			return
 		}
@@ -670,8 +682,12 @@ func (s *Server) hold(sess Session) Session {
 	}
 	if old := s.sessions[sess.ID()]; old != nil {
 		// A second attach lost the race. Keep the session that may
-		// already have a turn, and drop the duplicate handle.
-		_ = sess.Close()
+		// already have a turn, and drop the duplicate handle — unless the
+		// engine handed back the held one itself, as it does for an id
+		// given by prefix.
+		if sess != old.session {
+			_ = sess.Close()
+		}
 		return old.session
 	}
 	s.sessions[sess.ID()] = &held{session: sess}
@@ -685,6 +701,20 @@ func (s *Server) busy(id string) bool {
 	defer s.mu.Unlock()
 	h := s.sessions[id]
 	return h != nil && h.turnID != ""
+}
+
+// busyPrefix is busy for an id that may be a prefix, as session.fork's
+// is: any held session it could name with a turn in flight counts. An
+// ambiguous prefix is refused as busy rather than read half-written.
+func (s *Server) busyPrefix(prefix string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, h := range s.sessions {
+		if h.turnID != "" && strings.HasPrefix(id, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) lookup(id string) Session {

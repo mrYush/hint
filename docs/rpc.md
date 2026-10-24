@@ -118,6 +118,7 @@ A cancelled completion is answered with an error.
 `complete.settings` returns the completion block as the files stand: `{"mode":"tab","profile":"","model":"","idle_after_ms":600,"warn_after_ms":2000}`.
 
 `profile.models` with `{"profile":"local"}` returns `{"models":["qwen2.5:7b", ...]}`, what the profile's endpoint serves; an unknown profile is `-32005 not found`, an endpoint that does not answer `-32603`.
+Like `complete`, it runs beside the connection's other requests, so its answer may come after those of requests sent later.
 
 `session.profile`, `session.fork`, `profile.list` (`v0.3`, WP1.5) and `complete`, `complete.cancel`, `complete.settings`, `profile.models` (WP1.6) were added without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
 
