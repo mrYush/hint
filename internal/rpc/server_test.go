@@ -10,7 +10,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -330,6 +332,103 @@ func TestHelloGolden(t *testing.T) {
 	}
 }
 
+// TestAttachByPrefixKeepsTheHeldSession: a prefix misses the server's
+// map, and the engine answers with the session the server already holds.
+// That is the same session, not a duplicate to close.
+func TestAttachByPrefixKeepsTheHeldSession(t *testing.T) {
+	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
+	ctx := context.Background()
+	view, err := c.OpenSession(ctx, OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := c.AttachSession(ctx, view.ID[:4])
+	if err != nil || again.ID != view.ID {
+		t.Fatalf("AttachSession(%q) = %+v, %v; want %s", view.ID[:4], again, err, view.ID)
+	}
+	if engine.sessions[view.ID].closed.Load() {
+		t.Fatal("attaching by prefix closed the session the server holds")
+	}
+	runFakeTurn(t, c, view.ID)
+}
+
+// TestPumpDrainsATurnWhoseClientIsGone: when the client hangs up mid-turn
+// the server stops writing, but it still reads the turn's channel to the
+// end, so a session that sends without watching ctx is not left blocked.
+func TestPumpDrainsATurnWhoseClientIsGone(t *testing.T) {
+	done := make(chan struct{})
+	sess := &fakeSession{id: "sess-1", run: func(context.Context) <-chan agentapi.Event {
+		ch := make(chan agentapi.Event)
+		go func() {
+			defer close(done)
+			defer close(ch)
+			for range 100 {
+				ch <- agentapi.Event{Kind: agentapi.EventTextDelta, Text: "x"}
+			}
+		}()
+		return ch
+	}}
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{sess.id: sess}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, peer := net.Pipe()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
+	enc, dec := json.NewEncoder(client), json.NewDecoder(client)
+
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello", "params": map[string]any{"protocol_version": ProtocolVersion}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.attach", "params": map[string]any{"id": sess.id}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "turn.start", "params": map[string]any{"session_id": sess.id, "text": "go"}})
+	if started := mustRecv(t, dec); started["error"] != nil {
+		t.Fatalf("turn.start: %v", started["error"])
+	}
+	_ = client.Close()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the turn is still blocked on its channel after the client left")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for srv.busy(sess.id) {
+		if time.Now().After(deadline) {
+			t.Fatal("the session is still busy after its turn was drained")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestModelsDoesNotBlockTheLoop: profile.models waits on the network, so
+// it runs beside the loop the way complete does, and a request sent
+// after it is answered first.
+func TestModelsDoesNotBlockTheLoop(t *testing.T) {
+	gate := make(chan struct{})
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}, modelsGate: gate}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
+	enc, dec := json.NewEncoder(client), json.NewDecoder(client)
+	// A blocked loop would leave the writes and reads below hanging.
+	if err := client.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello", "params": map[string]any{"protocol_version": ProtocolVersion}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "profile.models", "params": map[string]any{"profile": "local"}})
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "session.list"})
+	if first := mustRecv(t, dec); first["id"] != float64(3) {
+		t.Fatalf("first answer = %v; want session.list's while profile.models waits", first)
+	}
+	close(gate)
+	if models := mustRecv(t, dec); models["id"] != float64(2) || models["error"] != nil {
+		t.Fatalf("profile.models = %v", models)
+	}
+}
+
 func mustSend(t *testing.T, enc *json.Encoder, v any) {
 	t.Helper()
 	if err := enc.Encode(v); err != nil {
@@ -359,6 +458,26 @@ type fakeEngine struct {
 	completionOff bool
 	completes     int
 	cancelled     int
+	// modelsGate, when set, holds Models until it is closed.
+	modelsGate chan struct{}
+}
+
+// find resolves id the way session.Store.Find does: the exact id, or
+// the one session it is a prefix of.
+func (e *fakeEngine) find(id string) *fakeSession {
+	if s := e.sessions[id]; s != nil {
+		return s
+	}
+	var match *fakeSession
+	for full, s := range e.sessions {
+		if strings.HasPrefix(full, id) {
+			if match != nil {
+				return nil
+			}
+			match = s
+		}
+	}
+	return match
 }
 
 // setCompletion changes the fake's completion behaviour from a test.
@@ -403,7 +522,14 @@ func (e *fakeEngine) CompletionSettings(context.Context) (CompletionSettings, er
 	return CompletionSettings{Mode: "tab", IdleAfterMs: 600, WarnAfterMs: 2000}, nil
 }
 
-func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error) {
+func (e *fakeEngine) Models(ctx context.Context, profile string) ([]string, error) {
+	if e.modelsGate != nil {
+		select {
+		case <-e.modelsGate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if profile != "local" {
 		return nil, fmt.Errorf("%w: unknown profile %q", ErrNotFound, profile)
 	}
@@ -411,7 +537,7 @@ func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error)
 }
 
 func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {
-	src := e.sessions[opts.ID]
+	src := e.find(opts.ID)
 	if src == nil {
 		return nil, fmt.Errorf("%w: session %q", ErrNotFound, opts.ID)
 	}
@@ -434,7 +560,7 @@ func (e *fakeEngine) Open(_ context.Context, opts OpenOptions) (Session, error) 
 }
 
 func (e *fakeEngine) Attach(_ context.Context, id string) (Session, error) {
-	if s := e.sessions[id]; s != nil {
+	if s := e.find(id); s != nil {
 		return s, nil
 	}
 	return nil, errors.New("no such session")
@@ -448,13 +574,17 @@ type fakeSession struct {
 	turns   int
 	profile ProfileRef
 	parent  *Parent
+	// closed records Close; the server may call it from its goroutine.
+	closed atomic.Bool
+	// run, when set, replaces the scripted turn of RunTurn.
+	run func(ctx context.Context) <-chan agentapi.Event
 }
 
 func (s *fakeSession) ID() string                   { return s.id }
 func (s *fakeSession) Created() time.Time           { return time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC) }
 func (s *fakeSession) Messages() []agentapi.Message { return nil }
 func (s *fakeSession) Warnings() []string           { return nil }
-func (s *fakeSession) Close() error                 { return nil }
+func (s *fakeSession) Close() error                 { s.closed.Store(true); return nil }
 func (s *fakeSession) Profile() ProfileRef          { return s.profile }
 
 func (s *fakeSession) Parent() (Parent, bool) {
@@ -481,6 +611,9 @@ func (s *fakeSession) SetProfile(_ context.Context, ref ProfileRef) (ProfileRef,
 
 func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
 	s.turns++
+	if s.run != nil {
+		return s.run(ctx), nil
+	}
 	ch := make(chan agentapi.Event)
 	go func() {
 		defer close(ch)
