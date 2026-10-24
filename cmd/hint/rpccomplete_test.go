@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/provider"
@@ -134,10 +135,38 @@ func TestTrimSuggestion(t *testing.T) {
 		{"x", "   ", ""},
 		{"x", "", ""},
 		{"count", "one two three four five six seven eight nine ten eleven twelve thirteen", " one two three four five six seven eight nine ten eleven twelve"},
+		// A repeat in another case is cut too, in the model's own bytes:
+		// lowering İ or the Kelvin sign makes them shorter and Ⱥ longer,
+		// so the length of a lowered copy is no index into the original.
+		{"go to", "Go to İzmir", " İzmir"},
+		{"go", "GO İİİİ", " İİİİ"},
+		{"go", "GO ȺȺȺ", " ȺȺȺ"},
+		{"kelvin", "KELVIN \u212a", " \u212a"},
+		{"добавь тест", "Добавь Тест для парсера", " для парсера"},
 	}
 	for _, c := range cases {
 		if got := trimSuggestion(c.typed, c.raw); got != c.want {
 			t.Errorf("trimSuggestion(%q, %q) = %q, want %q", c.typed, c.raw, got, c.want)
 		}
 	}
+}
+
+// FuzzTrimSuggestion: whatever a model answers, trimming it neither
+// panics — it runs on the server's goroutine, where a panic ends the
+// process — nor hands the shell broken text or more than one line.
+func FuzzTrimSuggestion(f *testing.F) {
+	f.Add("add a test for", "add a test for the parser")
+	f.Add("go", "GO İİİİ")
+	f.Add("go", "GO ȺȺȺ")
+	f.Add("kelvin", "KELVIN \u212a")
+	f.Add("İ", "i\u0307x")
+	f.Fuzz(func(t *testing.T, typed, raw string) {
+		got := trimSuggestion(typed, raw)
+		if strings.ContainsAny(got, "\r\n") {
+			t.Errorf("trimSuggestion(%q, %q) = %q; want one line", typed, raw, got)
+		}
+		if utf8.ValidString(typed) && utf8.ValidString(raw) && !utf8.ValidString(got) {
+			t.Errorf("trimSuggestion(%q, %q) = %q; want valid UTF-8", typed, raw, got)
+		}
+	})
 }
