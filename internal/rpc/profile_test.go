@@ -98,6 +98,9 @@ func TestClient_ProfileSwitchWaitsForTheTurn(t *testing.T) {
 	if _, err := c.ForkSession(ctx, ForkOptions{ID: view.ID, Turn: 1}); !errors.As(err, &rpcErr) || rpcErr.Code != CodeBusy {
 		t.Errorf("fork during a turn = %v; want code %d", err, CodeBusy)
 	}
+	if _, err := c.ForkSession(ctx, ForkOptions{ID: view.ID[:4], Turn: 1}); !errors.As(err, &rpcErr) || rpcErr.Code != CodeBusy {
+		t.Errorf("fork by id prefix during a turn = %v; want code %d", err, CodeBusy)
+	}
 	if err := turn.Reply(ctx, ev.Permission.CallID, permission.Deny); err != nil {
 		t.Fatal(err)
 	}
