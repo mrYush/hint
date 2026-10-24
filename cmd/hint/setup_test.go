@@ -137,6 +137,45 @@ func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
 	}
 }
 
+// TestFirstRunKeepsTheProfileThatLacksAKey: when the fallback profile
+// has no key, setup proposes that profile with its own base URL and
+// model, so Enter keeps them instead of writing the built-in defaults.
+func TestFirstRunKeepsTheProfileThatLacksAKey(t *testing.T) {
+	home, cwd := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("ROUTER_KEY", "")
+	t.Chdir(cwd)
+	global := filepath.Join(home, ".config", "hint", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(global), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `default_provider: local
+fallback_provider: router
+providers:
+  - name: local
+    kind: ollama
+    model: qwen
+  - name: router
+    kind: openai
+    base_url: https://openrouter.ai/api/v1
+    model: qwen/qwen3-coder
+    api_key: ${ROUTER_KEY}
+`
+	if err := os.WriteFile(global, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, loadErr := config.Load(config.Flags{})
+	var noKey *config.NoKeyError
+	if !errors.As(loadErr, &noKey) || noKey.Profile != "router" {
+		t.Fatalf("Load = %v; want the fallback's missing key", loadErr)
+	}
+	info := firstRunInfo(cwd, loadErr)
+	if p := info.profile; p.Name != "router" || p.BaseURL != "https://openrouter.ai/api/v1" || p.Model != "qwen/qwen3-coder" {
+		t.Errorf("setup proposes %q at %s with model %q; want router as configured", p.Name, p.BaseURL, p.Model)
+	}
+}
+
 // secrets is a setupIO whose hidden answers come one per question.
 type secrets struct{ keys []string }
 

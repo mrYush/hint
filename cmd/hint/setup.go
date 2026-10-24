@@ -419,10 +419,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 	if err != nil {
 		return false
 	}
-	info := newSetupInfo(nil, cwd, config.Flags{})
-	if missingKey {
-		info.profile.Name = noKey.Profile
-	}
+	info := firstRunInfo(cwd, loadErr)
 	fmt.Fprintln(sio.err, "hint: you will need "+keyHelp+".")
 	fmt.Fprintln(sio.err, "hint:", strings.TrimPrefix(loadErr.Error(), "config: "))
 	fmt.Fprintln(sio.err, info.describe())
@@ -436,6 +433,30 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 		return false
 	}
 	return true
+}
+
+// firstRunInfo is what setup proposes after loadErr: the configuration
+// as far as it goes, and, when a profile has no key, that profile — the
+// fallback as well as the default — with its own base URL and model as
+// the answers Enter keeps.
+func firstRunInfo(cwd string, loadErr error) *setupInfo {
+	cfg, _ := config.LoadDraft(config.Flags{}) // what does not load is why setup runs
+	info := newSetupInfo(cfg, cwd, config.Flags{})
+	var noKey *config.NoKeyError
+	if !errors.As(loadErr, &noKey) {
+		return info
+	}
+	info.profile.Name = noKey.Profile
+	if cfg == nil {
+		return info
+	}
+	if p, err := cfg.Profile(noKey.Profile); err == nil {
+		info.profile = p
+		if info.profile.BaseURL == "" {
+			info.profile.BaseURL = defaultBaseURL
+		}
+	}
+	return info
 }
 
 // newSetupCommand is `hint setup`: the same questions without a session,
@@ -461,7 +482,7 @@ in a repository.`,
 				return err
 			}
 			// A config that does not load yet is the reason to run setup.
-			cfg, _ := config.Load(*flags)
+			cfg, _ := config.LoadDraft(*flags)
 			info := newSetupInfo(cfg, cwd, *flags)
 			fmt.Fprintln(os.Stderr, info.describe())
 			_, err = askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
