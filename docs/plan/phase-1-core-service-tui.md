@@ -1,6 +1,6 @@
 # Phase 1 — Core as a service + TUI
 
-> Status: Scope complete, release pending · Target release: **v0.3** · Estimate: 4–6 weeks (part-time)
+> Status: Released v0.3.0 · Estimate: 4–6 weeks (part-time)
 > Depends on: Phase 0 (`v0.2.0` shipped) · Does not wait on: WP0.14 (install indexes; that track runs in parallel)
 
 ## Goal
