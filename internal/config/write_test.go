@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -114,6 +115,39 @@ func TestLocate(t *testing.T) {
 	}
 	if loc := Locate(home, wd, lookup(nil)); len(loc.Read) != 1 || loc.Read[0] != proj {
 		t.Errorf("project file not found: %+v", loc)
+	}
+}
+
+// TestPathsCoverWhatTheLoaderReads: every name LoadFrom may read is in
+// Paths, the current and the legacy one of both layers, existing or not;
+// and whichever file Locate finds is one of them.
+func TestPathsCoverWhatTheLoaderReads(t *testing.T) {
+	home, wd := t.TempDir(), t.TempDir()
+	want := []string{
+		filepath.Join(home, ".config", "hint", "config.yaml"),
+		filepath.Join(home, ".config", "hint.yaml"),
+		filepath.Join(wd, ".hint", "config.yaml"),
+		filepath.Join(wd, "hint.yaml"),
+	}
+	got := Paths(home, wd, lookup(nil))
+	if !slices.Equal(got, want) {
+		t.Fatalf("Paths = %v\nwant %v", got, want)
+	}
+	for _, legacy := range []string{want[1], want[3]} {
+		if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(legacy, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loc := Locate(home, wd, lookup(nil))
+	if len(loc.Read) != 2 || !slices.Contains(got, loc.Read[0]) || !slices.Contains(got, loc.Read[1]) {
+		t.Errorf("Locate read %v; want the two legacy files, both in Paths", loc.Read)
+	}
+	xdg := t.TempDir()
+	if got := Paths(home, "", lookup(map[string]string{"XDG_CONFIG_HOME": xdg})); !slices.Equal(got, []string{filepath.Join(xdg, "hint", "config.yaml"), want[1]}) {
+		t.Errorf("Paths under XDG_CONFIG_HOME, no working directory = %v", got)
 	}
 }
 

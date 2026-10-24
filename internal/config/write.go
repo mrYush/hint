@@ -30,14 +30,41 @@ func Locate(home, workingDir string, lookupEnv func(string) (string, bool)) Loca
 	var loc Locations
 	if dir := GlobalDir(home, lookupEnv); dir != "" {
 		loc.Global = filepath.Join(dir, "config.yaml")
-		loc.Read = appendExisting(loc.Read, loc.Global, legacyGlobal(home))
 	}
-	if workingDir != "" {
-		loc.Read = appendExisting(loc.Read,
-			filepath.Join(workingDir, ".hint", "config.yaml"),
-			filepath.Join(workingDir, "hint.yaml"))
+	for _, names := range candidates(home, workingDir, lookupEnv) {
+		loc.Read = appendExisting(loc.Read, names...)
 	}
 	return loc
+}
+
+// Paths are every file LoadFrom may read — global and project, under the
+// current and the legacy name — whether it exists or not. They are what
+// the file tools must refuse: a file created at one of them is read on
+// the next reload.
+func Paths(home, workingDir string, lookupEnv func(string) (string, bool)) []string {
+	var out []string
+	for _, names := range candidates(home, workingDir, lookupEnv) {
+		for _, n := range names {
+			if n != "" {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+// candidates are the config files by layer, global then project, each
+// with its current name first and its legacy name after: the first that
+// exists is the one read. "" stands for a name that cannot be formed.
+func candidates(home, workingDir string, lookupEnv func(string) (string, bool)) [][]string {
+	var out [][]string
+	if dir := GlobalDir(home, lookupEnv); dir != "" {
+		out = append(out, []string{filepath.Join(dir, "config.yaml"), legacyGlobal(home)})
+	}
+	if workingDir != "" {
+		out = append(out, []string{filepath.Join(workingDir, ".hint", "config.yaml"), filepath.Join(workingDir, "hint.yaml")})
+	}
+	return out
 }
 
 func legacyGlobal(home string) string {
