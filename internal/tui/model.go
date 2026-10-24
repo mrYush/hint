@@ -388,6 +388,15 @@ func (m *model) finishTurn(msg turnDoneMsg) {
 		if m.entries[n-1].text == "" {
 			m.entries = m.entries[:n-1]
 			m.rendered = m.rendered[:n-1]
+			// esc during the turn may have selected the removed block:
+			// the selection moves to the block before it.
+			if m.sel >= len(m.entries) {
+				if len(m.entries) == 0 {
+					m.endBrowse()
+				} else {
+					m.selectEntry(len(m.entries) - 1)
+				}
+			}
 		} else {
 			m.entries[n-1].done = true
 			m.rendered[n-1] = m.draw(n - 1)

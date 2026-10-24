@@ -568,6 +568,35 @@ func TestCtrlCCancelsTheTurn(t *testing.T) {
 	}
 }
 
+// TestSelectionSurvivesAnEmptyAnswer: esc during a turn selects the
+// streaming answer, which is still empty. A turn that ends without text
+// removes that block, and the selection must move off it rather than
+// point past the end of the transcript.
+func TestSelectionSurvivesAnEmptyAnswer(t *testing.T) {
+	release := make(chan struct{})
+	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
+		<-release
+		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishStop}
+	}}
+	h := newHarness(t, eng, Options{})
+
+	h.submit("say nothing")
+	h.press("esc")
+	if h.m.sel != len(h.m.entries)-1 || h.m.entries[h.m.sel].kind != entryAssistant {
+		t.Fatalf("esc during the turn selected %d of %d; want the streaming answer", h.m.sel, len(h.m.entries))
+	}
+	close(release)
+	h.pump(until[turnDoneMsg])
+	if h.m.sel >= len(h.m.entries) {
+		t.Fatalf("selection %d points past the %d entries left", h.m.sel, len(h.m.entries))
+	}
+	if v := h.view(); !strings.Contains(v, "turn 1") {
+		t.Errorf("the status line does not show the selected turn:\n%s", v)
+	}
+	// The arrows still move between the blocks that are left.
+	h.press("up", "down")
+}
+
 // TestCtrlCInAnyLayout pins that a chord pressed in a Cyrillic layout is
 // the chord on the same US key, with and without the kitty protocol.
 func TestCtrlCInAnyLayout(t *testing.T) {
