@@ -302,6 +302,39 @@ providers:
 	}
 }
 
+// TestDraftKeepsAProfileWithoutAKey: the profile setup is about to
+// complete still comes back as configured, base_url and model included,
+// while a file that does not parse is an error even for a draft.
+func TestDraftKeepsAProfileWithoutAKey(t *testing.T) {
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
+default_provider: router
+providers:
+  - name: router
+    kind: openai
+    base_url: https://openrouter.ai/api/v1
+    model: qwen/qwen3-coder
+    api_key: ${UNSET_KEY}
+`)
+	if _, err := LoadFrom(opts); err == nil {
+		t.Fatal("a profile without a key loaded; want the validation error")
+	}
+	opts.Draft = true
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatalf("draft: %v", err)
+	}
+	p := mustDefault(t, cfg)
+	if p.BaseURL != "https://openrouter.ai/api/v1" || p.Model != "qwen/qwen3-coder" || p.APIKey != "" {
+		t.Errorf("draft profile = %+v; want the file's base_url and model, no key", p)
+	}
+
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "providers: [\n")
+	if _, err := LoadFrom(opts); err == nil {
+		t.Error("a draft over a file that does not parse loaded")
+	}
+}
+
 func TestFlatConfigMigration(t *testing.T) {
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `

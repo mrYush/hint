@@ -155,13 +155,20 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		trace:   trace,
 		notices: notices,
 		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
-		denied:  []string{config.GlobalDir(home, os.LookupEnv), store.Dir()},
+		denied:  deniedPaths(home, cwd, os.LookupEnv, store.Dir()),
 	})
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	return eng, cleanup, nil
+}
+
+// deniedPaths are hint's own files, which the file tools refuse: every
+// config file the loader reads, under its current or legacy name and
+// whether it exists yet, the global config directory, and the sessions.
+func deniedPaths(home, cwd string, lookupEnv func(string) (string, bool), sessions string) []string {
+	return append(config.Paths(home, cwd, lookupEnv), config.GlobalDir(home, lookupEnv), sessions)
 }
 
 // newEngine builds the stack for as: the working-directory root, the
