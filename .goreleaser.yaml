@@ -110,7 +110,7 @@ homebrew_casks:
     homepage: https://github.com/mrYush/hint
     description: Context-aware CLI assistant that reads, edits and runs your project
     license: MIT
-    binary: hint
+    binaries: [hint]
     # grep and glob prefer ripgrep and fall back to a pure-Go walk without
     # it; the cask pulls it in so the fast path is the one users get.
     dependencies:
