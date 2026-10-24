@@ -139,7 +139,8 @@ type Session interface {
 	// RunTurn records text as the user message and runs the agent. ask
 	// receives every permission question; a nil ask denies them. The
 	// returned channel carries the turn's events and is closed when the
-	// turn ends. RunTurn must return before it needs a receiver on that
+	// turn ends; the server reads it to the end even after its client is
+	// gone, so a sender need not watch ctx to finish. RunTurn must return before it needs a receiver on that
 	// channel: the server writes the turn id to the client first, and
 	// only then starts reading. A non-nil error means the turn never
 	// started.
@@ -158,8 +159,9 @@ type Engine interface {
 	// the configuration stands now.
 	Profiles(ctx context.Context) ([]ProfileInfo, error)
 	// Fork starts a session holding opts.ID's history through the end of
-	// opts.Turn (the whole history for 0), with the source's profile. The
-	// server checks that the source has no turn in flight before calling.
+	// opts.Turn (the whole history for 0), with the source's profile.
+	// opts.ID may be a unique prefix. The server checks that no session
+	// it could name has a turn in flight before calling.
 	// An unknown source is ErrNotFound, a turn it does not have — or an
 	// empty conversation — ErrInvalid.
 	Fork(ctx context.Context, opts ForkOptions) (Session, error)
