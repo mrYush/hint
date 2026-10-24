@@ -45,7 +45,7 @@ this process's stdin. Another terminal joins with hint --connect.`,
 			return serveListen(ctx, opts, listen)
 		},
 	}
-	cmd.Flags().StringVar(&listen, "listen", "", "Address to listen on, as unix:/path or tcp:127.0.0.1:port")
+	cmd.Flags().StringVar(&listen, "listen", "", "Address to listen on, as unix:/path or tcp:localhost:port (loopback only)")
 	cmd.Flags().BoolVar(&ask, "ask", false, "Confirm every file edit and shell command (the default)")
 	cmd.Flags().BoolVar(&autoEdit, "auto-edit", false, "Apply file edits without asking; still confirm shell commands")
 	cmd.Flags().BoolVar(&yolo, "yolo", false, "Run every edit and command without asking (dangerous)")
@@ -100,14 +100,12 @@ func serveListen(ctx context.Context, opts options, listen string) error {
 
 // publish opens the listener a `hint serve` answers on and leaves under
 // dir what a `hint --connect` needs to find it: a fresh auth.token and
-// the endpoint, written once the port is known. listen is the user's
-// address or "" for the platform default under dir. The caller closes
-// the listener and removes a Unix socket.
+// the endpoint. Both are written only once the address is ours: a serve
+// that fails because another one is running must not replace the files
+// that one's clients read. listen is the user's address or "" for the
+// platform default under dir. The caller closes the listener and removes
+// a Unix socket.
 func publish(dir, listen string, stderr io.Writer) (net.Listener, string, error) {
-	token, err := rpc.WriteToken(dir)
-	if err != nil {
-		return nil, "", err
-	}
 	network, addr, err := parseListen(listen, dir)
 	if err != nil {
 		return nil, "", err
@@ -116,7 +114,11 @@ func publish(dir, listen string, stderr io.Writer) (net.Listener, string, error)
 	if err != nil {
 		return nil, "", err
 	}
-	if err := rpc.WriteEndpoint(dir, lis.Addr().Network(), lis.Addr().String()); err != nil {
+	token, err := rpc.WriteToken(dir)
+	if err == nil {
+		err = rpc.WriteEndpoint(dir, lis.Addr().Network(), lis.Addr().String())
+	}
+	if err != nil {
 		_ = lis.Close()
 		return nil, "", err
 	}
@@ -142,7 +144,7 @@ func parseListen(listen, dir string) (network, addr string, err error) {
 	}
 	network, addr, ok := strings.Cut(listen, ":")
 	if !ok || (network != "unix" && network != "tcp") || addr == "" {
-		return "", "", fmt.Errorf("--listen must be unix:/path or tcp:127.0.0.1:port, not %q", listen)
+		return "", "", fmt.Errorf("--listen must be unix:/path or tcp:localhost:port, not %q", listen)
 	}
 	return network, addr, nil
 }
