@@ -4,9 +4,13 @@
 
 ## Principle: core as a service, shells as clients
 
-One Go core (agent runtime) exposes an API (JSON-RPC/gRPC over stdio or a
-localhost socket). Every interface — CLI/TUI, desktop widget, iOS/iPadOS,
-Android, Raspberry Pi — is a thin client of that core. The core talks to:
+One Go core (agent runtime) exposes an API over stdio or a localhost socket.
+Every interface — CLI/TUI, desktop widget, iOS/iPadOS, Android, Raspberry Pi — is a thin client of that core.
+`v0.3` is JSON-RPC 2.0 ([`docs/rpc.md`](../rpc.md)).
+A gRPC adapter is added beside it, on the same engine and the same events, when the first client of `hint serve` is not Go in this module (Phase 4 native shells).
+JSON-RPC stays for stdio and for Go clients.
+Phase 5 embeds the core with gomobile and does not use either socket protocol.
+The core talks to:
 
 - Providers (LLM/VLM/STT/TTS/Embeddings) over OpenAI-compatible APIs
 - Local models (Ollama, llama.cpp) as offline fallback
@@ -33,9 +37,10 @@ The pattern is proven in the industry:
 
 ```
 hint/
-├── cmd/hint/main.go            # CLI, flags, wiring
+├── cmd/hint/                   # CLI shell: an RPC client of the core it serves in-process
+│   └── rpcengine.go            # the one file that wires internal/agent into rpc.Engine
 ├── internal/
-│   ├── agent/                  # loop, turn, compaction, limits, tool schedule (WP0.11)
+│   ├── rpc/                    # JSON-RPC server (socket, loopback TCP, stdio) and Client (WP1.1, WP1.3)
 │   ├── provider/               # implementations of the modality interfaces
 │   │   ├── openai/             # openai-compatible client (chat+stream+tools)
 │   │   └── router/             # default/fallback routing

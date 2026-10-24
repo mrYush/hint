@@ -33,13 +33,15 @@ func TestMask(t *testing.T) {
 }
 
 func TestRedact(t *testing.T) {
-	secrets := []string{"key-one", "key-two", ""}
-	in := "url?a=key-one&b=key-two and key-one again"
+	secrets := []string{"key-one-1234", "key-two-5678", "", "short"}
+	in := "url?a=key-one-1234&b=key-two-5678 and key-one-1234 again, a short word"
 	got := Redact(in, secrets)
-	if strings.Contains(got, "key-one") || strings.Contains(got, "key-two") {
+	if strings.Contains(got, "key-one-1234") || strings.Contains(got, "key-two-5678") {
 		t.Errorf("Redact left a secret in %q", got)
 	}
-	if got != "url?a=***&b=*** and *** again" {
+	// A secret shorter than eight characters is not one, and replacing
+	// it would eat ordinary words.
+	if got != "url?a=***&b=*** and *** again, a short word" {
 		t.Errorf("Redact = %q", got)
 	}
 }

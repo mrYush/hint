@@ -6,9 +6,10 @@
 
 ## Goal
 
-The agent runtime inside a mobile app — no server required. The Go core is
-embedded via **gomobile bind** (xcframework for iOS, AAR for Android) with
-thin native shells.
+The agent runtime inside a mobile app — no server required.
+The Go core is embedded via **gomobile bind** (xcframework for iOS, AAR for Android) with thin native shells.
+This is in-process: the phone does not talk gRPC or JSON-RPC to a daemon.
+A gRPC adapter is the Phase 4 trigger (a non-Go client of `hint serve`), not this phase.
 
 ## Work packages
 

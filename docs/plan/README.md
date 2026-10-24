@@ -14,6 +14,7 @@ roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
 | `raspberry-pi-smoke-test.md` | Checklist for a Raspberry Pi **5** + Ollama smoke. Backlog as of 2026-10-11; does not gate `v0.2.0` |
+| `completion-quality-eval.md` | How to measure what WP1.6's completion is worth on small models: acceptance rate, latency, cost, residency, and the pass criteria for a README recommendation or a default. Backlog as of 2026-10-19; does not gate `v0.3` |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
 | [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
@@ -39,6 +40,27 @@ Phase files use plain GitHub task lists:
 - `- [ ]` — not started
 - `- [x]` — done
 - Append `(blocked: reason)` to a task that cannot proceed.
+
+**Branch per work package.** Every `### WPx.y` heading is followed by a
+``**Branch:** `dev/wpx.y-<short-name>` `` line, assigned when the work package
+is written down, before work starts (naming per CONTRIBUTING "Git workflow").
+The work package's status is read from that branch, not from a separate
+field: no such branch — not started; branch exists — in progress; branch
+merged into `develop` — done (append **done** to the heading with the merge
+date; this may be automated on merge). One work package — one branch; do not
+bundle small packages into a shared branch, merge them quickly instead.
+Checkboxes inside the package remain the step-level view.
+
+**Exception: scope that grew inside one branch.** A branch that, while in
+progress, came to carry work beyond its package (another feature the
+package turned out to need, or the plans of later packages) may be merged
+as one PR instead of being split after review has started. Three
+conditions: the extra scope is in the host package's checklist, so the
+phase file shows what was delivered where; the PR description has a scope
+note naming the exception and why splitting was not worth it; and the
+phase file records the exception under the package. Later packages still
+get their own branches; the exception is for scope found on the way, not
+a way to plan two packages into one branch.
 
 Each phase file header carries a status line: `Planned` → `In progress` →
 `Released vX.Y`.

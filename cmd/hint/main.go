@@ -96,6 +96,13 @@ type options struct {
 	sessionID string
 	debug     bool
 	output    outputFormat
+	// connect names a running `hint serve` to use instead of an
+	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
+	// runs the core in this process.
+	connect string
+	// tui runs the interactive session as the full-screen shell; false is
+	// the line REPL (--plain, or no terminal on stdout).
+	tui bool
 }
 
 // newRootCommand builds the command tree. Flags are bound to locals and
@@ -105,8 +112,8 @@ func newRootCommand() *cobra.Command {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
-	var sessionID, prompt, output string
-	var debug bool
+	var sessionID, prompt, output, rpcMode, connect string
+	var debug, tuiMode, plain bool
 
 	rootCmd := &cobra.Command{
 		Use:     "hint [flags] [-p \"question\"]",
@@ -119,14 +126,21 @@ next one; the conversation is recorded and can be continued later with
 wants; --output json makes the answer machine-readable.
 
 A question given as plain arguments (hint "question") still works as a
-one-shot for compatibility and prints a note about -p.`,
-		Example: `  hint                                   # interactive session
+one-shot for compatibility and prints a note about -p.
+
+The interactive session is a full-screen shell on a terminal; --plain
+keeps the line REPL.`,
+		Example: `  hint                                   # interactive session (full-screen shell)
+  hint --plain                           # the same as a line REPL
   hint -p "what does main.go do?"        # one answer, then exit
   hint -p "list the tests" --output json # for scripts
   hint -c                                # continue this directory's last session
   hint --session 3f2a                    # continue the session whose id starts with 3f2a
   hint sessions                          # list this directory's sessions
-  hint models                            # list the models the profile serves`,
+  hint models                            # list the models the profile serves
+  hint serve                             # JSON-RPC on a local socket
+  hint --connect -c                      # join that server from another terminal
+  hint --mode rpc                        # the same protocol on stdin/stdout`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// A run-time failure is printed once, by main; cobra keeps
@@ -139,6 +153,16 @@ one-shot for compatibility and prints a note about -p.`,
 				session:   sessionModeOf(continueLast, resume, noSession, sessionID),
 				sessionID: sessionID,
 				debug:     debug,
+				connect:   connect,
+				tui:       useTUI(tuiMode, plain, os.Stdout),
+			}
+			if rpcMode != "" && rpcMode != "rpc" {
+				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
+			}
+			if rpcMode == "rpc" {
+				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+				defer stop()
+				return serveStdio(ctx, opts)
 			}
 			switch outputFormat(output) {
 			case outputText, outputJSON:
@@ -149,6 +173,9 @@ one-shot for compatibility and prints a note about -p.`,
 			inv, err := dispatch(prompt, args, opts.output, os.Stdin)
 			if err != nil {
 				return err
+			}
+			if tuiMode && !inv.interactive {
+				return errors.New("--tui is the interactive session; it takes no -p or question")
 			}
 			if inv.note != "" {
 				fmt.Fprintln(os.Stderr, "hint:", inv.note)
@@ -170,6 +197,21 @@ one-shot for compatibility and prints a note about -p.`,
 
 	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
 	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
+	rootCmd.Flags().StringVar(&rpcMode, "mode", "", "Speak JSON-RPC on stdin/stdout instead of running the CLI (rpc)")
+	// The CLI is a client of the core either way; --connect only changes
+	// which process runs it. A bare --connect finds the server through
+	// the files hint serve wrote; a value names the address outright.
+	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:127.0.0.1:port")
+	rootCmd.Flags().Lookup("connect").NoOptDefVal = connectAuto
+	// The full-screen shell is the interactive session on a terminal;
+	// --plain keeps the line REPL (a terminal that cannot draw it, a
+	// transcript to copy from). --tui was the opt-in while the shell was
+	// new and stays as a no-op so that scripts and habits keep working.
+	rootCmd.Flags().BoolVar(&plain, "plain", false, "Run the interactive session as a line REPL instead of the full-screen TUI")
+	rootCmd.Flags().BoolVar(&tuiMode, "tui", false, "Run the interactive session as the full-screen TUI (the default on a terminal)")
+	_ = rootCmd.Flags().MarkHidden("tui")
+	rootCmd.MarkFlagsMutuallyExclusive("connect", "mode")
+	rootCmd.MarkFlagsMutuallyExclusive("plain", "tui")
 
 	// Run modes are a policy of this run, not part of a provider profile,
 	// so they are plain flags rather than config.Flags. --ask exists so
@@ -201,12 +243,13 @@ one-shot for compatibility and prints a note about -p.`,
 	pf.StringVar(&flags.OverviewDepth, "overview-depth", "", "Directory levels listed in the system prompt; 0 for none (default 2)")
 	pf.StringVar(&flags.OverviewEntries, "overview-entries", "", "Cap on the entries listed in the system prompt (default 100)")
 	pf.StringVar(&flags.SummarizeInstructions, "summarize-instructions", "", "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
+	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	// A bare --summarize-instructions means true; =false still turns a
 	// config file's setting off for one run.
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags), newConfigCommand(&flags))
 	return rootCmd
 }
 
@@ -243,6 +286,20 @@ func dispatch(prompt string, args []string, output outputFormat, stdin *os.File)
 		return invocation{}, errors.New("stdin is not a terminal, so there is nobody to ask; use hint -p \"question\" for a non-interactive run")
 	}
 	return invocation{interactive: true}, nil
+}
+
+// useTUI decides the shape of the interactive session: the full-screen
+// shell when stdout is a terminal to draw on, unless --plain asks for the
+// line REPL; --tui asks for the shell outright. A one-shot ignores it.
+func useTUI(tuiFlag, plain bool, stdout *os.File) bool {
+	switch {
+	case plain:
+		return false
+	case tuiFlag:
+		return true
+	default:
+		return isTerminal(stdout)
+	}
 }
 
 // isTerminal reports whether f is a character device — a tty, but also

@@ -7,7 +7,7 @@ package openai
 //	go test -tags live ./internal/provider/openai/
 //
 // Endpoints are selected by environment (see testdata/README.md):
-// API_BAR_KEY for the api-bar gateway, OPENAI_API_KEY for api.openai.com,
+// APIBAR_KEY for the api-bar gateway, OPENAI_API_KEY for api.openai.com,
 // and an Ollama daemon on localhost:11434 (skipped when not reachable).
 
 import (
@@ -26,7 +26,7 @@ import (
 func liveProfiles(t *testing.T) []config.Profile {
 	t.Helper()
 	var profiles []config.Profile
-	if key := os.Getenv("API_BAR_KEY"); key != "" {
+	if key := os.Getenv("APIBAR_KEY"); key != "" {
 		profiles = append(profiles, config.Profile{
 			Name: "api-bar", Kind: config.KindOpenAI,
 			BaseURL: "https://api-bar.ru/route/openai", APIKey: key, Model: "gpt-4o",
@@ -51,7 +51,7 @@ func liveProfiles(t *testing.T) []config.Profile {
 		})
 	}
 	if len(profiles) == 0 {
-		t.Skip("no live endpoints configured (API_BAR_KEY / OPENAI_API_KEY / local Ollama)")
+		t.Skip("no live endpoints configured (APIBAR_KEY / OPENAI_API_KEY / local Ollama)")
 	}
 	return profiles
 }
