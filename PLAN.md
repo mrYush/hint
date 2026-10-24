@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-19
+> Status: living document · Last updated: 2026-10-24
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -89,18 +89,21 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
 ## Current status
 
-- **Active phase:** Phase 1 — core as a service + TUI (`v0.3`).
+- **Active phase:** Phase 2 — memory, MCP client, A2A (`v0.4`).
   Phase 0 shipped as `v0.2.0`.
+  Phase 1 shipped as `v0.3.0`.
   WP1.1 and the RPC contract (WP1.2) are in the tree: `hint serve` and `hint --mode rpc`.
   WP1.3 is in the tree: bare `hint` and `hint -p` are RPC clients of a core served in the same process, and `hint --connect` joins a running `hint serve` from another terminal.
   Nothing in `cmd/hint` calls the agent loop except the engine the server serves.
   The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
   WP1.4–WP1.7 are in the tree: the TUI is the default on a terminal (`--plain` keeps the REPL), profile switch and fork go over RPC, completion is behind `completion.mode`, keys live in the OS secret store.
-  The three Phase 1 acceptance criteria are met (2026-10-20); what remains before the `v0.3` tag is the release work in step 12 (apt signing key, Pages).
+  The three Phase 1 acceptance criteria are met (2026-10-20).
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
-  It does not block `v0.3`.
+  It did not block `v0.3.0`.
   The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
-  It goes live with the first final tag after the signing key (`APT_SIGNING_KEY`) is set and Pages is enabled; `v0.2.0` was built before the packages existed and is not republished.
+  The signing key (`APT_SIGNING_KEY`, and `APT_SIGNING_PASSPHRASE`) is set (2026-10-22).
+  `v0.3.0` publishes that repository; Pages is enabled on `gh-pages` after the first push.
+  `v0.2.0` was built before the packages existed and is not republished.
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
   WP0.2 — config profiles and sources (provider profiles,
@@ -184,8 +187,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** Phase 1 (`v0.3`).
-  `v0.2.0-alpha` and `v0.2.0` are tagged; `v0.2.0` is the GitHub Release and the Homebrew cask in `mrYush/homebrew-tap`.
+- **Next:** Phase 2 (`v0.4`).
+  `v0.2.0-alpha`, `v0.2.0` and `v0.3.0` are tagged; `v0.2.0` is the GitHub Release and the Homebrew cask in `mrYush/homebrew-tap`.
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) proceeds on its own and does not have to finish first.
   The audit fixes B1–B3 and M1–M2
@@ -251,11 +254,14 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     The hardware record is the Pi 4 bench, not a Pi 5 run.
     The tag needed `HOMEBREW_TAP_TOKEN`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
-    apt: implemented, awaiting the signing key, Pages and a final tag; Scoop: not started.
-    Before the next final tag: generate the apt signing key, set `APT_SIGNING_KEY` (and `APT_SIGNING_PASSPHRASE` if it has one) and enable Pages for `gh-pages`, or the tag fails at the apt step after the Release is already out.
-    Then the Scoop bucket, the cask's `postflight_steps`, and the deprecated `homebrew_casks.binary` key that `goreleaser check` flags.
+    apt: implemented.
+    `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are set (2026-10-22).
+    `v0.3.0` publishes the signed repository to `gh-pages`; Pages is turned on for that branch after the push.
+    Scoop is not started.
+    The Homebrew cask field `homebrew_casks.binary` is replaced by `binaries` so `goreleaser check` passes.
+    Still open after that: the Scoop bucket and the cask's `postflight_steps`.
     The cask already covers macOS.
-    This does not gate `v0.3`.
+    This did not gate `v0.3.0`.
     Official catalogs stay a separate parallel path and do not gate either track.
 13. ~~Phase 1 (`v0.3`): `hint serve` (WP1.1, WP1.2) and the CLI as its client (WP1.3).~~ Done.
 14. ~~WP1.4: the TUI on Bubble Tea v2, as a second client of the same protocol.~~ Done; its leftovers (the default-TUI flip, applying a saved setup without a restart) went to WP1.5 (decided 2026-10-18).

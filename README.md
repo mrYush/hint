@@ -664,9 +664,9 @@ your convenience.
 
 ### Known issues
 
-`v0.2.0-alpha` and `v0.2.0` ship with these confirmed bugs. They are
-backlog (decided 2026-10-11) and do not block either tag. Details and the
-full audit:
+`v0.2.0-alpha`, `v0.2.0` and `v0.3.0` ship with these confirmed bugs.
+They are backlog (decided 2026-10-11) and did not block those tags.
+Details and the full audit:
 [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
 1. **Compaction loses the summary.** When a long conversation is
@@ -686,11 +686,13 @@ full audit:
    instead of a truncated list; search a directory or narrow the pattern.
 5. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
-6. Not in `v0.2.0`, on `develop` since WP1.4: a gateway that answers a
-   failed request with both a short `error` and a longer `message` (the
-   NestJS shape, `{"error":"Unauthorized","message":"Invalid API key"}`)
-   is reported by the `error` field alone. `hint --debug` shows the full
-   response body.
+6. A gateway that answers a failed request with both a short `error` and a longer `message` (the NestJS shape, `{"error":"Unauthorized","message":"Invalid API key"}`) is reported by the `error` field alone.
+   `hint --debug` shows the full response body.
+   Present since `v0.3.0` (on `develop` since WP1.4).
+
+The OS secret store behind `api_key: keyring:<profile>` is exercised on Linux.
+On macOS and Windows the same call goes to the Keychain and the Credential Manager, and those two paths are unverified for this release.
+`secrets.store: file` does not need a store.
 
 ### Debug mode
 
