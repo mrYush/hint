@@ -39,10 +39,11 @@ func DefaultListen(dir string) (network, addr string) {
 	return "unix", filepath.Join(dir, "hint.sock")
 }
 
-// Listen opens network/addr. TCP is refused unless the host is loopback:
-// the token file is the only authenticator, and it is not a credential
-// that should cross a machine. A stale Unix socket whose peer is gone is
-// removed; a socket another process still accepts is left alone.
+// Listen opens network/addr. TCP is refused unless the host is loopback
+// (an address, or "localhost", which RFC 6761 reserves for it): the token
+// file is the only authenticator, and it is not a credential that should
+// cross a machine. A stale Unix socket whose peer is gone is removed; a
+// socket another process still accepts is left alone.
 func Listen(network, addr string) (net.Listener, error) {
 	switch network {
 	case "tcp":
@@ -50,8 +51,8 @@ func Listen(network, addr string) (net.Listener, error) {
 		if err != nil {
 			return nil, fmt.Errorf("rpc: %w", err)
 		}
-		if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
-			return nil, fmt.Errorf("rpc: tcp listen must be a loopback address, not %q", host)
+		if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			return nil, fmt.Errorf("rpc: tcp listen must be localhost or a loopback address, not %q", host)
 		}
 		lis, err := net.Listen("tcp", addr)
 		if err != nil {

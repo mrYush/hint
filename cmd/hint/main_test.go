@@ -818,6 +818,28 @@ func TestPermissionOverRPC(t *testing.T) {
 	}
 }
 
+// TestSecondServeKeepsTheFirstToken: a `hint serve` that cannot listen
+// — another one has the address — must leave the running one's token
+// and endpoint alone, or every client is refused until it restarts.
+func TestSecondServeKeepsTheFirstToken(t *testing.T) {
+	dir := t.TempDir()
+	lis, token, err := publish(dir, "tcp:127.0.0.1:0", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lis.Close() }()
+	addr := "tcp:" + lis.Addr().String()
+	if _, _, err := publish(dir, addr, io.Discard); err == nil {
+		t.Fatal("a second publish on a taken address succeeded")
+	}
+	if got, err := rpc.ReadToken(dir); err != nil || got != token {
+		t.Errorf("token after the failed publish = %q, %v; want the first server's", got, err)
+	}
+	if network, got, err := rpc.ReadEndpoint(dir); err != nil || "tcp:"+got != addr || network != "tcp" {
+		t.Errorf("endpoint after the failed publish = %s %s, %v; want %s", network, got, err, addr)
+	}
+}
+
 // TestConnect is Phase 1 acceptance criterion 1 as a test: a server
 // published the way `hint serve` publishes it, and two shells that reach
 // it through --connect the way a second terminal does. The first finds

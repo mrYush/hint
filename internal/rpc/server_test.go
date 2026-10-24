@@ -276,9 +276,27 @@ func TestNextTurnStartsRightAfterDone(t *testing.T) {
 	}
 }
 
-func TestListenRejectsNonLoopback(t *testing.T) {
-	if _, err := Listen("tcp", "0.0.0.0:0"); err == nil {
-		t.Fatal("Listen accepted a non-loopback address")
+// TestListenIsLoopbackOnly: the token is the only credential, so TCP
+// binds to loopback alone — by address or as localhost, which needs no
+// resolver to be known safe.
+func TestListenIsLoopbackOnly(t *testing.T) {
+	for _, c := range []struct {
+		addr string
+		ok   bool
+	}{
+		{"127.0.0.1:0", true},
+		{"[::1]:0", true},
+		{"localhost:0", true},
+		{"0.0.0.0:0", false},
+		{"example.com:0", false},
+	} {
+		lis, err := Listen("tcp", c.addr)
+		if err == nil {
+			_ = lis.Close()
+		}
+		if (err == nil) != c.ok {
+			t.Errorf("Listen(tcp, %q) = %v; want accepted %v", c.addr, err, c.ok)
+		}
 	}
 }
 

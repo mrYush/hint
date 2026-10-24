@@ -13,7 +13,7 @@ The address actually bound is written to `listen` in the same directory.
 It does not use a token: the process that holds the pipes is the client.
 
 The CLI itself is a client of this protocol.
-Bare `hint` and `hint -p` run the core in the same process and talk to it over an in-process pipe with exactly these messages; `hint --connect` talks to a running `hint serve` instead, reading `listen` and `auth.token` from the runtime directory (or `--connect unix:/path`, `--connect tcp:127.0.0.1:port`).
+Bare `hint` and `hint -p` run the core in the same process and talk to it over an in-process pipe with exactly these messages; `hint --connect` talks to a running `hint serve` instead, reading `listen` and `auth.token` from the runtime directory (or `--connect unix:/path`, `--connect tcp:localhost:port`).
 The Go client is `internal/rpc.Client`.
 
 ## Handshake
