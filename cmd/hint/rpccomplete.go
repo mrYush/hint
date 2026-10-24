@@ -196,10 +196,8 @@ func trimSuggestion(typed, raw string) string {
 	}
 	// A model that repeats the prompt: keep only what follows it.
 	if t := strings.TrimSpace(typed); t != "" {
-		if rest, ok := strings.CutPrefix(s, t); ok {
+		if rest, ok := cutPrefixFold(s, t); ok {
 			s = strings.TrimLeft(rest, " ")
-		} else if rest, ok := strings.CutPrefix(strings.ToLower(s), strings.ToLower(t)); ok {
-			s = strings.TrimLeft(s[len(s)-len(rest):], " ")
 		}
 	}
 	if s == "" {
@@ -218,6 +216,22 @@ func trimSuggestion(typed, raw string) string {
 		}
 	}
 	return s
+}
+
+// cutPrefixFold is strings.CutPrefix ignoring case. The cut is made at a
+// rune boundary of s itself: lowering can change a string's length in
+// bytes (Ⱥ grows, İ shrinks), so an index into a lowered copy does not
+// fit the original.
+func cutPrefixFold(s, prefix string) (string, bool) {
+	for i := range s {
+		if strings.EqualFold(s[:i], prefix) {
+			return s[i:], true
+		}
+	}
+	if strings.EqualFold(s, prefix) {
+		return "", true
+	}
+	return "", false
 }
 
 func wordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
