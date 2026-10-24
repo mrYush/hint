@@ -51,25 +51,51 @@ type Options struct {
 	// Keyring resolves api_key: keyring:<account> references. Nil means
 	// no secret store in this process: such a reference yields no key.
 	Keyring Keyring
+	// Draft skips the final validation: the configuration as the files,
+	// the environment and the flags say, for setup to show and complete.
+	// A draft may name no usable profile; errors reading or parsing a
+	// file are still errors.
+	Draft bool
 }
 
 // Load resolves configuration against the real process environment.
 func Load(flags Flags) (*Config, error) {
+	opts, err := processOptions(flags)
+	if err != nil {
+		return nil, err
+	}
+	return LoadFrom(opts)
+}
+
+// LoadDraft is Load without the final validation (Options.Draft): what
+// setup and `hint config` show and edit when a profile has no key or no
+// model yet — the very cases they exist for.
+func LoadDraft(flags Flags) (*Config, error) {
+	opts, err := processOptions(flags)
+	if err != nil {
+		return nil, err
+	}
+	opts.Draft = true
+	return LoadFrom(opts)
+}
+
+// processOptions are the Options of the running process.
+func processOptions(flags Flags) (Options, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "" // no home directory: global config is simply not read
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("config: resolving working directory: %w", err)
+		return Options{}, fmt.Errorf("config: resolving working directory: %w", err)
 	}
-	return LoadFrom(Options{
+	return Options{
 		HomeDir:    home,
 		WorkingDir: wd,
 		LookupEnv:  os.LookupEnv,
 		Flags:      flags,
 		Keyring:    OSKeyring{},
-	})
+	}, nil
 }
 
 // LoadFrom resolves configuration from the given inputs.
@@ -143,8 +169,10 @@ func LoadFrom(opts Options) (*Config, error) {
 		return nil, err
 	}
 
-	if err := l.validate(cfg); err != nil {
-		return nil, err
+	if !opts.Draft {
+		if err := l.validate(cfg); err != nil {
+			return nil, err
+		}
 	}
 	cfg.Warnings = l.warnings
 	return cfg, nil

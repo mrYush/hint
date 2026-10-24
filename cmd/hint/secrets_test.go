@@ -143,13 +143,14 @@ func TestToolOutputWithTheKeyIsRedacted(t *testing.T) {
 
 // TestFileToolsRefuseTheConfigAndSessions: with the working directory at
 // $HOME, read_file of the config file and of a session is refused, and
-// the project's own .hint/config.yaml too, while .hint/rules is read.
+// the project's own .hint/config.yaml too, while .hint/rules is read. The
+// legacy names the loader still reads are refused as well.
 func TestFileToolsRefuseTheConfigAndSessions(t *testing.T) {
 	base, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
 	home := base.cwd
 	configDir := filepath.Join(home, ".config", "hint")
 	sessions := filepath.Join(home, ".local", "share", "hint", "sessions")
-	for _, p := range []string{filepath.Join(configDir, "config.yaml"), filepath.Join(sessions, "x", "s.jsonl"), filepath.Join(home, ".hint", "config.yaml"), filepath.Join(home, ".hint", "rules", "go.md")} {
+	for _, p := range []string{filepath.Join(configDir, "config.yaml"), filepath.Join(sessions, "x", "s.jsonl"), filepath.Join(home, ".hint", "config.yaml"), filepath.Join(home, ".hint", "rules", "go.md"), filepath.Join(home, ".config", "hint.yaml"), filepath.Join(home, "hint.yaml")} {
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -165,11 +166,13 @@ func TestFileToolsRefuseTheConfigAndSessions(t *testing.T) {
 		{".local/share/hint/sessions/x/s.jsonl", true},
 		{".hint/config.yaml", true},
 		{".hint/rules/go.md", false},
+		{".config/hint.yaml", true},
+		{"hint.yaml", true},
 	} {
 		chat := &fakeChat{reply: func(int) string { return "done" }, call: readCall(c.path)}
 		as, sio, _, _ := testAssembly(t, chat, "")
 		as.cwd = home
-		as.denied = []string{configDir, sessions}
+		as.denied = deniedPaths(home, home, func(string) (string, bool) { return "", false }, sessions)
 		a, err := assemble(context.Background(), as, sio)
 		if err != nil {
 			t.Fatal(err)

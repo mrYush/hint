@@ -188,7 +188,7 @@ func newConfigCommand(flags *config.Flags) *cobra.Command {
 		if err != nil {
 			return nil, err
 		}
-		cfg, _ := config.Load(*flags) // a broken config is one reason to be here
+		cfg, _ := config.LoadDraft(*flags) // a broken config is one reason to be here
 		return newSetupInfo(cfg, cwd, *flags), nil
 	}
 	var project bool
