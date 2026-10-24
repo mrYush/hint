@@ -201,7 +201,7 @@ keeps the line REPL.`,
 	// The CLI is a client of the core either way; --connect only changes
 	// which process runs it. A bare --connect finds the server through
 	// the files hint serve wrote; a value names the address outright.
-	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:127.0.0.1:port")
+	rootCmd.Flags().StringVar(&connect, "connect", "", "Use a running hint serve instead of an in-process core: bare, unix:/path or tcp:localhost:port")
 	rootCmd.Flags().Lookup("connect").NoOptDefVal = connectAuto
 	// The full-screen shell is the interactive session on a terminal;
 	// --plain keeps the line REPL (a terminal that cannot draw it, a
