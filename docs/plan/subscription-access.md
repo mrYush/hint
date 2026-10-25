@@ -11,8 +11,7 @@
 ## The problem
 
 Suppose access to some models is sold as a subscription rather than paid per
-token by the user — the shape Perplexity uses for Portable Computer's cloud
-advisor, and the shape every "agent CLI with a plan attached" ends up in.
+token by the user — the shape every "agent CLI with a plan attached" ends up in.
 Then the client has to carry a credential that unlocks a model the user has
 not paid a provider for directly.
 
@@ -83,9 +82,9 @@ compaction all need a general chat endpoint. So the subscription buys the
 *advisor* role — a bounded question-and-answer escalation — while the main
 loop keeps running on the user's own key or on a local model.
 
-That is the same split Portable Computer arrived at, for a different reason:
-they narrowed the cloud call to keep private data on the device, we narrow it
-to contain a credential. The two motivations produce the same API, which is
+That is the same split a local-first appliance arrives at for a different
+reason: it narrows the cloud call to keep private data on the device, we
+narrow it to contain a credential. The two motivations produce the same API, which is
 a good sign for the shape. It also leaves C3 in `why-hint.md` intact — the
 subscription becomes one more rung of the ladder, never the only path.
 

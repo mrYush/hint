@@ -14,7 +14,7 @@ install them safely.
 ### WP7.1 — Package formats
 
 - [ ] **MCP server** (any language) — primary format
-- [ ] **Declarative skill**: folder with manifest + prompt + resources (Claude Code skills model)
+- [ ] **Declarative skill**: folder with manifest + prompt + resources (the common skills layout)
 - [ ] **Go plugin** compiled to a separate binary (spawned, not `plugin.so`)
 - [ ] Manifest schema: name, version, entry point, declared permission classes, platforms
 

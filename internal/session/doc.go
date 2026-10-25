@@ -37,7 +37,6 @@
 // and opening the file for appending truncates it away first, the way a
 // journal discards a torn tail, so the next record starts a clean line.
 //
-// The layout follows the session format of Pi (0BSD) — header line, typed
-// entries, a retained tail on compaction — reduced to what a linear
-// conversation needs: no entry ids or branching.
+// The layout — header line, typed entries, a retained tail on compaction —
+// is reduced to what a linear conversation needs: no entry ids or branching.
 package session

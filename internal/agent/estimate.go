@@ -16,8 +16,7 @@ type Estimator interface {
 // This is not a tokenizer. A real one (tiktoken-style) is per-model, needs
 // its vocabulary shipped or fetched, and the project's "no cgo" rule (see
 // CONTRIBUTING.md) rules out the common C-binding implementations. chars/4
-// is the same rough constant opencode and Crush fall back on for the same
-// reason. It only has to be good enough to trigger compaction a bit before
+// is the usual rough constant for this purpose. It only has to be good enough to trigger compaction a bit before
 // the real limit; the provider's ErrContextOverflow is the ground truth
 // this estimate merely tries to anticipate.
 type charEstimator struct{}
