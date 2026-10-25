@@ -493,9 +493,8 @@ depend on them:
   startup instead of as a provider 400 mid-turn. `Tools()`/`Schemas()` are
   sorted by name, matching `agent.schemas()`'s determinism rule.
 - Crush was consulted for the todo and whitespace-hint patterns only. Its
-  tree in `agents-research/` is now 0BSD-licensed, not FSL as
-  CONTRIBUTING records; no code was copied either way — updating the rule
-  is a separate docs decision.
+  current tree is 0BSD-licensed, not FSL as CONTRIBUTING records; no code
+  was copied either way — updating the rule is a separate docs decision.
 
 ### WP0.6 — Permission system — **done**
 
