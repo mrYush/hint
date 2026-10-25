@@ -245,7 +245,7 @@ Aider, Pi, …). The rule, from [docs/plan/risks.md](docs/plan/risks.md) R2:
 
 - Code may be borrowed **only** from MIT/Apache-licensed projects, with
   attribution in the commit message.
-- FSL and proprietary projects (e.g. Crush, Claude Code) are pattern
+- FSL-1.1-MIT and proprietary projects (e.g. Crush, Claude Code) are pattern
   references only — no copied code.
 
 `hint` itself is [MIT-licensed](LICENSE); by contributing you agree your

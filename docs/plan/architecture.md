@@ -206,7 +206,7 @@ session files and shipped over RPC:
 | MLC LLM | [mlc-ai/mlc-llm](https://github.com/mlc-ai/mlc-llm) | Alternative on-device runtime (iOS/Android GPU) |
 
 Licensing rule: borrow code only from MIT/Apache projects (archived opencode,
-Aider idea-porting, official SDKs). Crush (FSL) and Claude Code are pattern
+Aider idea-porting, official SDKs). Crush (FSL-1.1-MIT) and Claude Code are pattern
 sources only.
 
 ## Prior art: does an existing tool already implement the whole mechanic?
