@@ -58,7 +58,7 @@ type editPlan struct {
 }
 
 // editKind says how an edit applies: the usual replacement, or one of the
-// two empty-old_str forms the Aider edit-block format defines.
+// two empty-old_str forms the edit-block convention defines.
 type editKind int
 
 const (
@@ -94,7 +94,7 @@ func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res ag
 	data, _, err := readWhole(t.root, abs, maxEditSize)
 	switch {
 	case errors.Is(err, os.ErrNotExist) && in.OldStr == "":
-		// The empty-old_str case the Aider edit-block format defines: a
+		// The empty-old_str case of the edit-block convention: a
 		// missing file is created with the new text.
 		p.kind, p.after, p.n = editCreate, in.NewStr, len(in.NewStr)
 		return p, agentapi.ToolResult{}, true
@@ -192,8 +192,7 @@ func (t *editFile) Describe(_ context.Context, args json.RawMessage) (tool.Descr
 //  2. The same with old/new converted to CRLF when the file uses CRLF line
 //     endings, so a model that read a Windows file never has to reproduce
 //     the carriage returns.
-//  3. Whole-line match ignoring a uniform difference in leading whitespace,
-//     ported from Aider's replace_part_with_missing_leading_whitespace:
+//  3. Whole-line match ignoring a uniform difference in leading whitespace:
 //     models often drop or shrink the indentation of a block consistently
 //     across old and new. The replacement is re-indented by the same
 //     amount.

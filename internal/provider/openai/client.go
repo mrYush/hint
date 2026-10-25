@@ -7,11 +7,6 @@
 // fixture tests replay recorded byte streams, error mapping is explicit, and
 // the dialect quirks (tool-call fragments, usage chunks, gateway error
 // events) stay visible in this package instead of inside a dependency.
-//
-// The streaming loop and the index-keyed tool-call accumulator follow the
-// shape of Ollama's runner client (llm/llama_server.go, MIT) and the message
-// conversion follows opencode's provider (internal/llm/provider/openai.go,
-// MIT), both rewritten against the agentapi types.
 package openai
 
 import (

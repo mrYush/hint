@@ -238,18 +238,11 @@ If you believe you've found a security vulnerability, please do **not** open
 a public issue — contact the maintainer privately (see the repository owner's
 GitHub profile) and allow time for a fix.
 
-## Borrowed code and licensing
+## Licensing
 
-The plan deliberately studies other agents (opencode, Crush, Claude Code,
-Aider, Pi, …). The rule, from [docs/plan/risks.md](docs/plan/risks.md) R2:
-
-- Code may be borrowed **only** from MIT/Apache-licensed projects, with
-  attribution in the commit message.
-- FSL and proprietary projects (e.g. Crush, Claude Code) are pattern
-  references only — no copied code.
-
-`hint` itself is [MIT-licensed](LICENSE); by contributing you agree your
-contributions are provided under the same license.
+`hint` is [MIT-licensed](LICENSE); by contributing you agree your
+contributions are your own work, provided under the same license. Do not
+paste code from other projects into the tree.
 
 ## Questions
 

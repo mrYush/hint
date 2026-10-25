@@ -14,8 +14,7 @@ import (
 // the calls finished in: a session file and the next request must look the
 // same across runs of the same batch.
 //
-// Before WP0.11 this was a plain loop, one call after another, the way
-// opencode runs its batches. Independent reads of one batch now overlap
+// Before WP0.11 this was a plain loop, one call after another. Independent reads of one batch now overlap
 // (see schedule.go); everything the permission layer may ask about still
 // runs one at a time, in order, so the prompts keep their stable sequence.
 //

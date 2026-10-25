@@ -2,7 +2,7 @@
 
 > Status: Planned · Target release: **v0.4** · Estimate: 8–10 weeks (part-time)
 > Depends on: Phase 1
-> Exit bar: core parity with archived opencode / early Crush, plus `hint` reachable by and able to reach other agents.
+> Exit bar: core parity with a mature coding agent, plus `hint` reachable by and able to reach other agents.
 
 ## Goal
 
@@ -36,7 +36,7 @@ SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go
 
 ### WP2.2 — Repo map
 
-Reference — Aider. Requires tree-sitter (cgo) → build-tag isolation, see risks.
+Requires tree-sitter (cgo) → build-tag isolation, see risks.
 
 - [ ] go-tree-sitter parsing → def/ref tags per file
 - [ ] File graph + PageRank ranking of symbols
@@ -55,15 +55,11 @@ Reference — Aider. Requires tree-sitter (cgo) → build-tag isolation, see ris
 
 ### WP2.4 — Git integration
 
-Reference — Aider git-first.
-
 - [ ] `git` tool (status/diff/log/commit under the permission system)
 - [ ] Optional auto-commit of agent edits (config flag, off by default)
 - [ ] Dirty-tree guard: warn before the first write into a dirty repo
 
 ### WP2.5 — Compaction v2
-
-Reference — Claude Code pipeline.
 
 - [ ] Layered: microcompact tool outputs → summarize turns → hard truncation
 - [ ] Compaction records preserved in the session file (already a record kind)
