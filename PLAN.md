@@ -256,7 +256,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented.
     `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are set (2026-10-22).
-    `v0.3.0` publishes the signed repository to `gh-pages`; Pages is turned on for that branch after the push.
+    `v0.3.0` published the signed repository to `gh-pages` and Pages serves it (2026-10-25); `apt install hint` from `https://mryush.github.io/hint` verified on clean Debian 12 and Ubuntu 24.04 containers (amd64).
+    The arm64 package is in the index but has not been installed on a Raspberry Pi yet.
     Scoop is not started.
     The Homebrew cask field `homebrew_casks.binary` is replaced by `binaries` so `goreleaser check` passes.
     Still open after that: the Scoop bucket and the cask's `postflight_steps`.
