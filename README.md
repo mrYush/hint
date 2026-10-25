@@ -690,9 +690,22 @@ Details and the full audit:
    `hint --debug` shows the full response body.
    Present since `v0.3.0` (on `develop` since WP1.4).
 
-The OS secret store behind `api_key: keyring:<profile>` is exercised on Linux.
-On macOS and Windows the same call goes to the Keychain and the Credential Manager, and those two paths are unverified for this release.
-`secrets.store: file` does not need a store.
+**Limits of this release.** Three things are known and accepted for
+`v0.3.0`, not bugs to be fixed in a patch:
+
+- `bash` is not sandboxed. The file tools refuse hint's own config and
+  session files, and every tool result is scrubbed against the configured
+  keys, but an approved shell command runs as you and can read those
+  files. A sandbox for `bash` is a later work package (see [API
+  keys](#api-keys-and-what-the-agent-can-see)).
+- Input completion stays off by default (`completion.mode: off`). Every
+  request sends the text typed so far and the last question of the
+  conversation to the provider. Whether any other mode may become the
+  default waits on the quality evaluation, which did not gate this release.
+- The OS secret store behind `api_key: keyring:<profile>` is exercised on
+  Linux. On macOS and Windows the same call goes to the Keychain and the
+  Credential Manager, and those two paths are unverified for this release.
+  `secrets.store: file` does not need a store.
 
 ### Debug mode
 
