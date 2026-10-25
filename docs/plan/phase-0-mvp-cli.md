@@ -1341,15 +1341,16 @@ Pre-releases stay off every index, as they already stay off the cask.
       `brew install` without `--cask` selects that formula.
       Remove it, or the tap does not install the current version.
 - [x] Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
-- [ ] Debian family: an apt repository we operate.
+- [x] Debian family: an apt repository we operate.
       Suite `stable`, signed `Release`, index rebuilt from the current debs on each final tag.
       Implemented by `scripts/apt-repo.sh` and the last step of `release.yml`, served from the `gh-pages` branch at `https://mryush.github.io/hint`.
-      Index and signature built and checked with a throwaway key; still open until the first final tag publishes it and `apt install hint` is run on a clean Ubuntu and a Raspberry Pi.
-      Repository setup before that tag: enable Pages for `gh-pages` (Settings → Pages), see the signing-key item.
+      Published by `v0.3.0` (2026-10-25); Pages enabled for `gh-pages` the same day.
+      `apt install hint` with the README lines verified on clean `debian:bookworm` and `ubuntu:24.04` containers (amd64): signature accepted, `ripgrep` pulled in, `hint -v` reports `0.3.0`.
+      The arm64 package is indexed but not yet installed on a Raspberry Pi.
       One suite covers Ubuntu, Debian, Mint, Pop!_OS and Raspberry Pi OS, because the binary is built with `CGO_ENABLED=0` and does not need a per-distro-release archive.
-- [ ] The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
+- [x] The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
       The public half is what users add as the repository key.
-      Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); the key itself is not generated yet.
+      Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); both set 2026-10-22, used by the `v0.3.0` run.
 - [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
 - [ ] README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
       Done for apt and Homebrew; the Scoop bucket line waits for the bucket.
