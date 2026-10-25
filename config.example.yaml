@@ -1,0 +1,101 @@
+# hint configuration — every key, with its default.
+#
+# Copy this file to ~/.config/hint/config.yaml (or $XDG_CONFIG_HOME/hint/config.yaml)
+# for settings that apply everywhere, and/or to .hint/config.yaml in a repository
+# for settings that apply to that project only. `hint setup` writes the global file
+# for you and keeps whatever else is in it; `hint config set [--project] <key> <value>`
+# changes one key, checked against its type (`hint config keys` lists them).
+#
+# Layers, most specific first: command-line flags, HINT_* environment variables,
+# the project file, the global file, the built-in defaults. A key a more specific
+# layer does not mention is inherited from the next one. Profiles are matched by
+# `name`, so a project file can override one field (say `model`) of a global profile.
+#
+# Keep the API key out of a project file: it ends up in git. Use ${VAR} there, or
+# put the key in the global file (mode 0600).
+#
+# Only `providers` is needed to start; everything else has a default.
+
+# Provider profiles: named ways to reach a model. At least one is needed.
+# Any server of the OpenAI Chat Completions dialect is a provider: a model
+# behind vLLM (the example below), llama-server or LM Studio, a local Ollama,
+# OpenAI itself, or an aggregator such as OpenRouter or api-bar.ru.
+providers:
+  - name: vllm # required, unique; what default_provider / --provider refer to
+    kind: openai # openai (Chat Completions dialect, the default) | ollama
+    base_url: http://inference.example.net:8000/v1 # the server's OpenAI-compatible root;
+    #                                                hint appends /chat/completions.
+    #                                                Default for openai when omitted:
+    #                                                http://localhost:8000/v1 (vLLM on this
+    #                                                machine); for ollama: http://localhost:11434/v1
+    api_key: ${VLLM_API_KEY} # required for openai; $VAR and ${VAR} are expanded from the
+    #                          environment. A literal key works too (global file only).
+    #                          A vLLM started without a key accepts any value here
+    model: Qwen/Qwen2.5-Coder-32B-Instruct # required: a model the server serves (`hint models`
+    #                                        lists them). There is no default for either kind;
+    #                                        a server serves what was loaded into it
+    context_window: 32768 # tokens; sizes the compaction. Default: unknown, a built-in window
+    header_timeout: 60s # how long to wait for response headers, a Go duration with units.
+    #                     Default 60s; raise it for a local server on a small board
+    max_tokens_field: max_tokens # the request field for a reply's token limit:
+    #                              max_tokens (the default) | max_completion_tokens,
+    #                              which OpenAI's reasoning models (o-series, gpt-5) require
+
+  - name: local
+    kind: ollama # needs no key
+    base_url: http://localhost:11434/v1
+    model: qwen2.5:7b
+    context_window: 8192
+    header_timeout: 15m
+
+  # An aggregator is one more openai profile; uncomment and pick one:
+  # - name: cloud
+  #   kind: openai
+  #   base_url: https://openrouter.ai/api/v1 # or https://api-bar.ru/route/openai
+  #   api_key: ${OPENROUTER_API_KEY}
+  #   model: anthropic/claude-sonnet-4
+  #   context_window: 200000
+
+# The profile used for a run. Optional when there is exactly one profile.
+# Overridden by HINT_PROVIDER and --provider.
+default_provider: vllm
+
+# The profile tried when the default one is unreachable (network, timeout, 5xx).
+# Optional; must differ from default_provider. Overridden by HINT_FALLBACK_PROVIDER.
+fallback_provider: local
+
+# How much of the project is put in front of the model at the start.
+instructions:
+  budget: 32768 # bytes all HINT.md / AGENTS.md / CLAUDE.md files may take together.
+  #               HINT_INSTRUCTION_BUDGET, --instruction-budget
+  summarize: false # let the model summarize instruction files that do not fit even
+  #                  as outlines. HINT_INSTRUCTIONS_SUMMARIZE, --summarize-instructions
+
+overview:
+  depth: 2 # directory levels listed in the system prompt; 0 for none.
+  #          HINT_OVERVIEW_DEPTH, --overview-depth
+  max_entries: 100 # cap on the entries listed. HINT_OVERVIEW_ENTRIES, --overview-entries
+
+# Completion of what you type in the TUI: a short continuation from a model,
+# shown in the status line, Tab accepts it. Every request sends the text typed
+# so far and the last question to the provider, so it is off by default and
+# the modes differ in how often they ask. HINT_COMPLETION_MODE, --completion.
+completion:
+  mode: off # off | tab (ask only when Tab is pressed on a question) | idle (ask after
+  #           a pause in typing) | both. With a cloud profile the text leaves the
+  #           machine on every request; on a small machine a second model loaded
+  #           beside the main one slows both down, so prefer the session's profile
+  profile: "" # the profile that answers; empty: the session's own profile and model.
+  #             A separate small model is optional; name its profile here
+  model: "" # a model of that profile for completions; empty keeps the profile's
+  idle_after: 600ms # the pause that triggers a request in the idle mode
+  warn_after: 2s # after this long the status line says the completion model is slow
+
+# Where `hint setup` and /setup put an API key. The OS secret store (Secret
+# Service on Linux, Keychain on macOS, Credential Manager on Windows) keeps it
+# out of every file; the config then says `api_key: keyring:<profile>`.
+secrets:
+  store: auto # auto: the secret store when it answers, else this file (mode 0600)
+  #             with a warning | keyring: insist on the store | file: never use it
+  #             (a server, a container, CI). `hint config show-key <profile>` is the
+  #             one way to see a stored key again

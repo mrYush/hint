@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +35,8 @@ type Flags struct {
 	// SummarizeInstructions is --summarize-instructions: "true" or "false",
 	// a string so that an unset flag stays distinct from an explicit false.
 	SummarizeInstructions string
+	// Completion is --completion: a completion mode for this run.
+	Completion string
 }
 
 // Options are the external inputs of LoadFrom. Everything the loader touches
@@ -44,24 +48,54 @@ type Options struct {
 	WorkingDir string
 	LookupEnv  func(string) (string, bool)
 	Flags      Flags
+	// Keyring resolves api_key: keyring:<account> references. Nil means
+	// no secret store in this process: such a reference yields no key.
+	Keyring Keyring
+	// Draft skips the final validation: the configuration as the files,
+	// the environment and the flags say, for setup to show and complete.
+	// A draft may name no usable profile; errors reading or parsing a
+	// file are still errors.
+	Draft bool
 }
 
 // Load resolves configuration against the real process environment.
 func Load(flags Flags) (*Config, error) {
+	opts, err := processOptions(flags)
+	if err != nil {
+		return nil, err
+	}
+	return LoadFrom(opts)
+}
+
+// LoadDraft is Load without the final validation (Options.Draft): what
+// setup and `hint config` show and edit when a profile has no key or no
+// model yet — the very cases they exist for.
+func LoadDraft(flags Flags) (*Config, error) {
+	opts, err := processOptions(flags)
+	if err != nil {
+		return nil, err
+	}
+	opts.Draft = true
+	return LoadFrom(opts)
+}
+
+// processOptions are the Options of the running process.
+func processOptions(flags Flags) (Options, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "" // no home directory: global config is simply not read
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("config: resolving working directory: %w", err)
+		return Options{}, fmt.Errorf("config: resolving working directory: %w", err)
 	}
-	return LoadFrom(Options{
+	return Options{
 		HomeDir:    home,
 		WorkingDir: wd,
 		LookupEnv:  os.LookupEnv,
 		Flags:      flags,
-	})
+		Keyring:    OSKeyring{},
+	}, nil
 }
 
 // LoadFrom resolves configuration from the given inputs.
@@ -97,11 +131,16 @@ func LoadFrom(opts Options) (*Config, error) {
 	}
 	for _, p := range merged.Providers {
 		prof := Profile{
-			Name:    p.Name,
-			Kind:    Kind(p.Kind),
-			BaseURL: p.BaseURL,
-			APIKey:  p.APIKey,
-			Model:   p.Model,
+			Name:     p.Name,
+			Kind:     Kind(p.Kind),
+			BaseURL:  p.BaseURL,
+			APIKey:   p.APIKey,
+			Model:    p.Model,
+			KeyFrom:  p.keyFrom,
+			KeyRef:   p.keyRef,
+			KeyError: p.keyErr,
+
+			MaxTokensField: p.MaxTokensField,
 		}
 		if p.ContextWindow != nil {
 			prof.ContextWindow = *p.ContextWindow
@@ -130,8 +169,10 @@ func LoadFrom(opts Options) (*Config, error) {
 		return nil, err
 	}
 
-	if err := l.validate(cfg); err != nil {
-		return nil, err
+	if !opts.Draft {
+		if err := l.validate(cfg); err != nil {
+			return nil, err
+		}
 	}
 	cfg.Warnings = l.warnings
 	return cfg, nil
@@ -141,6 +182,8 @@ func LoadFrom(opts Options) (*Config, error) {
 type loader struct {
 	opts     Options
 	warnings []string
+	// keyEnv collects the ${VAR} names api_key values referred to.
+	keyEnv []string
 }
 
 func (l *loader) warnf(format string, args ...any) {
@@ -169,6 +212,8 @@ type fileConfig struct {
 	// apart from a file that says nothing.
 	Instructions fileInstructions `yaml:"instructions"`
 	Overview     fileOverview     `yaml:"overview"`
+	Completion   fileCompletion   `yaml:"completion"`
+	Secrets      fileSecrets      `yaml:"secrets"`
 
 	// Legacy flat schema (pre-WP0.2).
 	APIURL string `yaml:"api_url"`
@@ -185,7 +230,12 @@ type fileProfile struct {
 	ContextWindow *int   `yaml:"context_window"`
 	// HeaderTimeout is a Go duration string ("90s", "15m"); yaml.v3
 	// refuses a bare number for a time.Duration, so units are mandatory.
-	HeaderTimeout *time.Duration `yaml:"header_timeout"`
+	HeaderTimeout  *time.Duration `yaml:"header_timeout"`
+	MaxTokensField string         `yaml:"max_tokens_field"`
+	// keyFrom, keyRef and keyErr are filled by expand: where APIKey came
+	// from, and why a reference yielded nothing.
+	keyFrom, keyRef string
+	keyErr          error
 }
 
 type fileInstructions struct {
@@ -196,6 +246,18 @@ type fileInstructions struct {
 type fileOverview struct {
 	Depth      *int `yaml:"depth"`
 	MaxEntries *int `yaml:"max_entries"`
+}
+
+type fileSecrets struct {
+	Store string `yaml:"store"`
+}
+
+type fileCompletion struct {
+	Mode      string         `yaml:"mode"`
+	Profile   string         `yaml:"profile"`
+	Model     string         `yaml:"model"`
+	IdleAfter *time.Duration `yaml:"idle_after"`
+	WarnAfter *time.Duration `yaml:"warn_after"`
 }
 
 // GlobalDir returns the directory of the global configuration —
@@ -348,6 +410,9 @@ func mergeFiles(global, project fileConfig) fileConfig {
 			if pp.HeaderTimeout != nil {
 				out.Providers[i].HeaderTimeout = pp.HeaderTimeout
 			}
+			if pp.MaxTokensField != "" {
+				out.Providers[i].MaxTokensField = pp.MaxTokensField
+			}
 			merged = true
 			break
 		}
@@ -373,6 +438,27 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	if project.Overview.MaxEntries != nil {
 		out.Overview.MaxEntries = project.Overview.MaxEntries
 	}
+	// An explicit "off" in the project file is a non-empty value and
+	// beats the global file: a team can keep completion out of a
+	// repository a developer has it on everywhere else.
+	if project.Completion.Mode != "" {
+		out.Completion.Mode = project.Completion.Mode
+	}
+	if project.Completion.Profile != "" {
+		out.Completion.Profile = project.Completion.Profile
+	}
+	if project.Completion.Model != "" {
+		out.Completion.Model = project.Completion.Model
+	}
+	if project.Completion.IdleAfter != nil {
+		out.Completion.IdleAfter = project.Completion.IdleAfter
+	}
+	if project.Completion.WarnAfter != nil {
+		out.Completion.WarnAfter = project.Completion.WarnAfter
+	}
+	if project.Secrets.Store != "" {
+		out.Secrets.Store = project.Secrets.Store
+	}
 	return out
 }
 
@@ -381,12 +467,48 @@ func mergeFiles(global, project fileConfig) fileConfig {
 // the shell, which has already done its own expansion.
 func (l *loader) expand(fc *fileConfig) {
 	for i := range fc.Providers {
-		fc.Providers[i].BaseURL = expandValue(fc.Providers[i].BaseURL, l.opts.LookupEnv)
-		fc.Providers[i].APIKey = expandValue(fc.Providers[i].APIKey, l.opts.LookupEnv)
-		fc.Providers[i].Model = expandValue(fc.Providers[i].Model, l.opts.LookupEnv)
+		p := &fc.Providers[i]
+		p.BaseURL = expandValue(p.BaseURL, l.opts.LookupEnv)
+		p.APIKey, p.keyFrom, p.keyRef, p.keyErr = l.resolveKey(p.Name, p.APIKey)
+		p.Model = expandValue(p.Model, l.opts.LookupEnv)
 	}
 	fc.DefaultProvider = expandValue(fc.DefaultProvider, l.opts.LookupEnv)
 	fc.FallbackProvider = expandValue(fc.FallbackProvider, l.opts.LookupEnv)
+}
+
+// envRefs matches the $VAR and ${VAR} references os.Expand understands.
+var envRefs = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
+
+// resolveKey turns an api_key value into the key and says where it came
+// from: a keyring:<account> reference is read from the secret store (the
+// profile's name when the account is empty), a ${VAR} reference from the
+// environment — and its name is remembered, so no tool subprocess sees
+// it — and anything else is the key itself.
+func (l *loader) resolveKey(profile, value string) (key, from, ref string, err error) {
+	if value == "" {
+		return "", "", "", nil
+	}
+	if account, ok := KeyringRef(value); ok {
+		if account == "" {
+			account = profile
+		}
+		ref = KeyringValue(account)
+		if l.opts.Keyring == nil {
+			return "", KeyFromKeyring, ref, errors.New("no secret store in this process")
+		}
+		key, err := l.opts.Keyring.Get(account)
+		if err != nil {
+			return "", KeyFromKeyring, ref, err
+		}
+		return key, KeyFromKeyring, ref, nil
+	}
+	if names := envRefs.FindAllStringSubmatch(value, -1); len(names) > 0 {
+		for _, m := range names {
+			l.keyEnv = append(l.keyEnv, m[1])
+		}
+		return expandValue(value, l.opts.LookupEnv), KeyFromEnv, value, nil
+	}
+	return value, KeyFromFile, "", nil
 }
 
 // applyEnvScalars overlays the HINT_* variables that are not tied to a
@@ -413,46 +535,50 @@ func (l *loader) applyEnvScalars(cfg *Config) {
 // synthesizeIfEmpty provides the zero-config path: with no profiles from any
 // file, a single profile is built from well-known key variables. Implicit
 // key pickup happens ONLY here — an explicit profile must name its key via
-// ${VAR}; the loader never guesses a key for it. api-bar is the product
-// default, OPENAI_API_KEY is the legacy path, and when both are present
-// api-bar wins.
+// ${VAR}; the loader never guesses a key for it. Each hosted endpoint has
+// its own variable (APIBAR_KEY or APIBAR_TOKEN for the api-bar gateway,
+// OPENAI_API_KEY for api.openai.com) and api-bar wins when both are set;
+// API_BAR_KEY is the earlier spelling and still works, with a warning.
+// A bare HINT_API_KEY or --api-key lands on the kind default: a server on
+// this machine.
 func (l *loader) synthesizeIfEmpty(cfg *Config) {
 	if len(cfg.Providers) > 0 {
 		return
 	}
-	if key, ok := l.env("API_BAR_KEY"); ok {
-		l.addSynthetic(cfg, "api-bar", key)
-		return
-	}
-	if key, ok := l.env("APIBAR_TOKEN"); ok {
-		l.addSynthetic(cfg, "api-bar", key)
+	for _, name := range []string{"APIBAR_KEY", "APIBAR_TOKEN", "API_BAR_KEY"} {
+		key, ok := l.env(name)
+		if !ok {
+			continue
+		}
+		if name == "API_BAR_KEY" {
+			l.warnf("API_BAR_KEY is the old name of APIBAR_KEY; rename it")
+		}
+		l.addSynthetic(cfg, "api-bar", defaultAPIBarBaseURL, hostedDefaultModel, key)
 		return
 	}
 	if key, ok := l.env("OPENAI_API_KEY"); ok {
-		cfg.Providers = append(cfg.Providers, Profile{
-			Name:    "openai",
-			Kind:    KindOpenAI,
-			BaseURL: defaultOpenAIBaseURL,
-			APIKey:  key,
-		})
-		if cfg.DefaultProvider == "" {
-			cfg.DefaultProvider = "openai"
-		}
+		l.addSynthetic(cfg, "openai", defaultOpenAIBaseURL, hostedDefaultModel, key)
 		return
 	}
 	// No well-known key, but a key may still arrive via HINT_API_KEY or
-	// --api-key: give the overlays a profile to land on.
+	// --api-key: give the overlays a profile to land on. The model has to
+	// come the same way (HINT_MODEL, --model); validate says so otherwise.
 	_, envKey := l.env("HINT_API_KEY")
 	if envKey || l.opts.Flags.APIKey != "" {
-		l.addSynthetic(cfg, "default", "")
+		l.addSynthetic(cfg, "default", "", "", "")
 	}
 }
 
-func (l *loader) addSynthetic(cfg *Config, name, key string) {
+// addSynthetic appends an openai profile and makes it the default when
+// nothing named one. An empty baseURL leaves the kind default to
+// applyKindDefaults; an empty model stays empty.
+func (l *loader) addSynthetic(cfg *Config, name, baseURL, model, key string) {
 	cfg.Providers = append(cfg.Providers, Profile{
-		Name:   name,
-		Kind:   KindOpenAI,
-		APIKey: key, // BaseURL/Model filled by applyKindDefaults (api-bar gateway)
+		Name:    name,
+		Kind:    KindOpenAI,
+		BaseURL: baseURL,
+		Model:   model,
+		APIKey:  key,
 	})
 	if cfg.DefaultProvider == "" {
 		cfg.DefaultProvider = name
@@ -478,7 +604,7 @@ func (l *loader) overlaySelected(cfg *Config) error {
 		p.BaseURL = v
 	}
 	if v, ok := l.env("HINT_API_KEY"); ok {
-		p.APIKey = v
+		p.APIKey, p.KeyFrom, p.KeyRef, p.KeyError = v, KeyFromOverlay, "", nil
 	}
 	if v, ok := l.env("HINT_MODEL"); ok {
 		p.Model = v
@@ -487,7 +613,7 @@ func (l *loader) overlaySelected(cfg *Config) error {
 		p.BaseURL = l.opts.Flags.APIURL
 	}
 	if l.opts.Flags.APIKey != "" {
-		p.APIKey = l.opts.Flags.APIKey
+		p.APIKey, p.KeyFrom, p.KeyRef, p.KeyError = l.opts.Flags.APIKey, KeyFromOverlay, "", nil
 	}
 	if l.opts.Flags.Model != "" {
 		p.Model = l.opts.Flags.Model
@@ -537,7 +663,74 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if cfg.Overview.MaxEntries <= 0 {
 		cfg.Overview.MaxEntries = DefaultOverviewEntries
 	}
+	if err := l.resolveCompletion(cfg, files.Completion); err != nil {
+		return err
+	}
+	cfg.keyEnv = append([]string(nil), l.keyEnv...)
+	cfg.SecretStore.Store = SecretStore(files.Secrets.Store)
+	switch cfg.SecretStore.Store {
+	case "":
+		cfg.SecretStore.Store = StoreAuto
+	case StoreAuto, StoreKeyring, StoreFile:
+	default:
+		return fmt.Errorf("config: secrets.store must be auto, keyring or file, not %q", cfg.SecretStore.Store)
+	}
 	return nil
+}
+
+// resolveCompletion settles the completion: block: the merged files, then
+// HINT_COMPLETION_MODE, then --completion for the mode; the durations
+// from the files or the defaults. A profile it names must exist and be
+// usable, or the block is switched off with a warning — a project file
+// must not stop a run for a profile only one developer has.
+func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
+	c := &cfg.Completion
+	c.Mode = CompletionMode(fc.Mode)
+	c.Profile, c.Model = fc.Profile, fc.Model
+	c.IdleAfter, c.WarnAfter = DefaultCompletionIdleAfter, DefaultCompletionWarnAfter
+	if fc.IdleAfter != nil {
+		c.IdleAfter = *fc.IdleAfter
+	}
+	if fc.WarnAfter != nil {
+		c.WarnAfter = *fc.WarnAfter
+	}
+	if v, ok := l.env("HINT_COMPLETION_MODE"); ok {
+		if validCompletionMode(v) {
+			c.Mode = CompletionMode(v)
+		} else {
+			l.warnf("HINT_COMPLETION_MODE=%q is not a completion mode and was ignored", v)
+		}
+	}
+	if v := l.opts.Flags.Completion; v != "" {
+		if !validCompletionMode(v) {
+			return fmt.Errorf("config: --completion must be off, tab, idle or both, not %q", v)
+		}
+		c.Mode = CompletionMode(v)
+	}
+	switch {
+	case c.Mode == "":
+		c.Mode = CompletionOff
+	case !validCompletionMode(string(c.Mode)):
+		return fmt.Errorf("config: completion.mode must be off, tab, idle or both, not %q", c.Mode)
+	}
+	if c.IdleAfter <= 0 || c.WarnAfter <= 0 {
+		return errors.New("config: completion.idle_after and completion.warn_after must be positive durations")
+	}
+	if c.Profile != "" && c.Mode != CompletionOff {
+		if _, err := cfg.Usable(c.Profile, "completion"); err != nil {
+			l.warnf("completion is off: %s", strings.TrimPrefix(err.Error(), "config: "))
+			c.Mode = CompletionOff
+		}
+	}
+	return nil
+}
+
+func validCompletionMode(v string) bool {
+	switch CompletionMode(v) {
+	case CompletionOff, CompletionTab, CompletionIdle, CompletionBoth:
+		return true
+	}
+	return false
 }
 
 // overlayBool applies the environment variable and then the flag to *dst,
@@ -607,18 +800,16 @@ func applyKindDefaults(cfg *Config) {
 		switch p.Kind {
 		case KindOpenAI:
 			if p.BaseURL == "" {
-				p.BaseURL = defaultAPIBarBaseURL
-			}
-			if p.Model == "" {
-				p.Model = defaultOpenAIModel
+				p.BaseURL = defaultVLLMBaseURL
 			}
 		case KindOllama:
 			if p.BaseURL == "" {
 				p.BaseURL = defaultOllamaBaseURL
 			}
-			// An empty model stays empty: there is no sane default for a
-			// local install, validate rejects it for selected profiles.
 		}
+		// An empty model stays empty for either kind: a server serves
+		// whatever was loaded into it, and validate rejects a selected
+		// profile that names none.
 	}
 }
 
@@ -628,7 +819,7 @@ func applyKindDefaults(cfg *Config) {
 // not prevent the run from starting; it fails when selected.
 func (l *loader) validate(cfg *Config) error {
 	if len(cfg.Providers) == 0 {
-		return errors.New("config: no provider configured: set API_BAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml")
+		return ErrNoProvider
 	}
 	for _, p := range cfg.Providers {
 		switch p.Kind {
@@ -638,6 +829,11 @@ func (l *loader) validate(cfg *Config) error {
 		}
 		if p.HeaderTimeout < 0 {
 			return fmt.Errorf("config: profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
+		}
+		switch p.MaxTokensField {
+		case "", FieldMaxTokens, FieldMaxCompletionTokens:
+		default:
+			return fmt.Errorf("config: profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
 		}
 	}
 	if cfg.DefaultProvider == "" {
@@ -667,19 +863,6 @@ func (l *loader) validate(cfg *Config) error {
 }
 
 func (l *loader) validateUsable(cfg *Config, name, role string) error {
-	p, err := cfg.Profile(name)
-	if err != nil {
-		return err
-	}
-	switch p.Kind {
-	case KindOpenAI:
-		if p.APIKey == "" {
-			return fmt.Errorf("config: %s profile %q needs an API key: set api_key (e.g. ${API_BAR_KEY}), HINT_API_KEY, or --api-key", role, p.Name)
-		}
-	case KindOllama:
-		if p.Model == "" {
-			return fmt.Errorf("config: %s profile %q (kind ollama) needs an explicit model", role, p.Name)
-		}
-	}
-	return nil
+	_, err := cfg.Usable(name, role)
+	return err
 }

@@ -158,6 +158,37 @@ func TestStreamTextWithUsage(t *testing.T) {
 	}
 }
 
+// TestMaxTokensField pins where the reply's token limit goes: max_tokens
+// by default, max_completion_tokens alone when the profile says so.
+func TestMaxTokensField(t *testing.T) {
+	for _, field := range []string{"", config.FieldMaxTokens, config.FieldMaxCompletionTokens} {
+		srv, cap := serveFixture(t, "text.sse")
+		p := testProfile(srv.URL)
+		p.MaxTokensField = field
+		req := simpleRequest()
+		req.MaxTokens = 24
+		ch, err := New(p, WithHTTPClient(srv.Client())).Stream(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Stream: %v", err)
+		}
+		collect(t, ch)
+		var wire map[string]any
+		if err := json.Unmarshal(cap.body, &wire); err != nil {
+			t.Fatalf("request body: %v", err)
+		}
+		want, other := config.FieldMaxTokens, config.FieldMaxCompletionTokens
+		if field == config.FieldMaxCompletionTokens {
+			want, other = other, want
+		}
+		if wire[want] != 24.0 {
+			t.Errorf("field %q: %s = %v, want 24", field, want, wire[want])
+		}
+		if _, ok := wire[other]; ok {
+			t.Errorf("field %q: %s sent too", field, other)
+		}
+	}
+}
+
 func TestStreamSplitToolCalls(t *testing.T) {
 	srv, _ := serveFixture(t, "tools.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))

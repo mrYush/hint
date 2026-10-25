@@ -12,13 +12,16 @@ import (
 // outside it may depend on the exact JSON shape.
 
 type wireRequest struct {
-	Model         string             `json:"model"`
-	Messages      []wireMessage      `json:"messages"`
-	Tools         []wireTool         `json:"tools,omitempty"`
-	Temperature   *float64           `json:"temperature,omitempty"`
-	MaxTokens     int                `json:"max_tokens,omitempty"`
-	Stream        bool               `json:"stream"`
-	StreamOptions *wireStreamOptions `json:"stream_options,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []wireMessage `json:"messages"`
+	Tools       []wireTool    `json:"tools,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	// MaxCompletionTokens replaces MaxTokens for a profile whose
+	// max_tokens_field says so; never both.
+	MaxCompletionTokens int                `json:"max_completion_tokens,omitempty"`
+	Stream              bool               `json:"stream"`
+	StreamOptions       *wireStreamOptions `json:"stream_options,omitempty"`
 }
 
 type wireStreamOptions struct {
