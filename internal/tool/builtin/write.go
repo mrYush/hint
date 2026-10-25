@@ -57,7 +57,7 @@ func (t *writeFile) Run(_ context.Context, callID string, args json.RawMessage) 
 	rel := t.root.Rel(abs)
 
 	var previous int64 = -1
-	if info, err := os.Stat(abs); err == nil {
+	if info, err := t.root.Stat(abs); err == nil {
 		if info.IsDir() {
 			return agentapi.ErrorResult(callID, writeFileName, fmt.Sprintf("%s is a directory", rel)), nil
 		}
@@ -66,10 +66,10 @@ func (t *writeFile) Run(_ context.Context, callID string, args json.RawMessage) 
 		return agentapi.ErrorResult(callID, writeFileName, pathError(t.root, abs, err)), nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+	if err := t.root.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return agentapi.ErrorResult(callID, writeFileName, pathError(t.root, filepath.Dir(abs), err)), nil
 	}
-	if err := writeAtomic(abs, []byte(in.Content), 0o644); err != nil {
+	if err := writeAtomic(t.root, abs, []byte(in.Content), 0o644); err != nil {
 		return agentapi.ErrorResult(callID, writeFileName, pathError(t.root, abs, err)), nil
 	}
 
@@ -98,7 +98,7 @@ func (t *writeFile) Describe(_ context.Context, args json.RawMessage) (tool.Desc
 	}
 	rel := t.root.Rel(abs)
 
-	data, info, err := readWhole(abs, maxEditSize)
+	data, info, err := readWhole(t.root, abs, maxEditSize)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return tool.Description{

@@ -19,7 +19,7 @@ committing.
 `go test -tags live ./internal/provider/...` runs the optional live matrix
 (streaming text + one tool-call round trip). It expects:
 
-- `API_BAR_KEY` — api-bar.ru gateway profile
+- `APIBAR_KEY` — api-bar.ru gateway profile
 - `OPENAI_API_KEY` — api.openai.com
 - Ollama listening on `localhost:11434` with a small model pulled
 

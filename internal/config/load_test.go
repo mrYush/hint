@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -300,6 +302,39 @@ providers:
 	}
 }
 
+// TestDraftKeepsAProfileWithoutAKey: the profile setup is about to
+// complete still comes back as configured, base_url and model included,
+// while a file that does not parse is an error even for a draft.
+func TestDraftKeepsAProfileWithoutAKey(t *testing.T) {
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
+default_provider: router
+providers:
+  - name: router
+    kind: openai
+    base_url: https://openrouter.ai/api/v1
+    model: qwen/qwen3-coder
+    api_key: ${UNSET_KEY}
+`)
+	if _, err := LoadFrom(opts); err == nil {
+		t.Fatal("a profile without a key loaded; want the validation error")
+	}
+	opts.Draft = true
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatalf("draft: %v", err)
+	}
+	p := mustDefault(t, cfg)
+	if p.BaseURL != "https://openrouter.ai/api/v1" || p.Model != "qwen/qwen3-coder" || p.APIKey != "" {
+		t.Errorf("draft profile = %+v; want the file's base_url and model, no key", p)
+	}
+
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "providers: [\n")
+	if _, err := LoadFrom(opts); err == nil {
+		t.Error("a draft over a file that does not parse loaded")
+	}
+}
+
 func TestFlatConfigMigration(t *testing.T) {
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
@@ -329,6 +364,7 @@ providers:
   - name: p
     kind: openai
     api_key: real-key
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -348,6 +384,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -365,12 +402,14 @@ providers:
   - name: canon
     kind: openai
     api_key: k
+    model: m
 `)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint.yaml"), `
 providers:
   - name: legacy
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -393,6 +432,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -414,6 +454,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -433,14 +474,24 @@ func TestZeroConfig(t *testing.T) {
 		wantBaseURL string
 		wantModel   string
 		wantKey     string
+		wantWarning string
 	}{
 		{
-			name:        "API_BAR_KEY makes api-bar the default",
+			name:        "APIBAR_KEY makes api-bar the default",
+			env:         map[string]string{"APIBAR_KEY": "bar-key"},
+			wantName:    "api-bar",
+			wantBaseURL: "https://api-bar.ru/route/openai",
+			wantModel:   "gpt-4o",
+			wantKey:     "bar-key",
+		},
+		{
+			name:        "API_BAR_KEY, the old spelling, still works",
 			env:         map[string]string{"API_BAR_KEY": "bar-key"},
 			wantName:    "api-bar",
 			wantBaseURL: "https://api-bar.ru/route/openai",
 			wantModel:   "gpt-4o",
 			wantKey:     "bar-key",
+			wantWarning: "API_BAR_KEY is the old name",
 		},
 		{
 			name:        "APIBAR_TOKEN works too",
@@ -461,7 +512,7 @@ func TestZeroConfig(t *testing.T) {
 		{
 			name: "api-bar wins over openai when both keys are set",
 			env: map[string]string{
-				"API_BAR_KEY":    "bar-key",
+				"APIBAR_KEY":     "bar-key",
 				"OPENAI_API_KEY": "sk-x",
 			},
 			wantName:    "api-bar",
@@ -470,19 +521,19 @@ func TestZeroConfig(t *testing.T) {
 			wantKey:     "bar-key",
 		},
 		{
-			name:        "flags alone synthesize a profile on the product default",
-			flags:       Flags{APIKey: "flag-key"},
+			name:        "flags alone synthesize a profile on the kind default, a local server",
+			flags:       Flags{APIKey: "flag-key", Model: "flag-model"},
 			wantName:    "default",
-			wantBaseURL: "https://api-bar.ru/route/openai",
-			wantModel:   "gpt-4o",
+			wantBaseURL: "http://localhost:8000/v1",
+			wantModel:   "flag-model",
 			wantKey:     "flag-key",
 		},
 		{
-			name:        "HINT_API_KEY alone synthesizes on the product default",
-			env:         map[string]string{"HINT_API_KEY": "hint-key"},
+			name:        "HINT_API_KEY and HINT_MODEL synthesize on the kind default",
+			env:         map[string]string{"HINT_API_KEY": "hint-key", "HINT_MODEL": "env-model"},
 			wantName:    "default",
-			wantBaseURL: "https://api-bar.ru/route/openai",
-			wantModel:   "gpt-4o",
+			wantBaseURL: "http://localhost:8000/v1",
+			wantModel:   "env-model",
 			wantKey:     "hint-key",
 		},
 	}
@@ -500,8 +551,25 @@ func TestZeroConfig(t *testing.T) {
 				t.Errorf("profile = %#v, want name=%q base_url=%q model=%q key=%q",
 					p, tt.wantName, tt.wantBaseURL, tt.wantModel, tt.wantKey)
 			}
+			warned := strings.Contains(strings.Join(cfg.Warnings, "\n"), tt.wantWarning)
+			if tt.wantWarning != "" && !warned {
+				t.Errorf("warnings = %v, want one about %q", cfg.Warnings, tt.wantWarning)
+			}
+			if tt.wantWarning == "" && len(cfg.Warnings) != 0 {
+				t.Errorf("unexpected warnings %v", cfg.Warnings)
+			}
 		})
 	}
+
+	t.Run("a key without a model is an error that names the model", func(t *testing.T) {
+		opts := dirs(t)
+		opts.LookupEnv = lookup(map[string]string{"HINT_API_KEY": "hint-key"})
+		_, err := LoadFrom(opts)
+		var noModel *NoModelError
+		if !errors.As(err, &noModel) || !strings.Contains(err.Error(), "needs a model") {
+			t.Errorf("want a no-model error, got %v", err)
+		}
+	})
 
 	t.Run("nothing configured is an error", func(t *testing.T) {
 		opts := dirs(t)
@@ -512,20 +580,21 @@ func TestZeroConfig(t *testing.T) {
 	})
 }
 
-func TestOpenAIKindDefaultsToAPIBarNotOpenAICom(t *testing.T) {
+func TestOpenAIKindDefaultsToALocalServerNotOpenAICom(t *testing.T) {
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 	p := mustDefault(t, cfg)
-	if p.BaseURL != "https://api-bar.ru/route/openai" {
+	if p.BaseURL != "http://localhost:8000/v1" {
 		t.Errorf("base_url = %q, want the api-bar gateway", p.BaseURL)
 	}
 	if strings.Contains(p.BaseURL, "api.openai.com") {
@@ -564,6 +633,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: spare
     kind: openai
 default_provider: p
@@ -576,6 +646,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: fb
     kind: openai
 default_provider: p
@@ -599,6 +670,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: bad
     kind: anthropic
 default_provider: p
@@ -612,6 +684,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 default_provider: nope
 `,
 			wantErr: "default_provider",
@@ -623,6 +696,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
   - name: p
     kind: ollama
     model: llama3
@@ -636,6 +710,7 @@ providers:
   - name: a
     kind: openai
     api_key: k
+    model: m
   - name: b
     kind: ollama
     model: llama3
@@ -668,6 +743,7 @@ providers:
   - name: only
     kind: openai
     api_key: k
+    model: m
 `)
 	cfg, err := LoadFrom(opts)
 	if err != nil {
@@ -685,6 +761,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 	opts.LookupEnv = lookup(map[string]string{"HINT_DEBUG": "true"})
 	cfg, err := LoadFrom(opts)
@@ -735,6 +812,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `
 	t.Run("defaults", func(t *testing.T) {
 		opts := dirs(t)
@@ -865,6 +943,7 @@ providers:
     kind: openai
     base_url: http://127.0.0.1:8080/v1
     api_key: local
+    model: m
     header_timeout: 90s
 `)
 		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
@@ -888,6 +967,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
 `)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
@@ -910,6 +990,7 @@ providers:
   - name: p
     kind: openai
     api_key: k
+    model: m
     header_timeout: `+value+`
 `)
 			if _, err := LoadFrom(opts); err == nil {
@@ -917,4 +998,216 @@ providers:
 			}
 		})
 	}
+}
+
+func TestCompletionBlockLayersAndGuards(t *testing.T) {
+	global := `
+providers:
+  - name: big
+    kind: openai
+    api_key: k
+    model: m
+  - name: small
+    kind: ollama
+    model: tiny
+default_provider: big
+completion:
+  mode: idle
+  profile: small
+  idle_after: 900ms
+`
+	t.Run("files merge key by key with the defaults behind", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), global)
+		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "completion:\n  mode: \"off\"\n")
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := cfg.Completion
+		if c.Mode != CompletionOff || c.Profile != "small" || c.IdleAfter != 900*time.Millisecond || c.WarnAfter != DefaultCompletionWarnAfter {
+			t.Errorf("completion = %+v; want the project's off over the global idle, the global profile and pause, the default warn", c)
+		}
+	})
+	t.Run("env and flag beat the files", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), global)
+		opts.LookupEnv = lookup(map[string]string{"HINT_COMPLETION_MODE": "tab"})
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("env: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionTab {
+			t.Errorf("env: mode = %v", cfg.Completion.Mode)
+		}
+		opts.Flags.Completion = "both"
+		cfg, err = LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("flag: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionBoth || !cfg.Completion.Mode.OnTab() || !cfg.Completion.Mode.OnIdle() {
+			t.Errorf("flag: mode = %v", cfg.Completion.Mode)
+		}
+		opts.Flags.Completion = "sometimes"
+		if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "--completion") {
+			t.Errorf("a bad flag value was accepted: %v", err)
+		}
+	})
+	t.Run("an unusable completion profile switches the block off with a warning", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), strings.Replace(global, "profile: small", "profile: gone", 1))
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatalf("a missing completion profile stopped the run: %v", err)
+		}
+		if cfg.Completion.Mode != CompletionOff || len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "completion is off") {
+			t.Errorf("completion = %+v, warnings %v", cfg.Completion, cfg.Warnings)
+		}
+	})
+	t.Run("defaults when the block is absent", func(t *testing.T) {
+		opts := dirs(t)
+		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), strings.SplitN(global, "completion:", 2)[0])
+		cfg, err := LoadFrom(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := cfg.Completion; c.Mode != CompletionOff || c.IdleAfter != DefaultCompletionIdleAfter || c.WarnAfter != DefaultCompletionWarnAfter {
+			t.Errorf("completion = %+v", c)
+		}
+	})
+}
+
+func TestKeyringReferencesAndKeySources(t *testing.T) {
+	file := `
+providers:
+  - name: stored
+    kind: openai
+    api_key: "keyring:" # the account defaults to the profile's name
+    model: m
+  - name: named
+    kind: openai
+    api_key: "keyring: team-key"
+    model: m
+  - name: fromenv
+    kind: openai
+    api_key: ${MY_KEY}
+    model: m
+  - name: literal
+    kind: openai
+    api_key: sk-literal-1234567890
+    model: m
+  - name: missing
+    kind: openai
+    api_key: keyring:nope
+    model: m
+default_provider: stored
+`
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), file)
+	opts.LookupEnv = lookup(map[string]string{"MY_KEY": "sk-from-env-1234567890"})
+	opts.Keyring = MapKeyring{"stored": "sk-stored-1234567890", "team-key": "sk-team-1234567890"}
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][3]string{
+		"stored":  {"sk-stored-1234567890", KeyFromKeyring, "keyring:stored"},
+		"named":   {"sk-team-1234567890", KeyFromKeyring, "keyring:team-key"},
+		"fromenv": {"sk-from-env-1234567890", KeyFromEnv, "${MY_KEY}"},
+		"literal": {"sk-literal-1234567890", KeyFromFile, ""},
+		"missing": {"", KeyFromKeyring, "keyring:nope"},
+	}
+	for name, w := range want {
+		p, err := cfg.Profile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.APIKey != w[0] || p.KeyFrom != w[1] || p.KeyRef != w[2] {
+			t.Errorf("%s = key %q from %q ref %q; want %v", name, p.APIKey, p.KeyFrom, p.KeyRef, w)
+		}
+	}
+	// A missing entry is reported with the reference and the cause.
+	_, err = cfg.Usable("missing", "selected")
+	var noKey *NoKeyError
+	if !errors.As(err, &noKey) || noKey.Ref != "keyring:nope" || !errors.Is(err, ErrKeyringNotFound) || !strings.Contains(err.Error(), "secret store") {
+		t.Errorf("missing entry = %v", err)
+	}
+	// The variables api_key referred to are what a subprocess must not
+	// see, with the well-known ones; the secrets are every key loaded.
+	env := cfg.SecretEnv()
+	for _, name := range []string{"MY_KEY", "APIBAR_KEY", "OPENAI_API_KEY", "HINT_API_KEY"} {
+		if !slices.Contains(env, name) {
+			t.Errorf("SecretEnv lacks %s: %v", name, env)
+		}
+	}
+	if secrets := cfg.Secrets(); len(secrets) != 4 {
+		t.Errorf("Secrets = %d values, want the four keys", len(secrets))
+	}
+
+	// An overlay replaces the key and says so.
+	opts.LookupEnv = lookup(map[string]string{"MY_KEY": "x", "HINT_API_KEY": "sk-overlay-1234567890"})
+	cfg, err = LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.Profile("stored"); p.APIKey != "sk-overlay-1234567890" || p.KeyFrom != KeyFromOverlay || p.KeyRef != "" {
+		t.Errorf("overlay: %+v", p)
+	}
+	// No store in the process: a reference yields nothing, and says why.
+	opts.Keyring = nil
+	cfg, err = LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := cfg.Profile("named"); p.APIKey != "" || p.KeyError == nil || !strings.Contains(p.KeyError.Error(), "no secret store") {
+		t.Errorf("without a keyring: %+v, %v", p, p.KeyError)
+	}
+}
+
+func TestFilterEnviron(t *testing.T) {
+	env := []string{"PATH=/bin", "APIBAR_KEY=sk-1", "MY_KEY=sk-2", "COPY=sk-2", "EMPTY=", "PLAIN=hello", "NOEQ"}
+	got := FilterEnviron(env, []string{"APIBAR_KEY", "MY_KEY"}, []string{"sk-2", ""})
+	want := []string{"PATH=/bin", "EMPTY=", "PLAIN=hello", "NOEQ"}
+	if !slices.Equal(got, want) {
+		t.Errorf("FilterEnviron = %v, want %v", got, want)
+	}
+}
+
+func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), "providers:\n  - name: p\n    kind: openai\n    api_key: k-1234567890\n    model: m\nsecrets:\n  store: file\n")
+	cfg, err := LoadFrom(opts)
+	if err != nil || cfg.SecretStore.Store != StoreFile {
+		t.Errorf("store = %v, %v", cfg.SecretStore.Store, err)
+	}
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "secrets:\n  store: vault\n")
+	if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "secrets.store") {
+		t.Errorf("a bad store was accepted: %v", err)
+	}
+	if !KeyringAvailable(MapKeyring{}) || KeyringAvailable(nil) || KeyringAvailable(failingKeyring{}) {
+		t.Error("KeyringAvailable misjudges a store")
+	}
+	m := MapKeyring{}
+	if err := m.Set("a", "s"); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := m.Get("a"); err != nil || v != "s" {
+		t.Errorf("MapKeyring round trip: %q, %v", v, err)
+	}
+	if err := m.Delete("a"); err != nil || m.Delete("a") == nil {
+		t.Error("MapKeyring delete")
+	}
+}
+
+// failingKeyring is a store that does not answer: no Secret Service.
+type failingKeyring struct{}
+
+func (failingKeyring) Get(string) (string, error) {
+	return "", errors.New("config: secret store: no D-Bus session")
+}
+func (failingKeyring) Set(string, string) error {
+	return errors.New("config: secret store: no D-Bus session")
+}
+func (failingKeyring) Delete(string) error {
+	return errors.New("config: secret store: no D-Bus session")
 }

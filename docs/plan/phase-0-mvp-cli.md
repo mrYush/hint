@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: In progress · Target release: **v0.2.0** · Estimate: 6–10 weeks (part-time)
+> Status: Released v0.2.0 · WP0.14 runs in parallel with Phase 1 and does not gate v0.3 · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -152,6 +152,16 @@ depend on them:
   remains an explicit profile (or the `OPENAI_API_KEY`-only zero-config
   fallback). Revisit before a public release: a personal gateway as the
   compiled-in default is fine for the maintainer, not for strangers.
+  **Revisited 2026-10-18 (on `dev/wp1.5-session-ops`):** the kind default
+  for an `openai` profile without `base_url` is now `http://localhost:8000/v1`,
+  a vLLM-style server on this machine; api-bar is reached only by the
+  zero-config profile its own variable synthesizes, and that variable is
+  `APIBAR_KEY` (`APIBAR_TOKEN` too; `API_BAR_KEY` still works with a
+  warning). Docs and examples lead with a vLLM-served model; aggregators
+  (OpenRouter, api-bar.ru) are one more `openai` profile. The `model`
+  default (`gpt-4o`) went with it: every profile names its model, as
+  `ollama` profiles always had to, and only the two zero-config profiles
+  carry `gpt-4o` because their hosted endpoints are known to serve it.
 - **The default profile NAME is resolved before field overlays.**
   `--provider` → `HINT_PROVIDER` → files; only then do `HINT_API_KEY` /
   `HINT_API_URL` / `HINT_MODEL` and `--api-*` apply, and only to that
@@ -1316,6 +1326,54 @@ Decisions recorded when the package was planned:
   gemini-cli's and goose's import syntaxes buy little over a directory
   of files and add a parser that can loop.
 
+### WP0.14 — Install indexes for Debian and Windows
+
+`v0.2.0` publishes GitHub Release archives and the Homebrew cask.
+This package adds the indexes still missing so the same final version is what `apt` and a Windows package manager install.
+It does not reopen `v0.2.0` and it does not gate Phase 1 (`v0.3`): the two proceed in parallel.
+Pre-releases stay off every index, as they already stay off the cask.
+
+- [x] macOS: Homebrew cask in `mrYush/homebrew-tap` (`brew install --cask mrYush/tap/hint`), shipped with `v0.2.0`.
+      Later final tags keep updating it.
+- [ ] macOS: the next cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
+      Editing the generated `Casks/hint.rb` by hand does not survive the following release.
+- [ ] macOS: `homebrew-tap` still has a root formula `hint.rb` at `0.1.0`.
+      `brew install` without `--cask` selects that formula.
+      Remove it, or the tap does not install the current version.
+- [x] Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
+- [ ] Debian family: an apt repository we operate.
+      Suite `stable`, signed `Release`, index rebuilt from the current debs on each final tag.
+      Implemented by `scripts/apt-repo.sh` and the last step of `release.yml`, served from the `gh-pages` branch at `https://mryush.github.io/hint`.
+      Index and signature built and checked with a throwaway key; still open until the first final tag publishes it and `apt install hint` is run on a clean Ubuntu and a Raspberry Pi.
+      Repository setup before that tag: enable Pages for `gh-pages` (Settings → Pages), see the signing-key item.
+      One suite covers Ubuntu, Debian, Mint, Pop!_OS and Raspberry Pi OS, because the binary is built with `CGO_ENABLED=0` and does not need a per-distro-release archive.
+- [ ] The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
+      The public half is what users add as the repository key.
+      Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); the key itself is not generated yet.
+- [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
+- [ ] README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
+      Done for apt and Homebrew; the Scoop bucket line waits for the bucket.
+
+Decisions (2026-10-11):
+
+- **One index we operate per OS family.**
+  macOS already has the cask.
+  Debian-family systems get an apt repository.
+  Windows gets a Scoop bucket.
+  Each final tag updates all three.
+  Official catalogs — the Ubuntu archive, a Launchpad PPA, `microsoft/winget-pkgs`, homebrew-core — can be prepared in parallel and do not gate the tag.
+  That is the same split as the Homebrew tap versus an upstream formula.
+- **The apt host is a static repository we control**, regenerated from the current debs only.
+  A hosted index (Gemfury, Cloudsmith) would skip that step and adds an account plus a push token; it is not the channel.
+- **GitHub Pages from a `gh-pages` branch of this repository** (2026-10-15).
+  The workflow's own `GITHUB_TOKEN` can push it, so no second token, unlike a separate repository such as the tap.
+  Each final tag force-pushes one orphan commit, so old binaries do not pile up in git history; the ruleset covers only `main` and `develop`.
+  The price is that the index lives under the code repository's URL and Pages' bandwidth limits, and a rebuild always replaces the previous version (apt users cannot pin an older one; the GitHub Release keeps older debs).
+  Tooling is `apt-ftparchive` and `gpg`, which the Ubuntu runner already has; `aptly` or `reprepro` would keep a history we do not want.
+- **Windows is a Scoop bucket, not a winget submission.**
+  The bucket is a repository the release workflow pushes to, like the tap.
+  `winget` ships with Windows, but its manifest is a reviewed pull request to Microsoft's repository, so it waits with the other official catalogs.
+
 ## Acceptance criteria
 
 1. `hint -p "what files are in this project and what do they do"` — the agent
@@ -1342,7 +1400,9 @@ WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (CI/release done; Pi 4 bench is the hardware
 record) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` → tag
-`v0.2.0`. Pi 5 smoke and the audit fixes are backlog (2026-10-11).
+`v0.2.0`.
+WP0.14 (apt repository and Scoop bucket) runs in parallel with Phase 1 and does not gate `v0.3` (2026-10-11).
+Pi 5 smoke and the audit fixes are backlog (2026-10-11).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).

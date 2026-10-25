@@ -52,6 +52,29 @@ archives:
 checksum:
   name_template: checksums.txt
 
+nfpms:
+  - id: hint
+    package_name: hint
+    ids:
+      - hint
+    formats:
+      - deb
+    # hint_0.2.0_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    maintainer: Yurii Simonov <rep.yurii@gmail.com>
+    homepage: https://github.com/mrYush/hint
+    description: Context-aware CLI assistant that reads, edits and runs your project
+    license: MIT
+    section: utils
+    priority: optional
+    bindir: /usr/bin
+    # Same reasoning as the cask: grep and glob use ripgrep when present and
+    # fall back to a pure-Go walk, so it is recommended-by-default, not a
+    # hard requirement of the binary. The plan (WP0.14) asks for a
+    # dependency so the fast path is what apt users get.
+    dependencies:
+      - ripgrep
+
 changelog:
   sort: asc
   filters:
@@ -69,7 +92,9 @@ release:
   footer: |
     Known issues for this release are listed in the README under
     *Troubleshooting → Known issues*; the open bugs are tracked as
-    `[Phase 0]` GitHub issues.
+    `[Phase 0]` GitHub issues. The limits of this release (no sandbox
+    for `bash`, completion off by default, the secret store verified on
+    Linux only) are in that same section.
 
 # Homebrew tap: the cask is pushed to mrYush/homebrew-tap, so that
 # `brew install --cask mrYush/tap/hint` works. goreleaser is retiring the
@@ -87,7 +112,7 @@ homebrew_casks:
     homepage: https://github.com/mrYush/hint
     description: Context-aware CLI assistant that reads, edits and runs your project
     license: MIT
-    binary: hint
+    binaries: [hint]
     # grep and glob prefer ripgrep and fall back to a pure-Go walk without
     # it; the cask pulls it in so the fast path is the one users get.
     dependencies:

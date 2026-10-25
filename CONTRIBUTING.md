@@ -15,7 +15,8 @@ reworked.
 
 Requirements:
 
-- **Go ≥ 1.22** (raised from 1.20 by WP0.1, the MVP's stated floor)
+- **Go ≥ 1.26** (raised from 1.22 by WP1.4: `charm.land/bubbletea/v2`
+  declares it; `go.mod` is the authority)
 - No cgo — the core must always build with `CGO_ENABLED=0` (cgo-dependent
   features live behind build tags; see `docs/plan/risks.md`, R1)
 - An API key for an OpenAI-compatible service, or a local
@@ -46,7 +47,9 @@ but breaks `GOOS=linux GOARCH=arm64 go build ./...`, it will not be merged.
 Today's code is small (`cmd/hint`, `internal/config`, `internal/provider`,
 `internal/agent`, `internal/tool`, `internal/permission`, `internal/diff`,
 `internal/session`, `internal/console`, `internal/project`,
-`internal/debuglog`). The target layout is
+`internal/debuglog`, `internal/rpc`). `cmd/hint` is a client of
+`internal/rpc`: only the engine wiring (the `rpc*.go` files) may import the
+agent loop, and a test enforces it. The target layout is
 described in
 [docs/plan/architecture.md](docs/plan/architecture.md); new code should move
 toward it, not away from it. Two rules worth calling out now:
@@ -64,11 +67,15 @@ toward it, not away from it. Two rules worth calling out now:
   numbering, status legend, issue mirroring) are in
   [docs/plan/README.md](docs/plan/README.md).
 - GitHub Issues mirror the work packages of the *active* phase (currently
-  Phase 0, issues titled `[Phase 0][WP0.x] …`). Comment on the relevant issue
+  Phase 1, issues titled `[Phase 1][WP1.x] …`). Comment on the relevant issue
   before starting sizeable work so effort isn't duplicated.
 - Scope changes land in the phase file in the same PR as the code (or as a
   docs-only decision PR first). An agreement that exists only in a comment
   thread does not exist.
+- Every work package names its branch (`**Branch:** ...` under the `### WPx.y`
+  heading) when it is written down, before work starts; the package's status
+  is read from that branch (absent / exists / merged into `develop`), see the
+  status legend in [docs/plan/README.md](docs/plan/README.md).
 
 ## Git workflow
 
@@ -109,7 +116,16 @@ Flow:
   push needs the `HOMEBREW_TAP_TOKEN` repository secret: a token with write
   access to the tap repository. Without it a final release fails at the
   cask step after the GitHub Release is already published; pre-releases
-  skip the step. `goreleaser check` validates the config and
+  skip the step. The same goreleaser run builds a `.deb` per Linux
+  architecture (nFPM), and for a final version
+  [`scripts/apt-repo.sh`](scripts/apt-repo.sh) turns them into a signed apt
+  repository that the workflow force-pushes as one orphan commit to the
+  `gh-pages` branch, served by GitHub Pages at
+  `https://mryush.github.io/hint`. It needs the `APT_SIGNING_KEY`
+  repository secret (ASCII-armored private key; `APT_SIGNING_PASSPHRASE` if
+  the key has one). `gh-pages` is generated output: never edit it by hand.
+  The apt step also runs after the GitHub Release is published, so a
+  missing key fails it late. `goreleaser check` validates the config and
   `goreleaser release --snapshot --clean` builds everything into `dist/`
   without publishing.
 - **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
@@ -178,7 +194,8 @@ after it is merged into `develop`/`main`.
    `develop` as described above. Pull requests target `develop` (only
    `release/*` and `hotfix/*` PRs target `main`).
 2. Keep PRs focused: one work package, one fix, or one document per PR where
-   practical.
+   practical. Scope that grew inside a branch follows the exception in
+   [docs/plan/README.md](docs/plan/README.md) ("Branch per work package").
 3. Write tests with the change, not after it. Phase 0 targets ≥ 70% coverage
    on the agent loop, tools, and permission logic, and golden tests guard the
    session wire format — a PR that lowers these gates needs a stated reason.
@@ -186,8 +203,9 @@ after it is merged into `develop`/`main`.
    CI ([`ci.yml`](.github/workflows/ci.yml)) runs the same with the race
    detector, plus `gofmt -l`, `golangci-lint` with the repository's
    [`.golangci.yml`](.golangci.yml), and a cross-compilation of every
-   release target. To see the lint gate locally install the version CI
-   pins (`golangci-lint` v2.4.0) and run `golangci-lint run ./...`.
+   release target. To see the lint gate locally install the `golangci-lint`
+   version that `ci.yml` pins (the `version:` of the lint step; it is
+   pinned only there) and run `golangci-lint run ./...`.
 5. Open a pull request describing **what** changed and **why**; link the
    issue/work package it implements. Tick the corresponding checkboxes in the
    phase file in the same PR.

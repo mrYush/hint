@@ -1,0 +1,650 @@
+package rpc
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/pkg/agentapi"
+)
+
+func TestHelloThenTurnWithPermission(t *testing.T) {
+	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
+	srv := &Server{Engine: engine, PermissionWait: time.Second}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion},
+	})
+	hello := mustRecv(t, dec)
+	if hello["error"] != nil {
+		t.Fatalf("hello: %v", hello["error"])
+	}
+
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.open"})
+	opened := mustRecv(t, dec)
+	result, _ := opened["result"].(map[string]any)
+	sid, _ := result["id"].(string)
+	if sid == "" {
+		t.Fatalf("session.open = %v", opened)
+	}
+
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "turn.start",
+		"params": map[string]any{"session_id": sid, "text": "run the tests"},
+	})
+	started := mustRecv(t, dec)
+	turnID, _ := started["result"].(map[string]any)["turn_id"].(string)
+	if turnID == "" {
+		t.Fatalf("turn.start = %v", started)
+	}
+
+	var replied bool
+	for {
+		msg := mustRecv(t, dec)
+		if msg["method"] == "turn.done" {
+			break
+		}
+		if msg["method"] != "event" {
+			if id, ok := msg["id"]; ok && id == float64(4) && msg["error"] != nil {
+				t.Fatalf("permission.reply: %v", msg["error"])
+			}
+			continue
+		}
+		params, _ := msg["params"].(map[string]any)
+		ev, _ := params["event"].(map[string]any)
+		if ev["kind"] == string(agentapi.EventPermission) && !replied {
+			replied = true
+			perm, _ := ev["permission"].(map[string]any)
+			mustSend(t, enc, map[string]any{
+				"jsonrpc": "2.0", "id": 4, "method": "permission.reply",
+				"params": map[string]any{
+					"turn_id": turnID, "call_id": perm["call_id"], "decision": DecisionAllow,
+				},
+			})
+		}
+	}
+	if !replied {
+		t.Fatal("permission event was not delivered")
+	}
+	if !engine.sessions[sid].allowed {
+		t.Fatal("engine did not observe the allow decision")
+	}
+}
+
+func TestMethodBeforeHelloIsRejected(t *testing.T) {
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "session.list"})
+	msg := mustRecv(t, dec)
+	errObj, _ := msg["error"].(map[string]any)
+	if errObj["code"] != float64(CodeNotReady) {
+		t.Fatalf("error = %v", msg["error"])
+	}
+}
+
+func TestSocketTokenRequired(t *testing.T) {
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Token: "secret-token"}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion, "token": "nope"},
+	})
+	msg := mustRecv(t, dec)
+	errObj, _ := msg["error"].(map[string]any)
+	if errObj["code"] != float64(CodeUnauthorized) {
+		t.Fatalf("error = %v", msg["error"])
+	}
+}
+
+func TestPermissionTimeoutDenies(t *testing.T) {
+	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
+	srv := &Server{Engine: engine, PermissionWait: 20 * time.Millisecond}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion},
+	})
+	_ = mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.open"})
+	opened := mustRecv(t, dec)
+	sid := opened["result"].(map[string]any)["id"].(string)
+
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "turn.start",
+		"params": map[string]any{"session_id": sid, "text": "please"},
+	})
+	_ = mustRecv(t, dec)
+	for {
+		msg := mustRecv(t, dec)
+		if msg["method"] == "turn.done" {
+			break
+		}
+	}
+	if engine.sessions[sid].allowed {
+		t.Fatal("timed-out permission was allowed")
+	}
+}
+
+func TestSecondTurnIsBusy(t *testing.T) {
+	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
+	srv := &Server{Engine: engine, PermissionWait: time.Second}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion},
+	})
+	_ = mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.open"})
+	opened := mustRecv(t, dec)
+	sid := opened["result"].(map[string]any)["id"].(string)
+
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "turn.start",
+		"params": map[string]any{"session_id": sid, "text": "first"},
+	})
+	_ = mustRecv(t, dec) // turn id
+	// Drain until the permission event so the turn is inside Prompt.
+	for {
+		msg := mustRecv(t, dec)
+		if msg["method"] == "event" {
+			ev, _ := msg["params"].(map[string]any)["event"].(map[string]any)
+			if ev["kind"] == string(agentapi.EventPermission) {
+				break
+			}
+		}
+	}
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 4, "method": "turn.start",
+		"params": map[string]any{"session_id": sid, "text": "second"},
+	})
+	busy := mustRecv(t, dec)
+	errObj, _ := busy["error"].(map[string]any)
+	if errObj["code"] != float64(CodeBusy) {
+		t.Fatalf("second turn = %v", busy)
+	}
+}
+
+// TestNextTurnStartsRightAfterDone pins the other half of the busy rule:
+// turn.done means the session is free, so a turn.start sent the moment
+// it arrives is accepted, not refused as busy. A REPL does exactly this
+// between one answer and the next question.
+func TestNextTurnStartsRightAfterDone(t *testing.T) {
+	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
+	srv := &Server{Engine: engine, PermissionWait: time.Second}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	enc := json.NewEncoder(client)
+	dec := json.NewDecoder(client)
+	mustSend(t, enc, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "hello",
+		"params": map[string]any{"protocol_version": ProtocolVersion},
+	})
+	_ = mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.open"})
+	sid := mustRecv(t, dec)["result"].(map[string]any)["id"].(string)
+
+	// runTurn drives one turn to turn.done, allowing its permission
+	// question on the way, and returns the turn.start response.
+	runTurn := func(id int, text string) map[string]any {
+		mustSend(t, enc, map[string]any{
+			"jsonrpc": "2.0", "id": id, "method": "turn.start",
+			"params": map[string]any{"session_id": sid, "text": text},
+		})
+		started := mustRecv(t, dec)
+		turnID, _ := started["result"].(map[string]any)["turn_id"].(string)
+		if turnID == "" {
+			return started
+		}
+		// The pipe is synchronous: the reply's own response must be read
+		// before the next request is written, or the server is stuck
+		// writing it while this side is stuck writing turn.start.
+		replied, acked := false, false
+		for {
+			msg := mustRecv(t, dec)
+			if msg["id"] == float64(id+1) {
+				acked = true
+			}
+			if msg["method"] == "turn.done" {
+				if replied && !acked {
+					_ = mustRecv(t, dec)
+				}
+				return started
+			}
+			if msg["method"] != "event" {
+				continue
+			}
+			ev, _ := msg["params"].(map[string]any)["event"].(map[string]any)
+			if ev["kind"] == string(agentapi.EventPermission) {
+				perm, _ := ev["permission"].(map[string]any)
+				mustSend(t, enc, map[string]any{
+					"jsonrpc": "2.0", "id": id + 1, "method": "permission.reply",
+					"params": map[string]any{"turn_id": turnID, "call_id": perm["call_id"], "decision": DecisionAllow},
+				})
+				replied = true
+			}
+		}
+	}
+	if first := runTurn(3, "first"); first["error"] != nil {
+		t.Fatalf("first turn: %v", first["error"])
+	}
+	if second := runTurn(5, "second"); second["error"] != nil {
+		t.Fatalf("turn.start right after turn.done = %v; want it accepted", second["error"])
+	}
+}
+
+// TestListenIsLoopbackOnly: the token is the only credential, so TCP
+// binds to loopback alone — by address or as localhost, which needs no
+// resolver to be known safe.
+func TestListenIsLoopbackOnly(t *testing.T) {
+	for _, c := range []struct {
+		addr string
+		ok   bool
+	}{
+		{"127.0.0.1:0", true},
+		{"[::1]:0", true},
+		{"localhost:0", true},
+		{"0.0.0.0:0", false},
+		{"example.com:0", false},
+	} {
+		lis, err := Listen("tcp", c.addr)
+		if err == nil {
+			_ = lis.Close()
+		}
+		if (err == nil) != c.ok {
+			t.Errorf("Listen(tcp, %q) = %v; want accepted %v", c.addr, err, c.ok)
+		}
+	}
+}
+
+func TestWriteTokenIsOwnerOnly(t *testing.T) {
+	dir := t.TempDir()
+	token, err := WriteToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token == "" {
+		t.Fatal("empty token")
+	}
+	info, err := os.Stat(filepath.Join(dir, "auth.token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestHelloGolden(t *testing.T) {
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Version: "test"}
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(context.Background(), peer, peer, peer) }()
+
+	if _, err := io.WriteString(client, `{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol_version":1}}`+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	line, err := bufio.NewReader(client).ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(line), &got); err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("testdata/hello-result.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var golden map[string]any
+	if err := json.Unmarshal(want, &golden); err != nil {
+		t.Fatal(err)
+	}
+	gb, _ := json.Marshal(golden)
+	ab, _ := json.Marshal(got)
+	if string(ab) != string(gb) {
+		t.Fatalf("hello result\n got %s\nwant %s", ab, gb)
+	}
+}
+
+// TestAttachByPrefixKeepsTheHeldSession: a prefix misses the server's
+// map, and the engine answers with the session the server already holds.
+// That is the same session, not a duplicate to close.
+func TestAttachByPrefixKeepsTheHeldSession(t *testing.T) {
+	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
+	ctx := context.Background()
+	view, err := c.OpenSession(ctx, OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := c.AttachSession(ctx, view.ID[:4])
+	if err != nil || again.ID != view.ID {
+		t.Fatalf("AttachSession(%q) = %+v, %v; want %s", view.ID[:4], again, err, view.ID)
+	}
+	if engine.sessions[view.ID].closed.Load() {
+		t.Fatal("attaching by prefix closed the session the server holds")
+	}
+	runFakeTurn(t, c, view.ID)
+}
+
+// TestPumpDrainsATurnWhoseClientIsGone: when the client hangs up mid-turn
+// the server stops writing, but it still reads the turn's channel to the
+// end, so a session that sends without watching ctx is not left blocked.
+func TestPumpDrainsATurnWhoseClientIsGone(t *testing.T) {
+	done := make(chan struct{})
+	sess := &fakeSession{id: "sess-1", run: func(context.Context) <-chan agentapi.Event {
+		ch := make(chan agentapi.Event)
+		go func() {
+			defer close(done)
+			defer close(ch)
+			for range 100 {
+				ch <- agentapi.Event{Kind: agentapi.EventTextDelta, Text: "x"}
+			}
+		}()
+		return ch
+	}}
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{sess.id: sess}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, peer := net.Pipe()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
+	enc, dec := json.NewEncoder(client), json.NewDecoder(client)
+
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello", "params": map[string]any{"protocol_version": ProtocolVersion}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session.attach", "params": map[string]any{"id": sess.id}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "turn.start", "params": map[string]any{"session_id": sess.id, "text": "go"}})
+	if started := mustRecv(t, dec); started["error"] != nil {
+		t.Fatalf("turn.start: %v", started["error"])
+	}
+	_ = client.Close()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the turn is still blocked on its channel after the client left")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for srv.busy(sess.id) {
+		if time.Now().After(deadline) {
+			t.Fatal("the session is still busy after its turn was drained")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestModelsDoesNotBlockTheLoop: profile.models waits on the network, so
+// it runs beside the loop the way complete does, and a request sent
+// after it is answered first.
+func TestModelsDoesNotBlockTheLoop(t *testing.T) {
+	gate := make(chan struct{})
+	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}, modelsGate: gate}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, peer := net.Pipe()
+	defer func() { _ = client.Close() }()
+	go func() { _ = srv.serveConn(ctx, peer, peer, peer) }()
+	enc, dec := json.NewEncoder(client), json.NewDecoder(client)
+	// A blocked loop would leave the writes and reads below hanging.
+	if err := client.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello", "params": map[string]any{"protocol_version": ProtocolVersion}})
+	mustRecv(t, dec)
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "profile.models", "params": map[string]any{"profile": "local"}})
+	mustSend(t, enc, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "session.list"})
+	if first := mustRecv(t, dec); first["id"] != float64(3) {
+		t.Fatalf("first answer = %v; want session.list's while profile.models waits", first)
+	}
+	close(gate)
+	if models := mustRecv(t, dec); models["id"] != float64(2) || models["error"] != nil {
+		t.Fatalf("profile.models = %v", models)
+	}
+}
+
+func mustSend(t *testing.T, enc *json.Encoder, v any) {
+	t.Helper()
+	if err := enc.Encode(v); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustRecv(t *testing.T, dec *json.Decoder) map[string]any {
+	t.Helper()
+	var msg map[string]any
+	if err := dec.Decode(&msg); err != nil {
+		t.Fatal(err)
+	}
+	return msg
+}
+
+type fakeEngine struct {
+	sessions map[string]*fakeSession
+	// profiles is what profile.list answers; "local" and "cloud" are
+	// the two SetProfile accepts, "cloud" needing a key it has not got.
+	profiles []ProfileInfo
+	// completeDelay is how long Complete takes; completionOff makes it
+	// answer disabled. completes and cancelled count what it saw. cmu
+	// guards them: Complete runs on the server's goroutine.
+	cmu           sync.Mutex
+	completeDelay time.Duration
+	completionOff bool
+	completes     int
+	cancelled     int
+	// modelsGate, when set, holds Models until it is closed.
+	modelsGate chan struct{}
+}
+
+// find resolves id the way session.Store.Find does: the exact id, or
+// the one session it is a prefix of.
+func (e *fakeEngine) find(id string) *fakeSession {
+	if s := e.sessions[id]; s != nil {
+		return s
+	}
+	var match *fakeSession
+	for full, s := range e.sessions {
+		if strings.HasPrefix(full, id) {
+			if match != nil {
+				return nil
+			}
+			match = s
+		}
+	}
+	return match
+}
+
+// setCompletion changes the fake's completion behaviour from a test.
+func (e *fakeEngine) setCompletion(delay time.Duration, off bool) {
+	e.cmu.Lock()
+	defer e.cmu.Unlock()
+	e.completeDelay, e.completionOff = delay, off
+}
+
+func (e *fakeEngine) completionCounts() (completes, cancelled int) {
+	e.cmu.Lock()
+	defer e.cmu.Unlock()
+	return e.completes, e.cancelled
+}
+
+func (e *fakeEngine) List(context.Context) ([]Info, error) { return nil, nil }
+
+func (e *fakeEngine) Profiles(context.Context) ([]ProfileInfo, error) { return e.profiles, nil }
+
+// Complete answers "<text> done" after completeDelay, or on cancel; the
+// fake counts the requests and the cancels it saw.
+func (e *fakeEngine) Complete(ctx context.Context, req CompleteRequest) (CompleteResult, error) {
+	e.cmu.Lock()
+	e.completes++
+	delay, off := e.completeDelay, e.completionOff
+	e.cmu.Unlock()
+	if off {
+		return CompleteResult{Disabled: true, Reason: "completion.mode is off"}, nil
+	}
+	select {
+	case <-time.After(delay):
+		return CompleteResult{Suggestion: " done", Usage: &agentapi.Usage{InputTokens: 10, OutputTokens: 2}}, nil
+	case <-ctx.Done():
+		e.cmu.Lock()
+		e.cancelled++
+		e.cmu.Unlock()
+		return CompleteResult{}, ctx.Err()
+	}
+}
+
+func (e *fakeEngine) CompletionSettings(context.Context) (CompletionSettings, error) {
+	return CompletionSettings{Mode: "tab", IdleAfterMs: 600, WarnAfterMs: 2000}, nil
+}
+
+func (e *fakeEngine) Models(ctx context.Context, profile string) ([]string, error) {
+	if e.modelsGate != nil {
+		select {
+		case <-e.modelsGate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if profile != "local" {
+		return nil, fmt.Errorf("%w: unknown profile %q", ErrNotFound, profile)
+	}
+	return []string{"qwen", "llama"}, nil
+}
+
+func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {
+	src := e.find(opts.ID)
+	if src == nil {
+		return nil, fmt.Errorf("%w: session %q", ErrNotFound, opts.ID)
+	}
+	if opts.Turn == 0 {
+		opts.Turn = src.turns
+	}
+	if opts.Turn > src.turns || opts.Turn == 0 {
+		return nil, fmt.Errorf("%w: the conversation has %d turns, not %d", ErrInvalid, src.turns, opts.Turn)
+	}
+	s := &fakeSession{id: fmt.Sprintf("fork-%d", len(e.sessions)), ephemeral: opts.Ephemeral, turns: opts.Turn,
+		profile: src.profile, parent: &Parent{ID: src.id, Turn: opts.Turn}}
+	e.sessions[s.id] = s
+	return s, nil
+}
+
+func (e *fakeEngine) Open(_ context.Context, opts OpenOptions) (Session, error) {
+	s := &fakeSession{id: "sess-1", ephemeral: opts.Ephemeral}
+	e.sessions[s.id] = s
+	return s, nil
+}
+
+func (e *fakeEngine) Attach(_ context.Context, id string) (Session, error) {
+	if s := e.find(id); s != nil {
+		return s, nil
+	}
+	return nil, errors.New("no such session")
+}
+
+type fakeSession struct {
+	id        string
+	ephemeral bool
+	allowed   bool
+	// turns is how many user turns the session claims to have, for Fork.
+	turns   int
+	profile ProfileRef
+	parent  *Parent
+	// closed records Close; the server may call it from its goroutine.
+	closed atomic.Bool
+	// run, when set, replaces the scripted turn of RunTurn.
+	run func(ctx context.Context) <-chan agentapi.Event
+}
+
+func (s *fakeSession) ID() string                   { return s.id }
+func (s *fakeSession) Created() time.Time           { return time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC) }
+func (s *fakeSession) Messages() []agentapi.Message { return nil }
+func (s *fakeSession) Warnings() []string           { return nil }
+func (s *fakeSession) Close() error                 { s.closed.Store(true); return nil }
+func (s *fakeSession) Profile() ProfileRef          { return s.profile }
+
+func (s *fakeSession) Parent() (Parent, bool) {
+	if s.parent == nil {
+		return Parent{}, false
+	}
+	return *s.parent, true
+}
+
+func (s *fakeSession) SetProfile(_ context.Context, ref ProfileRef) (ProfileRef, error) {
+	switch ref.Profile {
+	case "local":
+		if ref.Model == "" {
+			ref.Model = "qwen"
+		}
+		s.profile = ref
+		return ref, nil
+	case "cloud":
+		return ProfileRef{}, fmt.Errorf("%w: profile %q needs an API key", ErrInvalid, ref.Profile)
+	default:
+		return ProfileRef{}, fmt.Errorf("%w: unknown profile %q", ErrNotFound, ref.Profile)
+	}
+}
+
+func (s *fakeSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
+	s.turns++
+	if s.run != nil {
+		return s.run(ctx), nil
+	}
+	ch := make(chan agentapi.Event)
+	go func() {
+		defer close(ch)
+		ch <- agentapi.Event{Kind: agentapi.EventTurnStart}
+		req := agentapi.PermissionRequest{CallID: "call-1", Tool: "bash", Class: agentapi.ClassExecute, Summary: "run " + text}
+		ch <- agentapi.Event{Kind: agentapi.EventPermission, Permission: &req}
+		decision, _ := ask.Prompt(ctx, permission.Ask{Request: req})
+		s.allowed = decision == permission.Allow || decision == permission.AllowAlways
+		finish := agentapi.FinishStop
+		if ctx.Err() != nil {
+			finish = agentapi.FinishCanceled
+		}
+		ch <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: finish}
+	}()
+	return ch, nil
+}

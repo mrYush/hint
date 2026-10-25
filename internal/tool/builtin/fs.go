@@ -28,10 +28,16 @@ const binaryProbe = 8192
 // caller's own --glob: ripgrep gives later globs precedence, and an
 // explicit positive glob otherwise re-admits hidden files. .gitignore is
 // honoured by ripgrep itself, and by the Go walk through project.Rules.
-func rgExcludeArgs() []string {
+// rgExcludeArgs are the globs a ripgrep run rooted at dir must skip: the
+// hidden and dependency directories every walk skips, and the paths the
+// root denies (WP1.7), relative to dir.
+func rgExcludeArgs(root tool.Root, dir string) []string {
 	args := []string{"--no-config", "--glob", "!.*"}
 	for _, name := range project.SkippedDirs() {
 		args = append(args, "--glob", "!"+name)
+	}
+	for _, rel := range root.DeniedUnder(dir) {
+		args = append(args, "--glob", "!"+rel)
 	}
 	return args
 }
@@ -71,7 +77,7 @@ func isBinary(r io.Reader) (bool, error) {
 func pathError(root tool.Root, abs string, err error) string {
 	rel := root.Rel(abs)
 	switch {
-	case errors.Is(err, tool.ErrOutsideRoot):
+	case errors.Is(err, tool.ErrOutsideRoot), errors.Is(err, tool.ErrDenied):
 		return err.Error()
 	case errors.Is(err, os.ErrNotExist):
 		return fmt.Sprintf("%s: no such file or directory", rel)
@@ -93,20 +99,20 @@ func pathError(root tool.Root, abs string, err error) string {
 // target lies inside the root, so following it here stays confined. The
 // temporary file is fsynced before the rename so that a crash cannot leave
 // an empty file where the old content was.
-func writeAtomic(abs string, data []byte, perm os.FileMode) error {
+func writeAtomic(root tool.Root, abs string, data []byte, perm os.FileMode) error {
 	if real, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = real
 	}
 	dir := filepath.Dir(abs)
-	if info, err := os.Stat(abs); err == nil {
+	if info, err := root.Stat(abs); err == nil {
 		perm = info.Mode().Perm()
 	}
-	tmp, err := os.CreateTemp(dir, ".hint-tmp-*")
+	tmp, err := root.CreateTemp(dir, ".hint-tmp-")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
+	cleanup := func() { _ = root.Remove(tmpName) }
 
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
@@ -127,7 +133,7 @@ func writeAtomic(abs string, data []byte, perm os.FileMode) error {
 		cleanup()
 		return err
 	}
-	if err := os.Rename(tmpName, abs); err != nil {
+	if err := root.Rename(tmpName, abs); err != nil {
 		cleanup()
 		return err
 	}
@@ -135,8 +141,8 @@ func writeAtomic(abs string, data []byte, perm os.FileMode) error {
 }
 
 // readWhole loads a regular file of at most limit bytes.
-func readWhole(abs string, limit int64) ([]byte, os.FileInfo, error) {
-	info, err := os.Stat(abs)
+func readWhole(root tool.Root, abs string, limit int64) ([]byte, os.FileInfo, error) {
+	info, err := root.Stat(abs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -146,7 +152,7 @@ func readWhole(abs string, limit int64) ([]byte, os.FileInfo, error) {
 	if info.Size() > limit {
 		return nil, info, fmt.Errorf("file is too large (%d bytes, limit %d)", info.Size(), limit)
 	}
-	data, err := os.ReadFile(abs)
+	data, err := root.ReadFile(abs)
 	if err != nil {
 		return nil, info, err
 	}
