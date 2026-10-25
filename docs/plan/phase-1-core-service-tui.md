@@ -15,8 +15,6 @@ interactive TUI.
 
 **Branch:** `dev/wp1.1-rpc`
 
-Reference — [Pi RPC mode](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/rpc.md).
-
 - [x] `hint serve`: JSON-RPC over unix socket (macOS/Linux) / localhost TCP (Windows)
 - [x] `hint --mode rpc`: same protocol over stdio for subprocess embedding
 - [x] Auth for the socket mode (token file with 0600 perms; localhost binding only)
@@ -84,8 +82,6 @@ Decisions for WP1.1–WP1.3 (2026-10-11):
 
 **Branch:** `dev/wp1.4-tui`
 
-References — Crush (reading only: its license is FSL-1.1-MIT, so no code is borrowed, per [risks.md](risks.md) R2), archived opencode (MIT).
-
 - [x] `hint --tui`: streaming chat view with markdown rendering (glamour for finished messages; a message still streaming is plain text)
 - [x] Diff view for write-permission prompts; `y` / `n` / `a` answer through `permission.reply`
 - [x] The history of a continued session (`-c`, `--session`) rendered on attach
@@ -112,13 +108,13 @@ Decisions (2026-10-17):
 - **Bubble Tea v2, through the `charm.land/...` module paths.**
   v2 is the module's canonical path (its `go.mod` says `module charm.land/bubbletea/v2`; the `github.com/charmbracelet/bubbletea/v2` path refuses to build).
   `bubbletea/v2`, `bubbles/v2`, `lipgloss/v2` and `glamour/v2` are pinned.
-  v1 is maintenance only and Crush, the reference, is on v2; the price is fewer examples and a different key and view API.
+  v1 is maintenance only; the price of v2 is fewer examples and a different key and view API.
 - **glamour from the first commit, for finished messages only.**
   A message still streaming is shown as plain text until `turn_end`, then rendered once.
-  Re-rendering the whole message on every delta is the cost Crush had to engineer around (a cached render of a stable prefix); this plan does not pay it until a profile shows the need.
+  Re-rendering the whole message on every delta is a cost (a cached render of a stable prefix is the usual answer); this plan does not pay it until a profile shows the need.
 - **`internal/tui` is a client of the protocol, like the REPL.**
   It imports `internal/rpc`, `pkg/agentapi` and `internal/permission`, never `internal/agent`; `TestShellNeverImportsTheAgent` covers it.
-- **Events reach the model through `tea.Program.Send`**, from one goroutine per turn, the way Crush and opencode deliver agent events.
+- **Events reach the model through `tea.Program.Send`**, from one goroutine per turn.
   A `tea.Cmd` that waits on the channel returns one message and has to be re-armed after each; `Send` does not lose messages and keeps the turn's reader where the REPL's is.
 - **One owner for the event semantics: `internal/shell`.**
   `shell.RunTurn` drives a turn and reports it through a small consumer-side `Sink` interface; the REPL's sink writes to the terminal, the TUI's sends messages to its program.

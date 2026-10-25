@@ -113,7 +113,7 @@ func CommandScope(cmd string) string {
 //
 // What the arguments themselves do is not inspected: `go test -exec
 // 'rm -rf /' ./...` is covered by `go test`. That is the limit of a
-// prefix grant, the same one Claude Code's rules have; the user who
+// prefix grant; the user who
 // answers "always" is trusting the program, not each future argument.
 func commandMatches(scope, cmd string) bool {
 	cmd = strings.TrimSpace(cmd)

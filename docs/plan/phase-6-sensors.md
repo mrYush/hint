@@ -14,8 +14,7 @@ through the same MCP mechanism as any other tool.
 Sensors are packaged as **MCP servers running inside the client**: the
 mobile/desktop shell hosts a local MCP server exposing tools like
 `get_location`, `read_sensor`, `capture_photo` — the core consumes them via
-the ordinary MCP client from Phase 2 (approach reference — Goose: everything
-extends through MCP).
+the ordinary MCP client from Phase 2: everything extends through MCP.
 
 ## Work packages
 

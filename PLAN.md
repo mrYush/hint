@@ -37,15 +37,15 @@ The in-process mobile core (Phase 5, gomobile) does not go through either wire.
 ```
 
 See [`docs/plan/architecture.md`](docs/plan/architecture.md) for the package
-layout, key interfaces, references, and the platform/provider matrices.
+layout, key interfaces, and the platform/provider matrices.
 
-## What makes this different from the references
+## What makes this different
 
 The claims below are argued in full — with their price, and with the
 conditions under which the project should be folded into someone else's
 core — in [`docs/plan/why-hint.md`](docs/plan/why-hint.md).
 
-1. **Not only code.** Coding agents (Claude Code, Aider, Crush) are the
+1. **Not only code.** Coding agents are the
    starting scenario because it is the most mature and testable one, but the
    target is a personal assistant with perception: camera→VLM, mic→STT, TTS
    replies, device sensors as context sources.
@@ -256,7 +256,8 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented.
     `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are set (2026-10-22).
-    `v0.3.0` publishes the signed repository to `gh-pages`; Pages is turned on for that branch after the push.
+    `v0.3.0` published the signed repository to `gh-pages` and Pages serves it (2026-10-25); `apt install hint` from `https://mryush.github.io/hint` verified on clean Debian 12 and Ubuntu 24.04 containers (amd64).
+    The arm64 package is in the index but has not been installed on a Raspberry Pi yet.
     Scoop is not started.
     The Homebrew cask field `homebrew_casks.binary` is replaced by `binaries` so `goreleaser check` passes.
     Still open after that: the Scoop bucket and the cask's `postflight_steps`.
@@ -282,27 +283,17 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q3 | Wails vs. native WinUI 3 for the Windows widget | Phase 4 | Spike at the start of Phase 4 |
 | Q4 | llama.cpp bindings vs. MLC LLM as the primary mobile on-device runtime | Phase 5 | Spike on both; the `ChatProvider` interface isolates the choice |
 | Q5 | License for the feature-store registry and SDK | Phase 7 | Decide with first external contributors |
-| Q6 | Build our own MCP client (WP2.1) vs. validate against Goose's mature MCP ecosystem/community server catalog first | Phase 2 | See [prior-art research](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic) — spike before WP2.1 starts |
+| Q6 | Build our own MCP client (WP2.1) vs. validate it first against the public MCP server catalogs | Phase 2 | Spike before WP2.1 starts |
 | Q7 | Tool schedule: keep the series-parallel tree, or promote to a full `depends_on` DAG if a real turn cannot be expressed as nested groups and chains? | WP0.11 | Recorded as a decision in [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done) and implemented as the tree (2026-09-07); revisit only with a concrete counterexample |
 | Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
 | Q10 | A2A: which side first — `hint` as an A2A client that delegates to remote agents, or `hint serve` as an A2A server other agents call — and which Go implementation to build on (the A2A project's Go SDK, or a thin client over the JSON-RPC spec) | Phase 2 (WP2.6) | Spike at the start of WP2.6: read the current spec, run the reference samples against `hint serve`, decide; recorded in [phase-2](docs/plan/phase-2-memory-mcp.md#wp26--a2a-hint-among-other-agents) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
 
-## Prior art
-
-No existing tool implements the full product mechanic, but three actively
-developed projects each already cover a large, different subset of it in
-production or public beta (FutureOS's core-as-a-service design, Goose's MCP
-maturity, OpenHuman's voice+desktop-widget experience). See
-[`docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic`](docs/plan/architecture.md#prior-art-does-an-existing-tool-already-implement-the-whole-mechanic)
-for the full comparison, sources, and what it means for the plan. Research
-pass dated 2026-08-29; re-run before Phase 4/5 decisions (Q2–Q4).
-
 ## How this plan is maintained
 
 - The rationale for the project's existence lives in
   [`docs/plan/why-hint.md`](docs/plan/why-hint.md); it carries a falsification
-  table that is re-checked on the same cadence as the prior-art scan.
+  table that is re-checked at every phase boundary.
 - Files under `docs/plan/` are the **source of truth**; GitHub Issues mirror
   the near-term work packages (currently Phase 1) for tracking and discussion.
   See [`docs/plan/README.md`](docs/plan/README.md) for conventions.
