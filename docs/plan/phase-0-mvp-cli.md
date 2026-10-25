@@ -204,9 +204,6 @@ depend on them:
 - **Hand-rolled HTTP + SSE over the stdlib, no `openai-go`.** Fixture tests
   replay recorded byte streams (`testdata/*.sse`), error mapping is explicit,
   and dialect quirks stay visible in the package instead of inside an SDK.
-  The streaming-loop and accumulator shape follows Ollama's runner client and
-  the message conversion follows opencode's provider (both MIT, rewritten
-  against `agentapi` types, attributed in the commit).
 - **The wire protocol lives in a sans-IO decoder** (`stream.go`): SSE lines
   go in, `ChatEvent`s come out, no HTTP anywhere. Protocol edge cases are
   table-tested from string literals without a server. The decoder implements
@@ -263,9 +260,9 @@ depend on them:
 
 ### WP0.4 — Agent loop — **done**
 
-- [x] Claude Code pattern: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
+- [x] One flat loop: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
 - [x] Limits: max iterations per turn (default 25), max context tokens
-- [x] Compaction at 80% of the window: summarize old turns into one system block (reference — auto-compact in opencode/Crush)
+- [x] Compaction at 80% of the window: summarize old turns into one system block
 - [x] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
 - [ ] Backlog (audit 2026-09-28, B1; does not block `v0.2.0`, decided 2026-10-11): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh)
 - [ ] Backlog (audit 2026-09-28, B2; does not block `v0.2.0`, decided 2026-10-11): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic)
@@ -280,8 +277,7 @@ depend on them:
   as an argument and never retains it — a stateful `Agent` would be the
   start of a session, which is WP0.7's job.
 - **Tool calls run sequentially, in request order**, not through a parallel
-  `errgroup.Group`. This follows opencode's loop (MIT, adapted, attributed
-  in the commit) and keeps a stable per-call order for WP0.6's confirmation
+  `errgroup.Group`. This keeps a stable per-call order for WP0.6's confirmation
   prompts, which ask about one call at a time. Parallel execution would
   trade that order — and WP0.6's upcoming per-call gating — for latency
   this MVP does not need. WP0.11 generalizes this into an Agent-built
@@ -339,7 +335,7 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 
 - [x] `read_file(path, offset?, limit?)`
 - [x] `write_file(path, content)`
-- [x] `edit_file(path, old_str, new_str)` — unique search/replace (Aider editblock format)
+- [x] `edit_file(path, old_str, new_str)` — unique search/replace
 - [x] `list_dir(path)`
 - [x] `glob(pattern)`
 - [x] `grep(pattern, path?)`
@@ -381,7 +377,7 @@ depend on them:
   the streaming form for subprocess output — it retains head and a ring of
   the tail so a command printing gigabytes cannot exhaust memory — and a
   test pins that it renders byte-for-byte what `Truncate` would on the
-  same bytes. (Idea from opencode and ollama, both MIT; rewritten.)
+  same bytes.
 - **Schemas are generated from the argument structs with
   `invopop/jsonschema`** (chat decision; the alternatives were hand-written
   JSON literals, which drift from the struct, or a ~150-line reflection
@@ -436,14 +432,13 @@ depend on them:
 - **`edit_file` matches in four steps and never guesses.** Exact unique
   substring → the same with CRLF line endings when the file uses them →
   whole-line match ignoring a uniform indentation difference, re-indenting
-  `new_str` to fit (an idea port of Aider's
-  `replace_part_with_missing_leading_whitespace`, Apache 2.0) → failure
+  `new_str` to fit → failure
   with the closest lines rendered with visible whitespace (`→`, `·`).
   Any step that finds more than one candidate fails as ambiguous, listing
   line numbers; editing the wrong site is the one outcome worse than a
   failed call. An empty `old_str` creates a missing file or appends to an
-  existing one, which is what Aider's edit-block format defines. There is
-  no "read before you edit" bookkeeping (opencode's `lastRead` map): it is
+  existing one, as the edit-block convention defines. There is
+  no "read before you edit" bookkeeping: it is
   cross-tool state that belongs with a session (WP0.7), if anywhere.
 - **`write_file` and `edit_file` write atomically** — temp file in the same
   directory, fsync, then rename, mode preserved — so a reader never sees a
@@ -454,11 +449,11 @@ depend on them:
   root, so following it stays confined. The result of `edit_file` echoes
   the changed region with line numbers so the model can verify without a
   second `read_file`.
-- **`bash` runs a fresh `bash -c` (or `sh -c`) per call**, not opencode's
+- **`bash` runs a fresh `bash -c` (or `sh -c`) per call**, not a
   persistent shell: shell state between calls is exactly the kind of
   hidden state a replayed session (WP0.7) cannot reproduce. The command
-  gets its own process group, killed whole on timeout (ollama's approach,
-  MIT), with `WaitDelay` so a detached child holding the pipes does not
+  gets its own process group, killed whole on timeout,
+  with `WaitDelay` so a detached child holding the pipes does not
   hang the call. Non-zero exit and timeout are `IsError` results carrying
   the output gathered so far; a missing shell is a machinery error.
   `timeout` is in seconds (default 60, max 600). **`bash` is not confined
@@ -492,13 +487,8 @@ depend on them:
   malformed schema, unknown class or duplicate name fails `hint` at
   startup instead of as a provider 400 mid-turn. `Tools()`/`Schemas()` are
   sorted by name, matching `agent.schemas()`'s determinism rule.
-- Crush was consulted for the todo and whitespace-hint patterns only. Its
-  license is FSL-1.1-MIT (checked 2026-10-25 against the LICENSE.md on
-  its main branch), so per R2 no code was copied.
 
 ### WP0.6 — Permission system — **done**
-
-References — Crush, Codex CLI.
 
 - [x] Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
 - [x] Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
@@ -612,14 +602,8 @@ depend on them:
   mutually exclusive cobra flags and not part of `config.Flags`: a run
   policy is not a provider profile. A config or environment default for
   the mode is a possible later addition, not part of this package.
-- Crush and Codex were consulted for the approval-mode vocabulary and
-  the grant/deny shape (pattern references only); the prompter-plus-scope
-  idea follows ollama's `ApprovalPrompter` (MIT), rewritten around
-  `agentapi.PermissionRequest`. No code was copied.
 
 ### WP0.7 — Sessions — **done**
-
-Reference — Pi session format.
 
 - [x] Append-only JSONL, one file per session:
       `~/.local/share/hint/sessions/<project-hash>/<created>_<id>.jsonl`
@@ -726,10 +710,6 @@ depend on them:
 
 ### WP0.8 — Project context — **done**
 
-References — codex (`agents_md.rs`: root-bounded walk, shared byte
-budget), openhuman (bounded read), gemini-cli (`getFolderStructure`: item
-cap), Crush (prompt placement; pattern reference only, FSL-1.1-MIT).
-
 - [x] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - [x] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
 
@@ -744,10 +724,9 @@ depend on them:
   --exclude-standard`** (chat decision, the same shape as WP0.5's
   ripgrep: an external tool as the fast, exact path and pure Go as the
   fallback). Alternatives priced and rejected: `go-git`'s gitignore
-  package plus a hand-built hierarchical matcher (Crush's route — ~200
+  package plus a hand-built hierarchical matcher (~200
   lines and a large module for one subpackage), `sabhiram/go-gitignore`
-  (unmaintained, known negation bugs, used by nobody in the research
-  tree), a home-grown parser (gitignore semantics — anchoring, `**`,
+  (unmaintained, known negation bugs), a home-grown parser (gitignore semantics — anchoring, `**`,
   negation, dir-only — are deceptively deep). Cost accepted: outside a
   repository, or without git installed, only the hidden-and-dependency
   rule applies; a process is spawned per listing, which the cold-start
@@ -762,28 +741,28 @@ depend on them:
   `dist`/`__pycache__`) still applies on top, so a committed `vendor/`
   is pruned as before.
 - **Instruction files are searched from the git root down to the
-  working directory, outermost first** (chat decision; codex, gemini-cli
-  and goose do the same, opencode-TS and pi-mono too). In each
+  working directory, outermost first** (chat decision; the common
+  convention among coding agents). In each
   directory the first of `HINT.md` > `AGENTS.md` > `CLAUDE.md` wins and
   the others are not read, so a project keeping both is not told the
-  same thing twice (opencode-TS's argument). The root is the nearest
+  same thing twice. The root is the nearest
   ancestor with a `.git` entry (directory or worktree file); without
   one only the working directory is searched. A global
   `~/.config/hint/HINT.md` was deferred to WP0.9 with the other flags.
 - **One 32 KiB budget for all instruction files, shared, truncating**
-  (chat decision; codex's number and policy). The budget is shared
+  (chat decision). The budget is shared
   rather than per file because it is the total that competes with the
   conversation for the context window, and the preamble is the one
   part of a request that compaction never touches. A file that
   overflows is cut at the remaining budget and marked; later files are
   skipped; each cut or skip is a stderr warning. The read itself is
-  bounded (`io.LimitReader`, openhuman's detail), so a symlinked log
-  is never loaded to be discarded. claurst's per-file skip was
+  bounded (`io.LimitReader`), so a symlinked log
+  is never loaded to be discarded. A per-file skip was
   rejected because one large file would silently leave a project with
   no instructions at all. Whitespace-only files cost nothing.
 - **The overview is a `project.Overview` strategy; `Tree{Depth: 2,
-  MaxEntries: 100}` is the default** and `None` exists. gemini-cli's
-  200-item cap and qwen-code's 20 bracket the number; two levels is
+  MaxEntries: 100}` is the default** and `None` exists. Other agents' caps range from 20 to 200
+  entries; two levels is
   what a developer glances at. Truncation says so in the listing so
   the model reaches for `list_dir`. The interface, rather than a
   constant, is deliberate: the user's intent is to let the *agent*
@@ -791,8 +770,8 @@ depend on them:
   (which files it has been reading, what the user keeps asking
   about). That is a Phase 1–2 item once there is a per-turn hook to
   hang it on; it is not scheduled here.
-- **Placement stays one `SystemMessage`.** codex sends instructions as
-  a user-role message so they can be swapped mid-session without
+- **Placement stays one `SystemMessage`.** Sending instructions as
+  a user-role message lets them be swapped mid-session without
   invalidating a cached system prefix; `hint` rebuilds the preamble
   every run and never stores it (WP0.7), so the swap has nothing to
   buy. `session.NewRecorder(sess, len(preamble))` is unchanged.
@@ -813,9 +792,8 @@ depend on them:
   that is not "not a repository" (a corrupt index, a killed process)
   is reported by `Load`; the tools that meet the same failure fall back
   to `Basic` silently rather than report it on every call.
-- Known limits, deliberately not addressed: `.hintignore` (Crush has
-  `.crushignore`); `@import` expansion inside instruction files
-  (gemini-cli, goose, claurst); case-insensitive filesystems where
+- Known limits, deliberately not addressed: `.hintignore`; `@import` expansion inside instruction files;
+  case-insensitive filesystems where
   `HINT.md` and `hint.md` are one file are not special-cased. What
   happens when the instruction files do not fit the budget — today a
   blind cut, with the nearest files the first to be dropped — and how
@@ -1181,10 +1159,8 @@ changed file. Never on by default.
 outgrows one file splits it: `HINT.md` stays a short index, and
 `.hint/rules/*.md` (location is [Q8](../../PLAN.md#open-questions))
 hold the detail. A rule file may carry front matter with `paths:` globs
-(the Cursor / Cline `globs` convention); a file with globs is loaded only
-once the agent touches a matching path in the turn — goose's
-`SubdirectoryHintTracker` and opencode's `Instruction.resolve` are the
-prior art — and until then is listed in the index by title. A rule file
+(the Cursor `globs` convention); a file with globs is loaded only
+once the agent touches a matching path in the turn, and until then is listed in the index by title. A rule file
 without globs is loaded always, as part of the index's budget. Nested
 `AGENTS.md` files are the directory-scoped special case of the same idea
 and keep working unchanged. This rung is what keeps a large project's
@@ -1273,10 +1249,9 @@ Decisions (2026-09-07, rung 4):
   — every tool call in the history is asked which files it named — so a
   continued session loads on its first request whatever the earlier run
   had loaded, compaction keeps the prefix verbatim as it always did, and
-  the session format carries nothing new. goose does the same with
-  `system_prompt_extras`. The alternatives were a user-role message
-  after the tool results (Claude Code's system-reminder shape: text the
-  user never typed under their role, plus bookkeeping against repeats)
+  the session format carries nothing new. The alternatives were a user-role
+  message after the tool results (text the user never typed under their
+  role, plus bookkeeping against repeats)
   and an addendum to the touching tool's result (the user's own rules
   demoted to untrusted tool output, against the WP0.8 decision).
 - **Tools say what they touch; nothing sniffs their arguments.**
@@ -1284,9 +1259,8 @@ Decisions (2026-09-07, rung 4):
   write_file and edit_file implement it, resolved through their root;
   list_dir, glob and grep do not (they look, they do not read a file a
   rule could be about), and neither does bash — its command is not
-  parsed for paths. goose sniffs `path` and shell-splits `command`, with
-  the false positives that implies; Claude Code matches its own tools'
-  path arguments, which is what the interface gives us as a contract an
+  parsed for paths. Sniffing `path` arguments or shell-splitting `command`
+  brings false positives; the interface gives us a contract an
   MCP adapter (Phase 2) can honour rather than a key name it must guess.
 - **A rule once loaded stays loaded for the run.** Deriving the set from
   the history would unload a rule when compaction summarized away the
@@ -1322,7 +1296,7 @@ Decisions recorded when the package was planned:
   confinement is by construction, as `tool.Root` is for the file tools.
 - **Splitting is a convention, not a format.** Rule files are plain
   Markdown with optional front matter; no schema, no `@import` language.
-  gemini-cli's and goose's import syntaxes buy little over a directory
+  An import syntax buys little over a directory
   of files and add a parser that can loop.
 
 ### WP0.14 — Install indexes for Debian and Windows
