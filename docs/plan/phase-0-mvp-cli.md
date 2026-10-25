@@ -493,8 +493,8 @@ depend on them:
   startup instead of as a provider 400 mid-turn. `Tools()`/`Schemas()` are
   sorted by name, matching `agent.schemas()`'s determinism rule.
 - Crush was consulted for the todo and whitespace-hint patterns only. Its
-  current tree is 0BSD-licensed, not FSL as CONTRIBUTING records; no code
-  was copied either way — updating the rule is a separate docs decision.
+  license is FSL-1.1-MIT (checked 2026-10-25 against the LICENSE.md on
+  its main branch), so per R2 no code was copied.
 
 ### WP0.6 — Permission system — **done**
 
@@ -728,7 +728,7 @@ depend on them:
 
 References — codex (`agents_md.rs`: root-bounded walk, shared byte
 budget), openhuman (bounded read), gemini-cli (`getFolderStructure`: item
-cap), Crush (prompt placement; pattern reference only, FSL).
+cap), Crush (prompt placement; pattern reference only, FSL-1.1-MIT).
 
 - [x] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - [x] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
