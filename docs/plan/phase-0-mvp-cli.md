@@ -1310,6 +1310,7 @@ Pre-releases stay off every index, as they already stay off the cask.
       Later final tags keep updating it.
 - [ ] macOS: the next cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
       Editing the generated `Casks/hint.rb` by hand does not survive the following release.
+      `.goreleaser.yaml` carries `hooks.post.install_steps` since the `v0.3.1` config; the tag confirms the generated cask.
 - [ ] macOS: `homebrew-tap` still has a root formula `hint.rb` at `0.1.0`.
       `brew install` without `--cask` selects that formula.
       Remove it, or the tap does not install the current version.
@@ -1325,8 +1326,9 @@ Pre-releases stay off every index, as they already stay off the cask.
       The public half is what users add as the repository key.
       Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); both set 2026-10-22, used by the `v0.3.0` run.
 - [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
-- [ ] README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
-      Done for apt and Homebrew; the Scoop bucket line waits for the bucket.
+      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`; the first manifest arrives with `v0.3.1`.
+- [x] README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
+      The Scoop lines landed with the `scoops` config, ahead of the first manifest.
 
 Decisions (2026-10-11):
 
