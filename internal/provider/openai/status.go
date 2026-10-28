@@ -103,17 +103,28 @@ func errorMessage(body []byte) string {
 	// Gateways in front of the API answer in their own shapes; the common
 	// ones are {"error":"Unauthorized"}, a string where OpenAI sends an
 	// object, and {"detail":"Access denied"} (api-bar, FastAPI), which
-	// would otherwise reach the user as raw JSON.
+	// would otherwise reach the user as raw JSON. NestJS sends both,
+	// {"message":"Invalid API key","error":"Unauthorized"}, where the
+	// useful part is the message and the error is the status text; so the
+	// longer fields win and the error is kept as a suffix when it differs.
 	var flat struct {
 		Error   string `json:"error"`
 		Message string `json:"message"`
 		Detail  string `json:"detail"`
 	}
 	if err := json.Unmarshal(body, &flat); err == nil {
-		for _, msg := range []string{flat.Error, flat.Message, flat.Detail} {
-			if msg = strings.TrimSpace(msg); msg != "" {
-				return msg
+		errText := strings.TrimSpace(flat.Error)
+		for _, msg := range []string{flat.Message, flat.Detail} {
+			if msg = strings.TrimSpace(msg); msg == "" {
+				continue
 			}
+			if errText != "" && !strings.EqualFold(errText, msg) {
+				return msg + " (" + errText + ")"
+			}
+			return msg
+		}
+		if errText != "" {
+			return errText
 		}
 	}
 	return strings.TrimSpace(string(body))
