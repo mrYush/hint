@@ -1301,7 +1301,7 @@ Decisions recorded when the package was planned:
 
 ### WP0.14 — Install indexes for Debian and Windows
 
-`v0.2.0` publishes GitHub Release archives and the Homebrew cask.
+`v0.2.0` published GitHub Release archives and the Homebrew cask; `v0.3.0` added the apt repository.
 This package adds the indexes still missing so the same final version is what `apt` and a Windows package manager install.
 It does not reopen `v0.2.0` and it does not gate Phase 1 (`v0.3`): the two proceed in parallel.
 Pre-releases stay off every index, as they already stay off the cask.
