@@ -46,6 +46,8 @@ coverage.html
 *.sublime-workspace
 *.sublime-project
 
+.cursor/
+
 # Временные файлы операционной системы
 .DS_Store
 .DS_Store?
