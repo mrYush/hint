@@ -235,8 +235,8 @@ Two rules from the architecture apply to every contribution:
   layer; file tools stay confined to the working directory by default.
 
 If you believe you've found a security vulnerability, please do **not** open
-a public issue — contact the maintainer privately (see the repository owner's
-GitHub profile) and allow time for a fix.
+a public issue — follow [SECURITY.md](SECURITY.md), which also states what
+each run mode hands over to the agent.
 
 ## Licensing
 
