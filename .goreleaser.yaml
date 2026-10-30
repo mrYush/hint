@@ -39,7 +39,7 @@ archives:
   - id: default
     formats:
       - tar.gz
-    # hint_0.1.0_linux_arm64.tar.gz; the Pi and Homebrew both key on this.
+    # hint_0.3.1_linux_arm64.tar.gz; the Pi and Homebrew both key on this.
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
@@ -59,7 +59,7 @@ nfpms:
       - hint
     formats:
       - deb
-    # hint_0.2.0_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
+    # hint_0.3.1_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     maintainer: Yurii Simonov <rep.yurii@gmail.com>
     homepage: https://github.com/mrYush/hint
@@ -92,7 +92,7 @@ release:
   footer: |
     Known issues for this release are listed in the README under
     *Troubleshooting → Known issues*; the open bugs are tracked as
-    `[Phase 0]` GitHub issues. The limits of this release (no sandbox
+    GitHub issues. The limits of this release (no sandbox
     for `bash`, completion off by default, the secret store verified on
     Linux only) are in that same section.
 
