@@ -70,6 +70,17 @@ The tap is `mrYush/tap` (the repository `mrYush/homebrew-tap`); the cask
 installs the release binary and brings ripgrep with it. Pre-releases are
 not published to the tap.
 
+### Scoop (Windows)
+
+```powershell
+scoop bucket add hint https://github.com/mrYush/scoop-bucket
+scoop install hint
+```
+
+The bucket is `mrYush/scoop-bucket`; the manifest installs the release
+binary for amd64 and arm64 and brings ripgrep from Scoop's `main` bucket.
+Pre-releases are not published to the bucket.
+
 ### Release archive
 
 Download the archive for your platform, check it against `checksums.txt`

@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/mrYush/hint/internal/console"
@@ -81,15 +82,36 @@ func TestLineReader_DiscardPending(t *testing.T) {
 }
 
 func TestLineReader_DiscardPendingObservesEOF(t *testing.T) {
-	r := console.NewLineReader(strings.NewReader(""))
-	r.DiscardPending() // starts the goroutine; it may or may not have hit EOF yet
-	time.Sleep(20 * time.Millisecond)
-	r.DiscardPending() // now it has: the EOF is collected here, not lost
-	// Whether or not DiscardPending saw the EOF in time, ReadLine must
-	// report it rather than hang.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if _, err := r.ReadLine(ctx); !errors.Is(err, io.EOF) {
-		t.Fatalf("ReadLine on an empty stream = %v, want io.EOF", err)
+	// The bubble waits until the reader goroutine is blocked offering EOF,
+	// so the test does not depend on a sleep. Dropping that error deadlocks
+	// the bubble: the goroutine has exited and ReadLine would wait forever.
+	synctest.Test(t, func(t *testing.T) {
+		r := console.NewLineReader(strings.NewReader(""))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		cancel()
+		if _, err := r.ReadLine(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("ReadLine = %v, want context.Canceled", err)
+		}
+		synctest.Wait()
+		r.DiscardPending()
+		if _, err := r.ReadLine(context.Background()); !errors.Is(err, io.EOF) {
+			t.Fatalf("ReadLine after DiscardPending = %v, want io.EOF", err)
+		}
+	})
+}
+
+// TestLineReader_DiscardPendingLeavesBufferedAnswer checks that input
+// already sitting in the stream is the next answer. DiscardPending must
+// not start the reader and take it.
+func TestLineReader_DiscardPendingLeavesBufferedAnswer(t *testing.T) {
+	r := console.NewLineReader(strings.NewReader("2\n"))
+	r.DiscardPending()
+	got, err := r.ReadLine(context.Background())
+	if err != nil || got != "2" {
+		t.Fatalf("ReadLine = %q, %v; want %q", got, err, "2")
+	}
+	if _, err := r.ReadLine(context.Background()); !errors.Is(err, io.EOF) {
+		t.Fatalf("ReadLine after the answer = %v, want io.EOF", err)
 	}
 }

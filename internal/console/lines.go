@@ -19,11 +19,11 @@ import (
 // LineReader reads lines from one stream on behalf of every prompt in the
 // process.
 //
-// The reader goroutine starts lazily on the first call and runs until the
-// stream ends. A question cancelled by ctx leaves it parked on the next
-// line, so the reader stays usable afterwards. Once the stream has ended,
-// [LineReader.ReadLine] keeps returning the terminal error immediately
-// rather than waiting on a goroutine that has exited.
+// The reader goroutine starts lazily on the first [LineReader.ReadLine]
+// and runs until the stream ends. A question cancelled by ctx leaves it
+// parked on the next line, so the reader stays usable afterwards. Once the
+// stream has ended, [LineReader.ReadLine] keeps returning the terminal
+// error immediately rather than waiting on a goroutine that has exited.
 //
 // Callers are sequential: the agent loop asks about one thing at a time,
 // so no lock guards the terminal-error field.
@@ -66,11 +66,15 @@ func (r *LineReader) start() {
 
 // DiscardPending drops lines the reader goroutine has already collected
 // while nobody was waiting for one — typed after a Ctrl-C, say — so that
-// they cannot be taken as the answer to the next question. It only sees a
-// line the goroutine is currently offering; one still being typed is, by
-// definition, meant for the question about to be asked.
+// they cannot be taken as the answer to the next question.
+//
+// It does not start the reader. Bytes still sitting unread belong to the
+// question about to be asked; starting the goroutine here races that
+// question for them and can discard a buffered answer before
+// [LineReader.ReadLine] sees it. Only a line the goroutine is already
+// offering is taken. An EOF taken that way is remembered; otherwise the
+// next ReadLine would wait on a goroutine that has already exited.
 func (r *LineReader) DiscardPending() {
-	r.start()
 	for r.eof == nil {
 		select {
 		case l := <-r.lines:
