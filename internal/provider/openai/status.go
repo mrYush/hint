@@ -104,9 +104,11 @@ func errorMessage(body []byte) string {
 	// ones are {"error":"Unauthorized"}, a string where OpenAI sends an
 	// object, and {"detail":"Access denied"} (api-bar, FastAPI), which
 	// would otherwise reach the user as raw JSON. NestJS sends both,
-	// {"message":"Invalid API key","error":"Unauthorized"}, where the
-	// useful part is the message and the error is the status text; so the
-	// longer fields win and the error is kept as a suffix when it differs.
+	// {"message":"Invalid API key","error":"Unauthorized"}, where message
+	// is the reason and error is the status text. The first non-empty of
+	// message, detail wins even when it is the shorter field; the status
+	// text is appended in parentheses when it differs, and stands alone
+	// when it is the only text.
 	var flat struct {
 		Error   string `json:"error"`
 		Message string `json:"message"`

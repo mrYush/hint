@@ -40,13 +40,12 @@ coverage.html
 # Файлы IDE и редакторов
 .idea/
 .vscode/
+.cursor/
 *.swp
 *~
 .*.swp
 *.sublime-workspace
 *.sublime-project
-
-.cursor/
 
 # Временные файлы операционной системы
 .DS_Store
