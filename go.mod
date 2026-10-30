@@ -2,6 +2,10 @@ module github.com/mrYush/hint
 
 go 1.26.0
 
+// v0.1.0 is the earlier, unrelated application that lived under this
+// path; it is not a version of this program (PLAN.md, decided 2026-09-27).
+retract v0.1.0
+
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.0

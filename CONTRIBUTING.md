@@ -116,7 +116,9 @@ Flow:
   push needs the `HOMEBREW_TAP_TOKEN` repository secret: a token with write
   access to the tap repository. Without it a final release fails at the
   cask step after the GitHub Release is already published; pre-releases
-  skip the step. The same goreleaser run builds a `.deb` per Linux
+  skip the step. The Scoop manifest goes to
+  [`mrYush/scoop-bucket`](https://github.com/mrYush/scoop-bucket) the same
+  way, with the `SCOOP_BUCKET_TOKEN` secret. The same goreleaser run builds a `.deb` per Linux
   architecture (nFPM), and for a final version
   [`scripts/apt-repo.sh`](scripts/apt-repo.sh) turns them into a signed apt
   repository that the workflow force-pushes as one orphan commit to the
@@ -235,8 +237,8 @@ Two rules from the architecture apply to every contribution:
   layer; file tools stay confined to the working directory by default.
 
 If you believe you've found a security vulnerability, please do **not** open
-a public issue — contact the maintainer privately (see the repository owner's
-GitHub profile) and allow time for a fix.
+a public issue — follow [SECURITY.md](SECURITY.md), which also states what
+each run mode hands over to the agent.
 
 ## Licensing
 
