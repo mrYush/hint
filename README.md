@@ -697,9 +697,12 @@ Details and the full audit:
    instead of a truncated list; search a directory or narrow the pattern.
 5. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
-6. A gateway that answers a failed request with both a short `error` and a longer `message` (the NestJS shape, `{"error":"Unauthorized","message":"Invalid API key"}`) is reported by the `error` field alone.
-   `hint --debug` shows the full response body.
-   Present since `v0.3.0` (on `develop` since WP1.4).
+
+**Fixed in `v0.3.1`.** A gateway that answers a failed request with both a
+short `error` and a longer `message` — the NestJS shape
+`{"error":"Unauthorized","message":"Invalid API key"}` — was reported by
+the `error` field alone. Present since `v0.3.0`. The message now comes
+first, with the error as a suffix when the two differ.
 
 **Limits of this release.** Three things are known and accepted for
 `v0.3.0`, not bugs to be fixed in a patch:

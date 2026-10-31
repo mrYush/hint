@@ -8,6 +8,13 @@ func TestErrorMessageShapes(t *testing.T) {
 		{"gateway string", `{"error": "Unauthorized"}`, "Unauthorized"},
 		{"gateway message", `{"message":"Forbidden"}`, "Forbidden"},
 		{"fastapi detail", `{"detail":"Access denied"}`, "Access denied"},
+		{"nestjs message and error", `{"statusCode":401,"message":"Invalid API key","error":"Unauthorized"}`, "Invalid API key (Unauthorized)"},
+		{"message equals error", `{"message":"Unauthorized","error":"Unauthorized"}`, "Unauthorized"},
+		{"message repeats error ignoring case", `{"message":"unauthorized","error":"UNAUTHORIZED"}`, "unauthorized"},
+		{"trimmed message and error", `{"message":" Invalid API key ","error":" Unauthorized "}`, "Invalid API key (Unauthorized)"},
+		{"short message still leads", `{"message":"no","error":"The API key is invalid"}`, "no (The API key is invalid)"},
+		{"blank message falls through to detail", `{"message":"  ","detail":"Access denied","error":"Forbidden"}`, "Access denied (Forbidden)"},
+		{"detail with error", `{"error":"Forbidden","detail":"Access denied"}`, "Access denied (Forbidden)"},
 		{"plain text", "  upstream timed out \n", "upstream timed out"},
 		{"empty", "", ""},
 	}
