@@ -28,6 +28,11 @@ index and are not part of the product doc set.
 - **Files here are the source of truth** for scope and status. GitHub Issues
   mirror the work packages of the *active* phase (one issue per work package,
   titled `[Phase N][WPx.y] Title`) for day-to-day tracking and discussion.
+- For a work package, the issue body repeats the branch line from the phase
+  file, and the pull request body carries `Closes #N`, so merging into
+  `develop` closes the issue automatically. The templates are
+  [`work-package.md`](../../.github/ISSUE_TEMPLATE/work-package.md) and
+  [`pull_request_template.md`](../../.github/pull_request_template.md).
 - When an issue closes, tick the corresponding checkboxes in the phase file in
   the same PR (or a follow-up docs commit).
 - When scope changes in a discussion or issue, port the decision back into the
