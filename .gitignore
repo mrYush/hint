@@ -40,6 +40,7 @@ coverage.html
 # Файлы IDE и редакторов
 .idea/
 .vscode/
+.cursor/
 *.swp
 *~
 .*.swp

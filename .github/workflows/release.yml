@@ -1,12 +1,14 @@
 # Release: pushing an annotated v* tag (CONTRIBUTING.md, "Releases")
 # builds every target with goreleaser, attaches the archives and
 # checksums and .deb packages to a GitHub Release, and — for a final
-# version — updates the Homebrew cask in mrYush/homebrew-tap and rebuilds
-# the apt repository on the gh-pages branch (served by GitHub Pages).
+# version — updates the Homebrew cask in mrYush/homebrew-tap, the Scoop
+# manifest in mrYush/scoop-bucket and rebuilds the apt repository on the
+# gh-pages branch (served by GitHub Pages).
 #
 # Secrets: GITHUB_TOKEN is provided by GitHub; HOMEBREW_TAP_TOKEN must be
-# a token with write access to mrYush/homebrew-tap. Without it the brew
-# step fails on a final release (pre-releases skip it).
+# a token with write access to mrYush/homebrew-tap, SCOOP_BUCKET_TOKEN one
+# with write access to mrYush/scoop-bucket. Without them the brew and
+# scoop steps fail on a final release (pre-releases skip them).
 # APT_SIGNING_KEY is the ASCII-armored private key that signs the apt
 # Release file (APT_SIGNING_PASSPHRASE if it has one). Without it the apt
 # step fails on a final release, after the GitHub Release is published.
@@ -42,6 +44,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
           # Two tags on one commit make GoReleaser pick whichever git lists
           # first (v0.2.0 was built as v0.2.0-alpha). The ref that triggered
           # the run is the tag we mean to publish.

@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-24
+> Status: living document · Last updated: 2026-10-31
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -81,7 +81,7 @@ already in the repository belongs to the earlier, substantially different
 application and is left as is. Pre-release tags carry a suffix
 (`v0.2.0-alpha`); every tag is full semver, as Go modules require.
 
-[WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) publishes the current CLI to the indexes a user installs from: the Homebrew cask (macOS, already shipped), an apt repository (Ubuntu, Debian and the other apt systems, including Raspberry Pi OS) and a Scoop bucket (Windows).
+[WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) publishes the current CLI to the indexes a user installs from: the Homebrew cask (macOS and Linux, already shipped), an apt repository (Ubuntu, Debian and the other apt systems, including Raspberry Pi OS) and a Scoop bucket (Windows).
 It runs **in parallel with Phase 1**.
 `v0.3` does not wait for it, and a tag that only updates those indexes is not the Phase 1 release.
 
@@ -100,10 +100,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   The three Phase 1 acceptance criteria are met (2026-10-20).
 - **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
   It did not block `v0.3.0`.
-  The apt side is in the tree: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step that publishes a signed repository to `gh-pages`.
-  The signing key (`APT_SIGNING_KEY`, and `APT_SIGNING_PASSPHRASE`) is set (2026-10-22).
-  `v0.3.0` publishes that repository; Pages is enabled on `gh-pages` after the first push.
+  The apt side is done: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step publish a signed repository to `gh-pages`; the signing key (`APT_SIGNING_KEY`, and `APT_SIGNING_PASSPHRASE`) was set 2026-10-22.
+  `v0.3.0` published that repository and Pages serves it from `https://mryush.github.io/hint` (2026-10-25).
   `v0.2.0` was built before the packages existed and is not republished.
+  The cask on `install_steps` and the `scoops` block are in the tree, and the root formula `hint.rb` (`0.1.0`) is out of `mrYush/homebrew-tap`; `v0.3.1` confirms the first two with the tag and publishes the Scoop manifest (step 19).
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
   WP0.2 — config profiles and sources (provider profiles,
@@ -188,7 +188,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
-  `v0.2.0-alpha`, `v0.2.0` and `v0.3.0` are tagged; `v0.2.0` is the GitHub Release and the Homebrew cask in `mrYush/homebrew-tap`.
+  `v0.2.0-alpha`, `v0.2.0` and `v0.3.0` are tagged; `v0.3.0` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap` and the package in the apt repository.
+  `v0.3.1` is in progress on `release/v0.3.1` ([runbook](docs/plan/release-v0.3.1.md)); nothing is tagged for it yet.
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) proceeds on its own and does not have to finish first.
   The audit fixes B1–B3 and M1–M2
@@ -211,9 +212,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   parallel, and instruction files that outgrow the budget arrive as
   outlines the `instructions` tool expands, or split into rules that load
   when the conversation reaches their paths. CI and the release pipeline
-  are in place. Nothing in the Phase 0 scope still blocks `v0.2.0`: the
-  audit fixes and the Pi 5 smoke are backlog (2026-10-11), and criterion
-  5 is the Pi 4 bench cited above.
+  are in place. `v0.2.0` and `v0.3.0` shipped with the Phase 0 backlog
+  unchanged: the audit fixes and the Pi 5 smoke stay backlog (2026-10-11),
+  and criterion 5 is the Pi 4 bench cited above.
 
 ## Compatibility decision
 
@@ -258,9 +259,9 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are set (2026-10-22).
     `v0.3.0` published the signed repository to `gh-pages` and Pages serves it (2026-10-25); `apt install hint` from `https://mryush.github.io/hint` verified on clean Debian 12 and Ubuntu 24.04 containers (amd64).
     The arm64 package is in the index but has not been installed on a Raspberry Pi yet.
-    Scoop is not started.
+    Scoop: the bucket repository `mrYush/scoop-bucket` exists (2026-10-28); the manifest arrives with `v0.3.1`.
     The Homebrew cask field `homebrew_casks.binary` is replaced by `binaries` so `goreleaser check` passes.
-    Still open after that: the Scoop bucket and the cask's `postflight_steps`.
+    Still open after that: the Scoop bucket, the cask on `install_steps` and the root formula `hint.rb` (`0.1.0`) in `mrYush/homebrew-tap`; see step 19.
     The cask already covers macOS.
     This did not gate `v0.3.0`.
     Official catalogs stay a separate parallel path and do not gate either track.
@@ -273,6 +274,9 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
 18. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
     Independent of every tag and of Phase 1.
+19. `v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.
+    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41) (a later patch) and anything from Phase 2.
+    The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
 
 ## Open questions
 

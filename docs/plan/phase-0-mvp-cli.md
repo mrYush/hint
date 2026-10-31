@@ -34,10 +34,10 @@ plus the modality interfaces (`ChatProvider`, `Embedder`, `Transcriber`,
 `Speaker`, `VisionProvider`) — only `ChatProvider` gets an implementation in
 this phase.
 
-- [x] Define message/event/tool types in `pkg/agentapi`
-- [x] Declare all modality interfaces (empty implementations forbidden — unimplemented ones simply have no constructor yet)
-- [x] Doc comments on every exported symbol (this becomes the SDK)
-- [x] Unit tests: JSON round-trip for every wire type
+- ✅ Define message/event/tool types in `pkg/agentapi`
+- ✅ Declare all modality interfaces (empty implementations forbidden — unimplemented ones simply have no constructor yet)
+- ✅ Doc comments on every exported symbol (this becomes the SDK)
+- ✅ Unit tests: JSON round-trip for every wire type
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -60,18 +60,18 @@ depend on them:
 Scope taken beyond the original checklist, because WP0.3–WP0.6 need these
 types to be public and would otherwise have to amend the contract later:
 
-- [x] `ActionClass` (read/write/execute) — the `Tool` interface would
+- ✅ `ActionClass` (read/write/execute) — the `Tool` interface would
       otherwise pull `permission.Class` out of `internal/`, putting the class
       out of reach of third-party tool authors
-- [x] Typed `Error`/`ErrorKind` with `Retryable`/`Fallbackable` — the WP0.3
+- ✅ Typed `Error`/`ErrorKind` with `Retryable`/`Fallbackable` — the WP0.3
       router needs to tell a network failure from a 401 to decide when to
       fall back
-- [x] `Usage` — the WP0.4 compaction trigger needs token accounting
-- [x] `Tool` interface (declared here, implemented in WP0.5),
+- ✅ `Usage` — the WP0.4 compaction trigger needs token accounting
+- ✅ `Tool` interface (declared here, implemented in WP0.5),
       `PermissionRequest` and `Compaction` payloads (the client-facing
       `Event` is incomplete without them)
-- [x] `go.mod` raised 1.20 → 1.22, the phase's stated floor
-- [x] `.golangci.yml` — the contract depends on the `exhaustive` linter for a
+- ✅ `go.mod` raised 1.20 → 1.22, the phase's stated floor
+- ✅ `.golangci.yml` — the contract depends on the `exhaustive` linter for a
       guarantee Go's compiler does not give (a `switch` over a string enum
       falling through to `default` when a constant is added). CI wires the
       gate itself in WP0.10; the config lands with the code that needs it.
@@ -108,12 +108,12 @@ around it:
 Extends `internal/config`. Priority: CLI flags → env (`HINT_*`) → project
 `./.hint/config.yaml` → global `~/.config/hint/config.yaml`.
 
-- [x] Provider profile type: `{name, base_url, api_key, model, kind: openai|ollama}`
-- [x] Multiple profiles; one `default_provider`, explicit `fallback_provider`
-- [x] Env references in values (`api_key: ${OPENAI_API_KEY}`)
-- [x] Secrets never logged; masking helper used by the debug logger
-- [x] Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
-- [x] Table-driven tests for source priority and env expansion
+- ✅ Provider profile type: `{name, base_url, api_key, model, kind: openai|ollama}`
+- ✅ Multiple profiles; one `default_provider`, explicit `fallback_provider`
+- ✅ Env references in values (`api_key: ${OPENAI_API_KEY}`)
+- ✅ Secrets never logged; masking helper used by the debug logger
+- ✅ Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
+- ✅ Table-driven tests for source priority and env expansion
 
 Example config:
 
@@ -191,12 +191,12 @@ depend on them:
 
 Replaces `internal/llm` with `internal/provider/openai` + `internal/provider/router`.
 
-- [x] `openai-compatible` implementation of `ChatProvider`: streaming chat completions + tool calls (covers OpenAI, Azure, OpenRouter, vLLM, LM Studio, aggregator gateways such as api-bar.ru, and Ollama via `/v1`)
-- [x] `ollama-native` client for health-check and model listing only
-- [x] Router: on network error/timeout of the default profile, automatically switch to the fallback profile with a notice on stderr
-- [x] Streaming output to the terminal
-- [x] Integration tests against OpenAI and Ollama (recorded fixtures for CI; live matrix job optional, incl. api-bar.ru — streaming and tool-calling especially)
-- [x] Delete `internal/llm`
+- ✅ `openai-compatible` implementation of `ChatProvider`: streaming chat completions + tool calls (covers OpenAI, Azure, OpenRouter, vLLM, LM Studio, aggregator gateways such as api-bar.ru, and Ollama via `/v1`)
+- ✅ `ollama-native` client for health-check and model listing only
+- ✅ Router: on network error/timeout of the default profile, automatically switch to the fallback profile with a notice on stderr
+- ✅ Streaming output to the terminal
+- ✅ Integration tests against OpenAI and Ollama (recorded fixtures for CI; live matrix job optional, incl. api-bar.ru — streaming and tool-calling especially)
+- ✅ Delete `internal/llm`
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -260,10 +260,10 @@ depend on them:
 
 ### WP0.4 — Agent loop — **done**
 
-- [x] One flat loop: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
-- [x] Limits: max iterations per turn (default 25), max context tokens
-- [x] Compaction at 80% of the window: summarize old turns into one system block
-- [x] Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
+- ✅ One flat loop: `while` — model responds; tool calls → execute all, append results, repeat; pure text → finish the turn
+- ✅ Limits: max iterations per turn (default 25), max context tokens
+- ✅ Compaction at 80% of the window: summarize old turns into one system block
+- ✅ Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
 - [ ] Backlog (audit 2026-09-28, B1; does not block `v0.2.0`, decided 2026-10-11): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh)
 - [ ] Backlog (audit 2026-09-28, B2; does not block `v0.2.0`, decided 2026-10-11): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic)
 
@@ -333,17 +333,17 @@ depend on them:
 Each tool: JSON Schema input, text output, timeout, large-output truncation
 (head+tail with a marker).
 
-- [x] `read_file(path, offset?, limit?)`
-- [x] `write_file(path, content)`
-- [x] `edit_file(path, old_str, new_str)` — unique search/replace
-- [x] `list_dir(path)`
-- [x] `glob(pattern)`
-- [x] `grep(pattern, path?)`
-- [x] `bash(command, timeout?)` — confirmation-gated (WP0.6); built and
+- ✅ `read_file(path, offset?, limit?)`
+- ✅ `write_file(path, content)`
+- ✅ `edit_file(path, old_str, new_str)` — unique search/replace
+- ✅ `list_dir(path)`
+- ✅ `glob(pattern)`
+- ✅ `grep(pattern, path?)`
+- ✅ `bash(command, timeout?)` — confirmation-gated (WP0.6); built and
       tested here, registered in `cmd/hint` only once WP0.6 gates it
-- [x] `todo(items[])` — current-task plan, shown to the user
-- [x] Tool registry + schema generation for the provider layer
-- [x] Per-tool unit tests incl. truncation and timeout behavior
+- ✅ `todo(items[])` — current-task plan, shown to the user
+- ✅ Tool registry + schema generation for the provider layer
+- ✅ Per-tool unit tests incl. truncation and timeout behavior
 - [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
 - [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
 
@@ -490,18 +490,18 @@ depend on them:
 
 ### WP0.6 — Permission system — **done**
 
-- [x] Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
-- [x] Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
-- [x] Session allow-list of remembered grants ("always allow `go test`")
-- [x] File tools confined to the working directory by default (the
+- ✅ Action classes: `read` (no confirmation), `write` (confirm with diff), `execute` (confirm with command shown)
+- ✅ Run modes: `--ask` (default), `--auto-edit` (writes silent, execute asks), `--yolo` (nothing asks, loud warning)
+- ✅ Session allow-list of remembered grants ("always allow `go test`")
+- ✅ File tools confined to the working directory by default (the
       mechanism, `tool.Root`, landed in WP0.5; this covers the run-mode
       policy around it)
-- [x] Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
+- ✅ Register `write_file`, `edit_file` and `bash` (`builtin.All`) in
       `cmd/hint` behind the permission layer — WP0.5 deliberately wired
       only `builtin.ReadOnly`. `bash` is the one tool `tool.Root` cannot
       confine (a subprocess goes where it likes), so its prompt must show
       the full command and `--auto-edit` must keep asking for it
-- [x] Classify a tool's `error` in `internal/agent.runTools` before
+- ✅ Classify a tool's `error` in `internal/agent.runTools` before
       wrapping it: a `context.Canceled` / `DeadlineExceeded` that a tool
       passes through (the WP0.5 limits decorator forwards a caller's
       cancel or deadline untouched) currently becomes `ErrUnknown` "tool
@@ -510,7 +510,7 @@ depend on them:
       during a running tool ends the turn the same way it does between
       tools — a denied permission (WP0.6's own new outcome) needs the
       same seam, so fix both together
-- [x] Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
+- ✅ Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -605,16 +605,16 @@ depend on them:
 
 ### WP0.7 — Sessions — **done**
 
-- [x] Append-only JSONL, one file per session:
+- ✅ Append-only JSONL, one file per session:
       `~/.local/share/hint/sessions/<project-hash>/<created>_<id>.jsonl`
       (`$XDG_DATA_HOME` respected; the creation timestamp in the name makes
       a plain listing sort by age, the hash is SHA-256 of the resolved
       working directory, the header records the path in clear)
-- [x] Record kinds: `session` (header), `message` (one `agentapi.Message`
+- ✅ Record kinds: `session` (header), `message` (one `agentapi.Message`
       verbatim — user/assistant/tool/system are its roles, and a tool call
       travels inside its assistant message), `compaction` (checkpoint)
-- [x] Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
-- [x] Golden tests for the session format (backward-compat gate)
+- ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
+- ✅ Golden tests for the session format (backward-compat gate)
 - [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
 
 Decisions taken while implementing, recorded here because later packages
@@ -710,8 +710,8 @@ depend on them:
 
 ### WP0.8 — Project context — **done**
 
-- [x] Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
-- [x] Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+- ✅ Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
+- ✅ Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -805,21 +805,21 @@ depend on them:
 
 Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.
 
-- [x] Interactive REPL (plain readline loop, no TUI framework)
-- [x] One-shot: `hint -p "question"` — exits after the answer; `--output json` for scripts
-- [x] Compatibility alias: `hint "question"` (positional args) behaves as one-shot, prints a one-line migration hint
-- [x] `--debug` logging with key masking
-- [x] The session surface WP0.7 left here: `--session <id>` (a full id or
+- ✅ Interactive REPL (plain readline loop, no TUI framework)
+- ✅ One-shot: `hint -p "question"` — exits after the answer; `--output json` for scripts
+- ✅ Compatibility alias: `hint "question"` (positional args) behaves as one-shot, prints a one-line migration hint
+- ✅ `--debug` logging with key masking
+- ✅ The session surface WP0.7 left here: `--session <id>` (a full id or
       a unique prefix) and `hint sessions`
-- [x] `hint models` (left here by WP0.3): Ollama's native listing for an
+- ✅ `hint models` (left here by WP0.3): Ollama's native listing for an
       ollama profile, `GET /models` of the dialect for every other kind
-- [x] WP0.8's limits as flags and config keys: `--instruction-budget` /
+- ✅ WP0.8's limits as flags and config keys: `--instruction-budget` /
       `instructions.budget`, `--overview-depth` / `overview.depth` (0 for
       none), `--overview-entries` / `overview.max_entries`, each also as a
       `HINT_*` variable
-- [x] Global `~/.config/hint/HINT.md`, read before the repository's files
+- ✅ Global `~/.config/hint/HINT.md`, read before the repository's files
       under the same budget
-- [x] Profile `context_window` (also `HINT_CONTEXT_WINDOW`,
+- ✅ Profile `context_window` (also `HINT_CONTEXT_WINDOW`,
       `--context-window`) sizes the agent's proactive compaction — the
       input WP0.12's rung 0 needs
 
@@ -925,10 +925,10 @@ depend on them:
 
 ### WP0.10 — CI, release, distribution
 
-- [x] GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
-- [x] goreleaser config; binaries attached to GitHub Releases
-- [x] Homebrew tap
-- [x] linux/arm64 hardware run: Pi 4 4 GB `pi-bench` `20261011-105151` on
+- ✅ GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
+- ✅ goreleaser config; binaries attached to GitHub Releases
+- ✅ Homebrew tap
+- ✅ linux/arm64 hardware run: Pi 4 4 GB `pi-bench` `20261011-105151` on
       commit `b2aee40`
       ([summary](evidence/pi-4-20261011-105151/summary.md),
       [runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
@@ -939,7 +939,7 @@ depend on them:
 - [ ] Backlog: Raspberry Pi 5 + Ollama smoke of the acceptance scenarios
       (no longer a `v0.2.0` gate, decided 2026-10-11; checklist
       [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md))
-- [x] Update README for the new CLI surface
+- ✅ Update README for the new CLI surface
 
 Decisions (2026-09-07):
 
@@ -1000,24 +1000,24 @@ Not on the `v0.2.0-alpha` critical path (WP0.1–WP0.7). Sequential execution
 remains the Phase 0 acceptance default. Depends on WP0.5 (something to
 schedule) and WP0.6 (gating must stay per-call and ordered).
 
-- [x] `Schedule` as a closed node tree (`Seq` / `Par` / `Call`) inside
+- ✅ `Schedule` as a closed node tree (`Seq` / `Par` / `Call`) inside
       `internal/agent` — the loop walks it; `runTools` becomes the `Call`
       leaf (`schedule.go`: `node` sealed by an unexported marker method,
       `seq` / `par` / `call`; `tools.go`: a `batch` walks the tree)
-- [x] Agent-built schedule from the model's `ToolCall` list: consecutive
+- ✅ Agent-built schedule from the model's `ToolCall` list: consecutive
       `ClassRead` calls share a `Par`; `ClassWrite` / `ClassExecute` and
       unknown tools are steps of their own (never a gated call inside a
       `Par`). The path rule was dropped — see the decisions below
-- [x] Deterministic result order: within a `Par`, results append in the
+- ✅ Deterministic result order: within a `Par`, results append in the
       model's request order, not finish order — session replay (WP0.7) and
       WP0.6 prompts stay stable
-- [x] Existing three tool-failure shapes still apply: `IsError` / unknown /
+- ✅ Existing three tool-failure shapes still apply: `IsError` / unknown /
       panic of one `Par` leaf does not cancel siblings already started;
       a machinery `error` cancels the group's `ctx` and aborts the turn
-- [x] Optional additive `ToolCall.After []string` (call IDs) so the model
+- ✅ Optional additive `ToolCall.After []string` (call IDs) so the model
       can tighten a dependency the heuristic cannot see; unknown IDs are
       ignored and the conservative schedule wins. No `WireVersion` bump
-- [x] Loop unit tests: a `Par` of two reads; a `Seq` of write-then-read;
+- ✅ Loop unit tests: a `Par` of two reads; a `Seq` of write-then-read;
       a nested `Seq(Par(...), Call)`; fallback to a plain chain; a gated
       call never enters a `Par` — plus a panic beside a sibling, a
       machinery error canceling the group, Ctrl-C with a group in flight,
@@ -1174,22 +1174,22 @@ agent-chosen overview from WP0.8 needs, so they land together; the
 repo map (WP2.2) competes for the same preamble budget and will need
 the rung-0 arithmetic to include it.
 
-- [x] Rung 0: budget scaled to the profile's context window
+- ✅ Rung 0: budget scaled to the profile's context window
       (`WithInstructionBudget` stays the override) —
       `project.InstructionBudgetFor`, `WithContextWindow`;
       `config.InstructionSettings.BudgetExplicit` says when not to scale
-- [x] Rung 1: per-file minimum share, then root→leaf fill; test that a
+- ✅ Rung 1: per-file minimum share, then root→leaf fill; test that a
       nearest file survives a spent budget as an outline
       (`TestFit_NearestFileSurvivesAsOutline`)
-- [x] Rung 2: Markdown outline renderer (heading tree + first sentence,
+- ✅ Rung 2: Markdown outline renderer (heading tree + first sentence,
       cuts at section boundaries; the heading is the anchor);
       `instructions` built-in (`ClassRead`, reads only discovered files,
       `{}`, `{path}`, `{path, section}` and `{quote}` forms);
       `RenderInstructions` marks outlined files
-- [x] Rung 3: `instructions.summarize` config key (default off), content-
+- ✅ Rung 3: `instructions.summarize` config key (default off), content-
       hash cache under XDG cache, `summary="true"` attribute, a warning
       naming each summarized file
-- [x] Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
+- ✅ Rung 4: `.hint/rules/*.md` discovery, `paths:` front matter, load
       on first touch via a turn observer in `internal/agent`, index lists
       the unloaded ones by title; golden test of the rendered preamble
       for a split project (`project.DiscoverRules`, `Rule`, `Activation`,
@@ -1301,32 +1301,34 @@ Decisions recorded when the package was planned:
 
 ### WP0.14 — Install indexes for Debian and Windows
 
-`v0.2.0` publishes GitHub Release archives and the Homebrew cask.
+`v0.2.0` published GitHub Release archives and the Homebrew cask; `v0.3.0` added the apt repository.
 This package adds the indexes still missing so the same final version is what `apt` and a Windows package manager install.
 It does not reopen `v0.2.0` and it does not gate Phase 1 (`v0.3`): the two proceed in parallel.
 Pre-releases stay off every index, as they already stay off the cask.
 
-- [x] macOS: Homebrew cask in `mrYush/homebrew-tap` (`brew install --cask mrYush/tap/hint`), shipped with `v0.2.0`.
+- ✅ macOS: Homebrew cask in `mrYush/homebrew-tap` (`brew install --cask mrYush/tap/hint`), shipped with `v0.2.0`.
       Later final tags keep updating it.
 - [ ] macOS: the next cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
       Editing the generated `Casks/hint.rb` by hand does not survive the following release.
+      `.goreleaser.yaml` carries `hooks.post.install_steps` since the `v0.3.1` config; the tag confirms the generated cask.
 - [ ] macOS: `homebrew-tap` still has a root formula `hint.rb` at `0.1.0`.
       `brew install` without `--cask` selects that formula.
       Remove it, or the tap does not install the current version.
-- [x] Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
-- [x] Debian family: an apt repository we operate.
+- ✅ Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
+- ✅ Debian family: an apt repository we operate.
       Suite `stable`, signed `Release`, index rebuilt from the current debs on each final tag.
       Implemented by `scripts/apt-repo.sh` and the last step of `release.yml`, served from the `gh-pages` branch at `https://mryush.github.io/hint`.
       Published by `v0.3.0` (2026-10-25); Pages enabled for `gh-pages` the same day.
       `apt install hint` with the README lines verified on clean `debian:bookworm` and `ubuntu:24.04` containers (amd64): signature accepted, `ripgrep` pulled in, `hint -v` reports `0.3.0`.
       The arm64 package is indexed but not yet installed on a Raspberry Pi.
       One suite covers Ubuntu, Debian, Mint, Pop!_OS and Raspberry Pi OS, because the binary is built with `CGO_ENABLED=0` and does not need a per-distro-release archive.
-- [x] The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
+- ✅ The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
       The public half is what users add as the repository key.
       Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); both set 2026-10-22, used by the `v0.3.0` run.
 - [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
-- [ ] README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
-      Done for apt and Homebrew; the Scoop bucket line waits for the bucket.
+      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`; the first manifest arrives with `v0.3.1`.
+- ✅ README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
+      The Scoop lines landed with the `scoops` config, ahead of the first manifest.
 
 Decisions (2026-10-11):
 

@@ -1,7 +1,8 @@
 # Raspberry Pi smoke test
 
-> Status: **backlog** (decided 2026-10-11) · Does **not** gate `v0.2.0-alpha`
-> or `v0.2.0`. The linux/arm64 record for this release is the Pi 4 bench
+> Status: **backlog** (decided 2026-10-11) · Did **not** gate `v0.2.0-alpha`,
+> `v0.2.0` or `v0.3.0`, all tagged without it. The linux/arm64 record for
+> those releases is the Pi 4 bench
 > [`evidence/pi-4-20261011-105151/`](evidence/pi-4-20261011-105151/summary.md)
 > ([PLAN.md](../../PLAN.md#current-status)).
 
@@ -169,8 +170,7 @@ After a green Pi 5 run, if that backlog item is picked up:
 - [ ] Tick WP0.10's Raspberry Pi checkbox in
       [phase-0-mvp-cli.md](phase-0-mvp-cli.md#wp010--ci-release-distribution)
 - [ ] Update the "Next" line in [PLAN.md](../../PLAN.md) past the Pi 5 run
-- [ ] Tag `v0.2.0` on the release path in [CONTRIBUTING.md](../../CONTRIBUTING.md)
-      (goreleaser's `prerelease: auto` / `skip_upload: auto` already apply to
-      pre-releases such as `v0.2.0-alpha`; final tags need `HOMEBREW_TAP_TOKEN`)
-- [ ] If a scenario failed: file it as a Phase 0 issue, do not tag `v0.2.0`
-      until fixed and re-run
+- ✅ ~~Tag `v0.2.0` on the release path in [CONTRIBUTING.md](../../CONTRIBUTING.md).~~
+      Tagged 2026-10-11 without this run; `v0.3.0` followed on 2026-10-25.
+- [ ] If a scenario failed: file it as an issue against the current release;
+      a tag already published is not reopened

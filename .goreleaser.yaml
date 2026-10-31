@@ -39,7 +39,7 @@ archives:
   - id: default
     formats:
       - tar.gz
-    # hint_0.1.0_linux_arm64.tar.gz; the Pi and Homebrew both key on this.
+    # hint_0.3.1_linux_arm64.tar.gz; the Pi and Homebrew both key on this.
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
@@ -59,7 +59,7 @@ nfpms:
       - hint
     formats:
       - deb
-    # hint_0.2.0_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
+    # hint_0.3.1_linux_amd64.deb; scripts/apt-repo.sh indexes dist/*.deb.
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     maintainer: Yurii Simonov <rep.yurii@gmail.com>
     homepage: https://github.com/mrYush/hint
@@ -89,10 +89,14 @@ release:
   # v0.2.0-alpha and friends are GitHub pre-releases; a plain vX.Y.Z is final.
   prerelease: auto
   name_template: "{{ .Tag }}"
+  # A failed index push (cask, scoop) leaves the GitHub Release in place;
+  # re-running the workflow on the same tag must then be able to upload
+  # the same archives again instead of failing on the existing assets.
+  replace_existing_artifacts: true
   footer: |
     Known issues for this release are listed in the README under
     *Troubleshooting → Known issues*; the open bugs are tracked as
-    `[Phase 0]` GitHub issues. The limits of this release (no sandbox
+    GitHub issues. The limits of this release (no sandbox
     for `bash`, completion off by default, the secret store verified on
     Linux only) are in that same section.
 
@@ -118,13 +122,16 @@ homebrew_casks:
     dependencies:
       - formula: ripgrep
     # The binaries are not signed or notarized: macOS quarantines them on
-    # download and would refuse to run them. The hook lifts the flag the
-    # way goreleaser documents for unsigned casks.
+    # download and would refuse to run them. The steps lift the flag in
+    # Homebrew's declarative hook DSL (`postflight_steps`); the Ruby
+    # `install` block is deprecated since goreleaser v2.19.
     hooks:
       post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/hint"]
+        install_steps: |
+          on_macos do
+            if_path_exists "/usr/bin/xattr" do
+              run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/hint"]
+            end
           end
     # Pre-releases are not offered to brew users; the cask follows final
     # versions only.
@@ -133,3 +140,32 @@ homebrew_casks:
       name: goreleaser-bot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+
+# Scoop bucket: the manifest is pushed to mrYush/scoop-bucket, so that
+# `scoop bucket add hint https://github.com/mrYush/scoop-bucket` and
+# `scoop install hint` work on Windows amd64 and arm64 (goreleaser keys
+# the windows .zip archives as "64bit" and "arm64"). The push needs a
+# token with write access to that repository in the SCOOP_BUCKET_TOKEN
+# secret, for the same reason as the cask.
+scoops:
+  - name: hint
+    repository:
+      owner: mrYush
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+    # The bucket root, as goreleaser recommends; Scoop reads manifests
+    # from the root or from a bucket/ subdirectory.
+    directory: ""
+    homepage: https://github.com/mrYush/hint
+    description: Context-aware CLI assistant that reads, edits and runs your project
+    license: MIT
+    # Same as the cask and the deb: ripgrep is in Scoop's main bucket,
+    # which every Scoop install has.
+    depends:
+      - ripgrep
+    # Pre-releases stay off the bucket, like the cask.
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
