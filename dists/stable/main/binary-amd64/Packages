@@ -1,0 +1,17 @@
+Package: hint
+Architecture: amd64
+Version: 0.3.1
+Priority: optional
+Section: utils
+Maintainer: Yurii Simonov <rep.yurii@gmail.com>
+Installed-Size: 19668
+Depends: ripgrep
+Filename: pool/main/hint_0.3.1_linux_amd64.deb
+Size: 7060374
+MD5sum: 77f73952068f7afa45487e0c7e3fc168
+SHA1: bb811d0c30bc3f3361b9e320ea0b225d0a353985
+SHA256: aedee113bc7f39ee54de9c695ddd9b5ba753dd2bd5c869f0de5836d558c0f710
+SHA512: c70bfbcc2321c55abdba166ad01e85e3dbbd98ee11ed10c037a7e15c1b383d1c757dcc7331517861f7516161dc18dde530c3887933b5d4b93ccca096922562e3
+Homepage: https://github.com/mrYush/hint
+Description: Context-aware CLI assistant that reads, edits and runs your project
+
