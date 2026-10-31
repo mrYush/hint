@@ -275,7 +275,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Independent of every tag and of Phase 1.
 19. `v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.
     Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41) (a later patch) and anything from Phase 2.
-    The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` expires 2026-11-10 ([#71](https://github.com/mrYush/hint/issues/71)) and is renewed first if the tag comes later.
+    The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
 
 ## Open questions
 

@@ -16,16 +16,16 @@ out of scope.
 
 ## Current state (2026-10-31)
 
-- [x] `develop` at `92438a0`; PR [#74](https://github.com/mrYush/hint/pull/74)
+- ✅ `develop` at `92438a0`; PR [#74](https://github.com/mrYush/hint/pull/74)
       merged; CI green on the merge commit.
-- [x] Gateway message fix in the tree (`internal/provider/openai/status.go`);
+- ✅ Gateway message fix in the tree (`internal/provider/openai/status.go`);
       the README note says "fixed in `v0.3.1`".
-- [x] `retract v0.1.0` in `go.mod` and `SECURITY.md` (the first two items of
+- ✅ `retract v0.1.0` in `go.mod` and `SECURITY.md` (the first two items of
       [#50](https://github.com/mrYush/hint/issues/50)).
-- [x] `scoops` and the cask `hooks.post.install_steps` in
+- ✅ `scoops` and the cask `hooks.post.install_steps` in
       [`.goreleaser.yaml`](../../.goreleaser.yaml).
-- [x] `v0.3.1` status review in `PLAN.md` and `docs/plan/phase-0-mvp-cli.md`.
-- [x] [#57](https://github.com/mrYush/hint/issues/57) closed on 2026-10-31;
+- ✅ `v0.3.1` status review in `PLAN.md` and `docs/plan/phase-0-mvp-cli.md`.
+- ✅ [#57](https://github.com/mrYush/hint/issues/57) closed on 2026-10-31;
       the fix is in `develop` and ships in `v0.3.1`.
 - [ ] `main` is at `86cd1ab` with no `v0.3.1` tag; this branch is cut from
       `develop` at `92438a0`, and §4 cuts the tag on `main`.
@@ -34,55 +34,49 @@ out of scope.
 
 ### Repository
 
-- [ ] `git checkout develop && git pull --ff-only`; `git status` is clean.
-- [ ] CI on `develop` is green: `Lint`, `Test`, and all six build jobs.
-- [ ] `go test ./...` and `go vet ./...` pass locally (or CI is the only
-      gate when no local Go toolchain is installed).
-- [ ] `gofmt -l .` prints nothing.
-- [ ] `goreleaser check` passes on the release commit (see §3 for the
-      dry run).
+- ✅ `git checkout develop && git pull --ff-only`; `git status` is clean.
+- ✅ CI on `develop` is green: `Lint`, `Test`, and all six build jobs.
+- ✅ `go test ./...` and `go vet ./...` pass locally (or CI is the only gate when no local Go toolchain is installed).
+- ✅ `gofmt -l .` prints nothing.
+- ✅ `goreleaser check` passes on the release commit (see §3 for the dry run).
 
 ### Secrets
 
-- [ ] `HOMEBREW_TAP_TOKEN` is renewed before the tag. It expires
-      **2026-11-10** ([#71](https://github.com/mrYush/hint/issues/71)).
-  - [ ] Create a fine-grained token `hint-homebrew-tap`, expiration one
-        year, repository access only `mrYush/homebrew-tap`, Contents:
+- ✅ `HOMEBREW_TAP_TOKEN` is renewed before the tag. The fine-grained token `hint-homebrew-tap` expires **2027-10-28** ([#71](https://github.com/mrYush/hint/issues/71)).
+  - ✅ Create a fine-grained token `hint-homebrew-tap`, expiration one year, repository access only `mrYush/homebrew-tap`, Contents:
         Read and write.
-  - [ ] `gh secret set HOMEBREW_TAP_TOKEN --repo mrYush/hint` (stdin).
-  - [ ] Delete the old `pwriter-cursor` token.
-  - [ ] Record the new expiry date in #71, then close it.
-- [ ] `SCOOP_BUCKET_TOKEN` exists and has Contents: Read and write on
-      `mrYush/scoop-bucket`. Without it the release fails at the Scoop
-      step after the GitHub Release is published.
-- [ ] `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are still set; `v0.3.0`
+  - ✅ `gh secret set HOMEBREW_TAP_TOKEN --repo mrYush/hint` (stdin).
+  - ✅ Delete the old `pwriter-cursor` token.
+  - ✅ Record the new expiry date in #71, then close it.
+- ✅ `SCOOP_BUCKET_TOKEN` exists and has Contents: Read and write on `mrYush/scoop-bucket`. Without it the release fails at the Scoop step after the GitHub Release is published.
+- ✅ `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are still set; `v0.3.0`
       used them. A missing key fails the apt step late.
-- [ ] `gh secret list --repo mrYush/hint` shows all four secrets (it shows
+- ✅ `gh secret list --repo mrYush/hint` shows all four secrets (it shows
       names and update dates, not expiry or scope).
 
 ### External repositories and GitHub
 
-- [ ] Remove the root formula `hint.rb` (`0.1.0`) from
+- ✅ Remove the root formula `hint.rb` (`0.1.0`) from
       `mrYush/homebrew-tap`; keep `Casks/hint.rb`. Without the removal,
       `brew install` without `--cask` keeps installing the old application.
-- [ ] Edit the `v0.1.0` GitHub Release: state that it is the earlier,
+- ✅ Edit the `v0.1.0` GitHub Release: state that it is the earlier,
       unrelated application, superseded by `v0.2.0`, and retracted in
       `go.mod`; keep the tag and the Release. This is the last item of
       [#50](https://github.com/mrYush/hint/issues/50).
-- [ ] Confirm the default branch and layout of `mrYush/scoop-bucket`; a
+- ✅ Confirm the default branch and layout of `mrYush/scoop-bucket`; a
       manifest at the repository root is valid (Scoop falls back to the root
       when no `bucket/` directory exists).
 
 ## 1. Documentation before the tag
 
-- [ ] `README.md` → Known issues: add `v0.3.1` to the list of releases that
+- ✅ `README.md` → Known issues: add `v0.3.1` to the list of releases that
       still ship the five open bugs. The fixed gateway item stays a separate
       "fixed in `v0.3.1`" note, not a numbered open item.
-- [ ] `README.md` → Limits: say `v0.3.1` (unchanged from `v0.3.0`).
+- ✅ `README.md` → Limits: say `v0.3.1` (unchanged from `v0.3.0`).
 - [ ] `PLAN.md` → Current status: the Scoop config and the cask
       `install_steps` are in the tree; the tag confirms them. The root
       formula removal is a manual tap action.
-- [x] `PLAN.md` §19 links this runbook.
+- ✅ `PLAN.md` §19 links this runbook.
 - [ ] Mark the release as in progress in `PLAN.md` when the release branch is
       cut.
 - [ ] Keep the phase file checkboxes open until the release artifacts are
