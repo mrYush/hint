@@ -40,11 +40,15 @@ index and are not part of the product doc set.
 
 ## Status legend
 
-Phase files use plain GitHub task lists:
+Phase files mark each step with one of two markers:
 
 - `- [ ]` — not started
-- `- [x]` — done
+- `- ✅` — done
 - Append `(blocked: reason)` to a task that cannot proceed.
+
+GitHub counts only `- [ ]` and `- [x]` in its task-list progress; the ✅
+marker is this repository's convention, so the progress bar shows the done
+steps as unchecked.
 
 **Branch per work package.** Every `### WPx.y` heading is followed by a
 ``**Branch:** `dev/wpx.y-<short-name>` `` line, assigned when the work package

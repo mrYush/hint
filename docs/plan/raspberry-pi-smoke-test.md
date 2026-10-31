@@ -170,7 +170,7 @@ After a green Pi 5 run, if that backlog item is picked up:
 - [ ] Tick WP0.10's Raspberry Pi checkbox in
       [phase-0-mvp-cli.md](phase-0-mvp-cli.md#wp010--ci-release-distribution)
 - [ ] Update the "Next" line in [PLAN.md](../../PLAN.md) past the Pi 5 run
-- [x] ~~Tag `v0.2.0` on the release path in [CONTRIBUTING.md](../../CONTRIBUTING.md).~~
+- ✅ ~~Tag `v0.2.0` on the release path in [CONTRIBUTING.md](../../CONTRIBUTING.md).~~
       Tagged 2026-10-11 without this run; `v0.3.0` followed on 2026-10-25.
 - [ ] If a scenario failed: file it as an issue against the current release;
       a tag already published is not reopened

@@ -15,28 +15,28 @@ interactive TUI.
 
 **Branch:** `dev/wp1.1-rpc`
 
-- [x] `hint serve`: JSON-RPC over unix socket (macOS/Linux) / localhost TCP (Windows)
-- [x] `hint --mode rpc`: same protocol over stdio for subprocess embedding
-- [x] Auth for the socket mode (token file with 0600 perms; localhost binding only)
-- [x] Concurrent sessions: one server, many client connections, session ownership rules
-- [x] Graceful shutdown; in-flight turn cancellation
+- ✅ `hint serve`: JSON-RPC over unix socket (macOS/Linux) / localhost TCP (Windows)
+- ✅ `hint --mode rpc`: same protocol over stdio for subprocess embedding
+- ✅ Auth for the socket mode (token file with 0600 perms; localhost binding only)
+- ✅ Concurrent sessions: one server, many client connections, session ownership rules
+- ✅ Graceful shutdown; in-flight turn cancellation
 
 ### WP1.2 — Event model as contract v1 — **done** (2026-10-16)
 
 **Branch:** `dev/wp1.1-rpc` (shipped with WP1.1 in one commit, before the one-branch rule)
 
-- [x] Stabilize `pkg/agentapi` events: `turn_start` / `text_delta` / `tool_start` / `permission` / `turn_end` (the names already on the v0.2.0 wire; see the decision below)
-- [x] Permission requests flow over RPC and block on the client's answer (with timeout + default-deny)
-- [x] Versioned protocol handshake (`protocol_version` in hello)
-- [x] Golden tests for the wire format; document the protocol in `docs/rpc.md`
+- ✅ Stabilize `pkg/agentapi` events: `turn_start` / `text_delta` / `tool_start` / `permission` / `turn_end` (the names already on the v0.2.0 wire; see the decision below)
+- ✅ Permission requests flow over RPC and block on the client's answer (with timeout + default-deny)
+- ✅ Versioned protocol handshake (`protocol_version` in hello)
+- ✅ Golden tests for the wire format; document the protocol in `docs/rpc.md`
 
 ### WP1.3 — CLI/REPL on top of the RPC API — **done** (2026-10-17)
 
 **Branch:** `dev/wp1.3-cli-client`
 
-- [x] REPL and one-shot modes become RPC clients of an in-process (or spawned) core (`internal/rpc.Client` over a `net.Pipe` to the same `rpc.Server` that `hint serve` runs; `hint --connect` points the same shell at a running server)
-- [x] No behavior change for users; acceptance scenarios from Phase 0 re-run green (`cmd/hint` tests unchanged in what they assert; `TestPermissionOverRPC` drives a permission question and its answer across the wire)
-- [x] Delete any direct agent-loop calls from `cmd/hint` — the API is the only path (`TestShellNeverImportsTheAgent` pins it: only the engine wiring imports `internal/agent`)
+- ✅ REPL and one-shot modes become RPC clients of an in-process (or spawned) core (`internal/rpc.Client` over a `net.Pipe` to the same `rpc.Server` that `hint serve` runs; `hint --connect` points the same shell at a running server)
+- ✅ No behavior change for users; acceptance scenarios from Phase 0 re-run green (`cmd/hint` tests unchanged in what they assert; `TestPermissionOverRPC` drives a permission question and its answer across the wire)
+- ✅ Delete any direct agent-loop calls from `cmd/hint` — the API is the only path (`TestShellNeverImportsTheAgent` pins it: only the engine wiring imports `internal/agent`)
 
 Decisions for WP1.1–WP1.3 (2026-10-11):
 
@@ -82,19 +82,19 @@ Decisions for WP1.1–WP1.3 (2026-10-11):
 
 **Branch:** `dev/wp1.4-tui`
 
-- [x] `hint --tui`: streaming chat view with markdown rendering (glamour for finished messages; a message still streaming is plain text)
-- [x] Diff view for write-permission prompts; `y` / `n` / `a` answer through `permission.reply`
-- [x] The history of a continued session (`-c`, `--session`) rendered on attach
-- [x] Session list view: list and resume (`-r` opens it)
-- [x] Copying text out: the terminal's own selection works (mouse reporting is off by default), `ctrl+y` / `/copy [answer|question|code|all]` copy to the clipboard, and `/mouse` turns on a mode where the wheel scrolls and a click copies the block under it
-- [x] Tab completes slash commands and their arguments from one table that also drives `/help`; a command that cannot be used right now (`/copy` with an empty transcript, `/sessions` during a turn) is neither offered nor run
-- [x] A rejected key names the configuration in use and offers to fill it in: `hint setup` (line-based), a `/setup` form in the TUI (key masked), and an offer after the failed turn in the REPL; `internal/config.WriteProfile` edits the global file in place, keeping comments, mode 0600
-- [x] First run without any configuration: on a terminal `hint` offers the setup questions (defaults for everything but the key, which is typed with echo off) and carries on with the file it wrote; `config.example.yaml` documents every key and a test keeps it current
-- [x] Every config key editable without an editor: `internal/config/schema.go` is the one table of keys (type, allowed values, default, overlays, help) that the setup form, `hint config set|unset|show|keys`, `/config` with Tab completion and the example test all read; `config.Edit` checks a value against its key and the result against the loader before one atomic write
-- [x] Scrolling without the mouse: ↑ on the input's first line and ↓ on its last move the transcript (so does a wheel, which a terminal without mouse reporting sends as arrows), shift+↑↓ by line, pgup/pgdn by page, ctrl+home/end to the ends, and the header says how many lines are below
-- [x] A message browser: esc in an empty input (or ctrl+↑) selects a block, marked by a bar and not a fill; ↑↓/j/k move, `y` copies, `f` is the hook for the fork, esc returns; every transcript entry knows its turn
-- [x] One-letter answers and commands work in any layout: the TUI takes the US key the kitty protocol reports (`BaseCode`), and a table of the Cyrillic layouts (`internal/console.QWERTY`) covers terminals without it and the line prompts; text typed into the input is never rewritten
-- [x] `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL (shipped by WP1.5; the Phase 0 scenarios passed through the TUI on 2026-10-20, acceptance 3)
+- ✅ `hint --tui`: streaming chat view with markdown rendering (glamour for finished messages; a message still streaming is plain text)
+- ✅ Diff view for write-permission prompts; `y` / `n` / `a` answer through `permission.reply`
+- ✅ The history of a continued session (`-c`, `--session`) rendered on attach
+- ✅ Session list view: list and resume (`-r` opens it)
+- ✅ Copying text out: the terminal's own selection works (mouse reporting is off by default), `ctrl+y` / `/copy [answer|question|code|all]` copy to the clipboard, and `/mouse` turns on a mode where the wheel scrolls and a click copies the block under it
+- ✅ Tab completes slash commands and their arguments from one table that also drives `/help`; a command that cannot be used right now (`/copy` with an empty transcript, `/sessions` during a turn) is neither offered nor run
+- ✅ A rejected key names the configuration in use and offers to fill it in: `hint setup` (line-based), a `/setup` form in the TUI (key masked), and an offer after the failed turn in the REPL; `internal/config.WriteProfile` edits the global file in place, keeping comments, mode 0600
+- ✅ First run without any configuration: on a terminal `hint` offers the setup questions (defaults for everything but the key, which is typed with echo off) and carries on with the file it wrote; `config.example.yaml` documents every key and a test keeps it current
+- ✅ Every config key editable without an editor: `internal/config/schema.go` is the one table of keys (type, allowed values, default, overlays, help) that the setup form, `hint config set|unset|show|keys`, `/config` with Tab completion and the example test all read; `config.Edit` checks a value against its key and the result against the loader before one atomic write
+- ✅ Scrolling without the mouse: ↑ on the input's first line and ↓ on its last move the transcript (so does a wheel, which a terminal without mouse reporting sends as arrows), shift+↑↓ by line, pgup/pgdn by page, ctrl+home/end to the ends, and the header says how many lines are below
+- ✅ A message browser: esc in an empty input (or ctrl+↑) selects a block, marked by a bar and not a fill; ↑↓/j/k move, `y` copies, `f` is the hook for the fork, esc returns; every transcript entry knows its turn
+- ✅ One-letter answers and commands work in any layout: the TUI takes the US key the kitty protocol reports (`BaseCode`), and a table of the Cyrillic layouts (`internal/console.QWERTY`) covers terminals without it and the line prompts; text typed into the input is never rewritten
+- ✅ `hint` launches the TUI by default when stdout is a TTY; `--plain` keeps the readline REPL (shipped by WP1.5; the Phase 0 scenarios passed through the TUI on 2026-10-20, acceptance 3)
 
 Merged under the scope exception of [README.md](README.md) ("Branch per work package"), 2026-10-18: interactive configuration (`hint setup`, `hint config`, `/config`, `internal/config` schema and in-place writes) grew inside this branch because a rejected key in the TUI needed it, and the branch also wrote down WP1.6 and WP1.7.
 Splitting it after review had started would have cost a rebase of reviewed commits for no gain in what `develop` receives.
@@ -145,14 +145,14 @@ Decisions (2026-10-17):
 
 **Branch:** `dev/wp1.5-session-ops`
 
-- [x] `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process.
+- ✅ `session.profile`: switch the provider profile of a session mid-conversation; the engine builds a provider per profile from the config instead of one per process.
       An optional `model` overrides the profile's own for that session
-- [x] `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1; 0 or omitted is the whole conversation).
+- ✅ `session.fork`: a new session that starts from an existing one's history up to the end of a given user turn (`{"id": …, "turn": N}`, turns counted from 1; 0 or omitted is the whole conversation).
       A turn, not a message index: a client counts the questions it showed, but not the tool messages the core added between them; the TUI's entries already carry their turn, and the message browser's `f` calls it
-- [x] `profile.list`: the configured profiles with their roles and whether a session can switch to them, read from the files as they stand
-- [x] The TUI exposes both: `/profile [name [model]]` with Tab completion and a picker, the profile in the header, `f` in the message browser (fork after that turn) and in the session list (fork the whole row), and the list drawn as a tree with forks under their source
-- [x] The line REPL has `/profile` too, so `--plain` is not left without the switch
-- [x] WP1.4 debt: a saved `hint setup` / `/setup` is applied to the running session instead of asking for a restart; the TUI is the default on a terminal, `--plain` keeps the REPL and `--tui` stays as a hidden no-op
+- ✅ `profile.list`: the configured profiles with their roles and whether a session can switch to them, read from the files as they stand
+- ✅ The TUI exposes both: `/profile [name [model]]` with Tab completion and a picker, the profile in the header, `f` in the message browser (fork after that turn) and in the session list (fork the whole row), and the list drawn as a tree with forks under their source
+- ✅ The line REPL has `/profile` too, so `--plain` is not left without the switch
+- ✅ WP1.4 debt: a saved `hint setup` / `/setup` is applied to the running session instead of asking for a restart; the TUI is the default on a terminal, `--plain` keeps the REPL and `--tui` stays as a hidden no-op
 
 Additive methods, no `WireVersion` or `ProtocolVersion` bump; an older core answers them with method-not-found.
 
@@ -185,12 +185,12 @@ Decisions (2026-10-18):
 
 **Branch:** `dev/wp1.6-input-completion`
 
-- [x] `complete` over RPC: given the text typed so far, the core returns a short continuation from a model; `complete.cancel` stops it; a newer `complete` on the connection cancels the older; the request runs beside the connection's loop so `permission.reply` and `turn.cancel` are never held up (a test pins it)
-- [x] The suggestion in the TUI: shown in the status line (`tab accepts: …`), Tab accepts it, any other key discards it
-- [x] A `completion:` block in the config with the usual layering — `mode` (`off` | `tab` | `idle` | `both`), `profile`, `model`, `idle_after`, `warn_after`; `HINT_COMPLETION_MODE` and `--completion` for the mode; an explicit `off` in the project file beats a global `on`; a named profile that does not exist or cannot be used switches the block off with a warning instead of stopping the run
-- [x] A slow or failing completion never gets in the way: the request runs beside the input; an edit cancels it; a suggestion belongs to the exact text it was asked for and a late answer is dropped by its id; past `warn_after` the status line says the model is slow; three failures in a row switch it off for the session with a notice; `/completion on` tries again
-- [x] `/completion [off|tab|idle|both]` sets the trigger for the session and alone reports the mode, its source, the profile and the requests and tokens spent so far
-- [x] Command arguments that depend on the configuration: the model argument of `/profile` and the value of `/config set providers.<p>.model` complete from `profile.models`, fetched by the first Tab on it and cached for the session
+- ✅ `complete` over RPC: given the text typed so far, the core returns a short continuation from a model; `complete.cancel` stops it; a newer `complete` on the connection cancels the older; the request runs beside the connection's loop so `permission.reply` and `turn.cancel` are never held up (a test pins it)
+- ✅ The suggestion in the TUI: shown in the status line (`tab accepts: …`), Tab accepts it, any other key discards it
+- ✅ A `completion:` block in the config with the usual layering — `mode` (`off` | `tab` | `idle` | `both`), `profile`, `model`, `idle_after`, `warn_after`; `HINT_COMPLETION_MODE` and `--completion` for the mode; an explicit `off` in the project file beats a global `on`; a named profile that does not exist or cannot be used switches the block off with a warning instead of stopping the run
+- ✅ A slow or failing completion never gets in the way: the request runs beside the input; an edit cancels it; a suggestion belongs to the exact text it was asked for and a late answer is dropped by its id; past `warn_after` the status line says the model is slow; three failures in a row switch it off for the session with a notice; `/completion on` tries again
+- ✅ `/completion [off|tab|idle|both]` sets the trigger for the session and alone reports the mode, its source, the profile and the requests and tokens spent so far
+- ✅ Command arguments that depend on the configuration: the model argument of `/profile` and the value of `/config set providers.<p>.model` complete from `profile.models`, fetched by the first Tab on it and cached for the session
 
 Decisions (2026-10-19):
 
@@ -232,15 +232,15 @@ the `bash` tool inherited the whole environment, so `env` printed `APIBAR_KEY`;
 the file tools were confined to the project root, which is the home directory when `hint` runs there;
 tool results reached the model and the session file unmasked — only the `--debug` trace was redacted.
 
-- [x] Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
+- ✅ Keys in the OS secret store (Keychain, Windows Credential Manager, Secret Service over D-Bus) instead of the config file: `api_key: keyring:<profile>`; `hint setup` and `/setup` write there.
       `secrets.store: auto | keyring | file` decides: `auto` uses the store when it answers and falls back to the 0600 file with the fallback named in the save message; `keyring` insists; `file` never asks (a server, a container, CI)
-- [x] `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
-- [x] Tool subprocesses run without the keys: `bash`, and ripgrep behind `glob` and `grep`, get the environment minus every variable a profile's `${VAR}` names, the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`, `API_BAR_KEY`, `OPENAI_API_KEY`, `HINT_API_KEY`) and any variable whose value equals a configured key
-- [x] Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — one decorator at the registry, since the agent loop is the only reader of a result
-- [x] The file tools refuse the config directory, the session directory, the project's `.hint/config.yaml` and the legacy `~/.config/hint.yaml` and `<cwd>/hint.yaml` (existing or not: the loader would read a file created there) even when the project root contains them; `.hint/rules` stays readable; the walks skip them and ripgrep is told to
-- [x] `tool.Root` opens files through `os.Root`, which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
-- [x] Tests that pin each path: `env`, a tool output that contains the key (the model, the terminal and the session file), `read_file` from a root at `$HOME`, the symlink swap, setup with a store, without one and under each policy, `show-key`
-- [x] A profile that keeps a literal key in a file while a store answers gets one warning at start; nothing migrates a key behind the user's back
+- ✅ `hint config show-key <profile>`: the one way to see a key again; terminal only, asks for confirmation, prints a masked form unless `--reveal`; no RPC method and no tool reaches it
+- ✅ Tool subprocesses run without the keys: `bash`, and ripgrep behind `glob` and `grep`, get the environment minus every variable a profile's `${VAR}` names, the well-known ones (`APIBAR_KEY`, `APIBAR_TOKEN`, `API_BAR_KEY`, `OPENAI_API_KEY`, `HINT_API_KEY`) and any variable whose value equals a configured key
+- ✅ Every tool result is redacted against `Config.Secrets()` before it reaches the model, an event or the session file — one decorator at the registry, since the agent loop is the only reader of a result
+- ✅ The file tools refuse the config directory, the session directory, the project's `.hint/config.yaml` and the legacy `~/.config/hint.yaml` and `<cwd>/hint.yaml` (existing or not: the loader would read a file created there) even when the project root contains them; `.hint/rules` stays readable; the walks skip them and ripgrep is told to
+- ✅ `tool.Root` opens files through `os.Root`, which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
+- ✅ Tests that pin each path: `env`, a tool output that contains the key (the model, the terminal and the session file), `read_file` from a root at `$HOME`, the symlink swap, setup with a store, without one and under each policy, `show-key`
+- ✅ A profile that keeps a literal key in a file while a store answers gets one warning at start; nothing migrates a key behind the user's back
 
 Decisions (2026-10-19):
 
