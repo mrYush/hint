@@ -73,11 +73,11 @@ out of scope.
       still ship the five open bugs. The fixed gateway item stays a separate
       "fixed in `v0.3.1`" note, not a numbered open item.
 - ✅ `README.md` → Limits: say `v0.3.1` (unchanged from `v0.3.0`).
-- [ ] `PLAN.md` → Current status: the Scoop config and the cask
+- ✅ `PLAN.md` → Current status: the Scoop config and the cask
       `install_steps` are in the tree; the tag confirms them. The root
       formula removal is a manual tap action.
 - ✅ `PLAN.md` §19 links this runbook.
-- [ ] Mark the release as in progress in `PLAN.md` when the release branch is
+- ✅ Mark the release as in progress in `PLAN.md` when the release branch is
       cut.
 - [ ] Keep the phase file checkboxes open until the release artifacts are
       verified; tick them in the post-release docs change (§6).
@@ -88,8 +88,8 @@ GitFlow: a release branch is cut from `develop`, stabilized, merged into
 `main` with a regular merge, tagged, and merged back.
 
 - [ ] `git checkout develop && git pull --ff-only`
-- [ ] `git checkout -b release/v0.3.1`
-- [ ] Only documentation and release chores on this branch; no feature code.
+- ✅ `git checkout -b release/v0.3.1`
+- ✅ Only documentation and release chores on this branch; no feature code.
 - [ ] Commit with an imperative English subject; push the branch.
 - [ ] Open a PR `release/v0.3.1` → `main`; wait for CI.
 - [ ] Merge with **Create a merge commit** (not squash, not rebase).

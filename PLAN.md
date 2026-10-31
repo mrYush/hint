@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-24
+> Status: living document · Last updated: 2026-10-31
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -103,7 +103,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   The apt side is done: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step publish a signed repository to `gh-pages`; the signing key (`APT_SIGNING_KEY`, and `APT_SIGNING_PASSPHRASE`) was set 2026-10-22.
   `v0.3.0` published that repository and Pages serves it from `https://mryush.github.io/hint` (2026-10-25).
   `v0.2.0` was built before the packages existed and is not republished.
-  Still open: the Scoop bucket, the cask on `install_steps` (today's cask carries the deprecated `postflight` block) and the root formula `hint.rb` (`0.1.0`) left in `mrYush/homebrew-tap`; all three go into `v0.3.1` (step 19).
+  The cask on `install_steps` and the `scoops` block are in the tree, and the root formula `hint.rb` (`0.1.0`) is out of `mrYush/homebrew-tap`; `v0.3.1` confirms the first two with the tag and publishes the Scoop manifest (step 19).
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
   WP0.2 — config profiles and sources (provider profiles,
@@ -189,6 +189,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
   `v0.2.0-alpha`, `v0.2.0` and `v0.3.0` are tagged; `v0.3.0` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap` and the package in the apt repository.
+  `v0.3.1` is in progress on `release/v0.3.1` ([runbook](docs/plan/release-v0.3.1.md)); nothing is tagged for it yet.
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) proceeds on its own and does not have to finish first.
   The audit fixes B1–B3 and M1–M2
