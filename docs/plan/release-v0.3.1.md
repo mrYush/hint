@@ -99,15 +99,21 @@ GitFlow: a release branch is cut from `develop`, stabilized, merged into
 This is the first release that uses the cask `install_steps` and the
 `scoops` block, so validate the generated files before publishing.
 
-- [ ] Use goreleaser v2.19 or newer (`install_steps` is newer than the
-      Ruby `install` hook).
-- [ ] `goreleaser check`
-- [ ] `goreleaser release --snapshot --clean`
-- [ ] Inspect `dist/homebrew/Casks/hint.rb`: version `0.3.1`,
-      `postflight_steps`, no old `postflight` block.
-- [ ] Inspect `dist/scoop/hint.json`: version `0.3.1`, `64bit` and `arm64`
-      entries.
-- [ ] Inspect `dist/*.deb` (amd64 and arm64) and the six archives.
+- ✅ Use goreleaser v2.19 or newer (`install_steps` is newer than the
+      Ruby `install` hook). The dry run used 2.19.0.
+- ✅ `goreleaser check`
+- ✅ `goreleaser release --snapshot --clean`
+- ✅ Inspect `dist/homebrew/Casks/hint.rb`: `postflight_steps` with the
+      `xattr` step inside `on_macos`, no old `postflight` block.
+- ✅ Inspect `dist/scoop/hint.json`: `64bit` and `arm64`, each with
+      `hint.exe`.
+- ✅ Inspect `dist/*.deb` (amd64 and arm64) and the six archives: darwin and
+      linux as `.tar.gz`, windows as `.zip`, each amd64 and arm64.
+
+A snapshot takes its version from the last tag, `v0.3.0`, plus the short
+commit — `0.3.0-SNAPSHOT-<sha>` in the generated files and `v0.3.0` in the
+download URLs. That is expected: `0.3.1` appears only on the annotated tag,
+and §5 is where the version is read back.
 
 ## 4. Tag and publish
 
