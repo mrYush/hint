@@ -66,9 +66,9 @@ toward it, not away from it. Two rules worth calling out now:
   and status; [PLAN.md](PLAN.md) holds the roadmap. Conventions (work-package
   numbering, status legend, issue mirroring) are in
   [docs/plan/README.md](docs/plan/README.md).
-- GitHub Issues mirror the work packages of the *active* phase (currently
-  Phase 1, issues titled `[Phase 1][WP1.x] …`). Comment on the relevant issue
-  before starting sizeable work so effort isn't duplicated.
+- GitHub Issues mirror the work packages of the *active* phase, titled
+  `[Phase N][WPx.y] …`. Comment on the relevant issue before starting
+  sizeable work so effort isn't duplicated.
 - Scope changes land in the phase file in the same PR as the code (or as a
   docs-only decision PR first). An agreement that exists only in a comment
   thread does not exist.
@@ -76,6 +76,30 @@ toward it, not away from it. Two rules worth calling out now:
   heading) when it is written down, before work starts; the package's status
   is read from that branch (absent / exists / merged into `develop`), see the
   status legend in [docs/plan/README.md](docs/plan/README.md).
+
+### Opening an issue
+
+Start every task with an issue, before the branch exists. Use the `Work
+package` issue template for a planned task; a bug or a one-off change uses a
+plain title. A work-package issue is titled `[Phase N][WPx.y] <imperative
+title>` and its body starts with the branch it will use:
+
+    **Branch:** `dev/wpx.y-<short-name>`
+
+For a work package, the issue, the phase-file heading, the branch, and the
+pull request carry the same name. A work-package branch that appears in
+neither the issue nor the phase file is not ready to start.
+
+Every issue also carries:
+
+- **Scope** — what changes and what is explicitly out of scope, with a link
+  to the phase file or the roadmap;
+- **Done when** — acceptance criteria as checkboxes;
+- **Links** — related issues and the phase file.
+
+The `**Branch:**` line goes under the `### WPx.y` heading in the phase file
+in the same change that creates the work package, as described in
+[docs/plan/README.md](docs/plan/README.md).
 
 ## Git workflow
 
@@ -132,6 +156,24 @@ Flow:
   without publishing.
 - **Hotfixes**: `hotfix/<short-name>` branches off `main`, is merged into
   **both `main` (then patch-tagged) and `develop`**, and deleted.
+
+### Branch names
+
+| Prefix | Use | Example | Target |
+|---|---|---|---|
+| `dev/` | a work package | `dev/wp2.1-mcp-client` | `develop` |
+| `feature/` | a feature outside a work package | `feature/openapi-tools` | `develop` |
+| `fix/` | a bug fix | `fix/torn-session-tail` | `develop` |
+| `docs/` | documentation only | `docs/v0.3.1-status` | `develop` |
+| `release/` | a release stabilization | `release/v0.3.1` | `main` |
+| `hotfix/` | a patch cut from `main` | `hotfix/tap-refresh` | `main` and `develop` |
+
+The name is lowercase ASCII with hyphens, is short, and names the issue it
+implements; `dev/` and `feature/` are interchangeable, but a work package
+uses `dev/wpx.y-<short-name>`. One issue gets one branch; do not share a
+branch between issues. Work branches start at `develop`; `release/` and
+`hotfix/` follow the release and hotfix rules above. Delete the branch after
+it is merged.
 
 ## Branch protection and review policy
 
@@ -212,8 +254,39 @@ after it is merged into `develop`/`main`.
    issue/work package it implements. Tick the corresponding checkboxes in the
    phase file in the same PR.
 
-Commit messages: imperative mood, a subject line under ~72 characters, and a
-body explaining the reasoning when it isn't obvious. English only.
+### Commits
+
+- Subject: imperative English, under ~72 characters, no trailing period.
+- Body: why the change is needed, wrapped around 72 columns; reference the
+  issue with `Refs #123` while the work is partial. Do not rely on a commit
+  trailer to close an issue — the pull-request body does that.
+- One concern per commit. The branch may carry several, but the squash merge
+  into `develop` makes the pull-request title the final subject, so write the
+  title as a commit subject.
+- After review starts, add commits; do not rewrite the branch.
+
+### Pull requests
+
+- Title: imperative English, under ~72 characters; it becomes the squash
+  commit on `develop`.
+- Body: **What**, **Why**, and a line `Closes #123` on its own line. GitHub
+  closes the issue automatically when the PR merges into the default branch
+  (`develop`). Use `Refs #123` instead when the PR does not complete the
+  issue; do not close the issue by hand.
+- If the PR completes more than one issue, put one `Closes #N` per line.
+- Add a scope note when the branch carries work beyond its work package, per
+  the exception in [docs/plan/README.md](docs/plan/README.md). Tick the
+  phase-file checkboxes in the same PR.
+- A PR that targets `main` is a `release/*` or `hotfix/*` PR; it does not use
+  `Closes` for feature issues. A release closes its own issue, if it has one.
+
+### Review comments
+
+- Answer every review comment with a change or a reason. Do not resolve a
+  conversation silently.
+- Push follow-up commits; do not force-push after review starts.
+- Request re-review after addressing the comments; branch protection dismisses
+  an approval when new commits are pushed.
 
 ## Code style
 

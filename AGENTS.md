@@ -12,6 +12,10 @@ line, some integrate on `main`. Do not import those habits here.
 
 ## How to take a task
 
+- Stay inside the request. The ask names the whole scope: if it says plan,
+  write down, or check, it does not also authorize a commit, a push, a pull
+  request, or an issue. Do the named part, show it, and stop; the next step
+  is the user's call.
 - One task at a time. Do not start the next until the current one is done
   or stopped with a recorded reason and the next action.
 - One concern per branch and per commit. A fix does not carry an unrelated
@@ -32,10 +36,17 @@ build and pass tests. `main` is releases only. Work branches off
 `docs/<short-name>`. Pull requests target `develop`, except `release/*`
 and `hotfix/*`, which target `main`.
 
+- Follow the flow this repository already has — the GitFlow branches, the
+  issue, the `**Branch:**` line, the pull request — as written in
+  [CONTRIBUTING.md](CONTRIBUTING.md) and
+  [docs/plan/README.md](docs/plan/README.md). Do not improvise a shortcut
+  around it, and when a request would take you outside it, ask first.
 - [docs/plan/](docs/plan/) is the source of truth for scope and status.
   [docs/plan/README.md](docs/plan/README.md) has the status legend and the
   work-package rules. An agreement that exists only in an issue comment
   does not exist until it is written into the phase file.
+- Start a task with an issue. The work-package template carries the branch
+  line, scope, and acceptance criteria; a bug uses a plain title.
 - Every `### WPx.y` heading has a `**Branch:**` line, assigned when the
   package is written down, before work starts. Status is read from that
   branch: absent means not started, present means in progress, merged into
@@ -45,6 +56,16 @@ and `hotfix/*`, which target `main`.
 - Commit subjects are imperative English, under about 72 characters. The
   body says why, when the subject does not. Squash-merge is the default
   into `develop`, so the pull-request title is the commit subject.
+- Every issue carries a `**Branch:**` line. For a work package that exact
+  name is the phase-file heading, the branch, and the PR. One issue, one
+  branch, one PR. Use `dev/wpx.y-<short-name>`, `feature/`, `fix/`, `docs/`,
+  `release/`, or `hotfix/`; work branches start at `develop`.
+- A PR body carries `Closes #N` on its own line, which is what closes the
+  issue when the PR merges into `develop`. Use `Refs #N` for a partial PR
+  and do not close an issue by hand. The description also says what changed,
+  why, and what was run to verify it.
+- Answer review comments with a change or a reason; do not resolve a
+  conversation silently. Add commits instead of rewriting a reviewed branch.
 
 ## Go
 
