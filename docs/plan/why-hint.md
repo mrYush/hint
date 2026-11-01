@@ -1,6 +1,6 @@
 # Why `hint` exists
 
-> Status: living document · Last updated: 2026-10-25
+> Status: living document · Last updated: 2026-10-31
 > Companion to [`architecture.md`](architecture.md): that file says *how* the
 > system is built, this one says *why it is worth building at all*.
 
@@ -34,6 +34,12 @@ Half the case for a project is what it refuses to compete on. `hint` is not:
   consequence of running locally, not the pitch.
 - **A managed service.** The default deployment is a binary the user owns,
   with the user's own provider credentials.
+- **A hosted harness runner.** Running other agents' harnesses as a service
+  for many users — tenant isolation, quotas, billing — is an execution
+  platform, not this product. A *local* conductor, launching a harness on the
+  user's own machine under the user's credentials and permission mode, may
+  arrive later as a delegation seam (Q11 in [PLAN.md](../../PLAN.md));
+  the hosted version stays out, like every other managed service.
 
 ## The three claims
 
