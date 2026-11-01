@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: Released v0.2.0 · WP0.14 runs in parallel with Phase 1 and does not gate v0.3 · Estimate: 6–10 weeks (part-time)
+> Status: Released v0.2.0 · WP0.14 shipped with v0.3.1 · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -1308,25 +1308,26 @@ Pre-releases stay off every index, as they already stay off the cask.
 
 - ✅ macOS: Homebrew cask in `mrYush/homebrew-tap` (`brew install --cask mrYush/tap/hint`), shipped with `v0.2.0`.
       Later final tags keep updating it.
-- [ ] macOS: the next cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
+- ✅ macOS: the cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
       Editing the generated `Casks/hint.rb` by hand does not survive the following release.
-      `.goreleaser.yaml` carries `hooks.post.install_steps` since the `v0.3.1` config; the tag confirms the generated cask.
-- [ ] macOS: `homebrew-tap` still has a root formula `hint.rb` at `0.1.0`.
-      `brew install` without `--cask` selects that formula.
-      Remove it, or the tap does not install the current version.
+      `v0.3.1` published `Casks/hint.rb` `0.3.1` with `postflight_steps` from `hooks.post.install_steps`.
+- ✅ macOS: the root formula `hint.rb` at `0.1.0` is removed from `mrYush/homebrew-tap`.
+      `brew install` without `--cask` no longer selects that formula.
+      Removed before the `v0.3.1` tag; the tap root has no `hint.rb`.
 - ✅ Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
 - ✅ Debian family: an apt repository we operate.
       Suite `stable`, signed `Release`, index rebuilt from the current debs on each final tag.
       Implemented by `scripts/apt-repo.sh` and the last step of `release.yml`, served from the `gh-pages` branch at `https://mryush.github.io/hint`.
       Published by `v0.3.0` (2026-10-25); Pages enabled for `gh-pages` the same day.
       `apt install hint` with the README lines verified on clean `debian:bookworm` and `ubuntu:24.04` containers (amd64): signature accepted, `ripgrep` pulled in, `hint -v` reports `0.3.0`.
-      The arm64 package is indexed but not yet installed on a Raspberry Pi.
+      `v0.3.1` installed the arm64 package on Ubuntu 24.04 arm64 (`hint -v` reported `0.3.1`). A Raspberry Pi install is not recorded.
       One suite covers Ubuntu, Debian, Mint, Pop!_OS and Raspberry Pi OS, because the binary is built with `CGO_ENABLED=0` and does not need a per-distro-release archive.
 - ✅ The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
       The public half is what users add as the repository key.
       Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); both set 2026-10-22, used by the `v0.3.0` run.
-- [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
-      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`; the first manifest arrives with `v0.3.1`.
+- ✅ Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
+      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`.
+      `v0.3.1` published `hint.json` `0.3.1` for `64bit` and `arm64`.
 - ✅ README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
       The Scoop lines landed with the `scoops` config, ahead of the first manifest.
 
@@ -1377,7 +1378,7 @@ ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (CI/release done; Pi 4 bench is the hardware
 record) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` → tag
 `v0.2.0`.
-WP0.14 (apt repository and Scoop bucket) runs in parallel with Phase 1 and does not gate `v0.3` (2026-10-11).
+WP0.14 (apt repository and Scoop bucket) did not gate `v0.3` (2026-10-11) and shipped in `v0.3.1`.
 Pi 5 smoke and the audit fixes are backlog (2026-10-11).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
