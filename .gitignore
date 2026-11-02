@@ -70,6 +70,7 @@ docs/plan/evidence/*/runs.jsonl
 
 # Другие временные файлы и директории
 /tmp/
+.tmp
 *.log
 *.bak
 .*.kate-swp

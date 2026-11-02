@@ -141,6 +141,10 @@ func TestGoldenFormat(t *testing.T) {
 	defer func() { _ = loaded.Close() }()
 	_, checkpoint, after := goldenConversation()
 	wantMessages := append(append([]agentapi.Message(nil), checkpoint...), after...)
+	// The committed file predates Message.Summary: its checkpoint opens
+	// with a plain system message, and loading must still mark it, since a
+	// stored checkpoint's leading system message is compaction output.
+	wantMessages[0] = agentapi.SummaryMessage(wantMessages[0].Text())
 	if !reflect.DeepEqual(loaded.Messages(), wantMessages) {
 		t.Errorf("loaded conversation = %+v\nwant %+v", loaded.Messages(), wantMessages)
 	}
@@ -439,13 +443,59 @@ func TestRecorder(t *testing.T) {
 	}
 	defer func() { _ = loaded.Close() }()
 	// The checkpoint is stored without the preamble: the next run prepends
-	// its own.
-	want := []agentapi.Message{agentapi.SystemMessage("summary"), agentapi.UserMessage("latest")}
+	// its own. Its leading system message is compaction output even though
+	// this file was written without the marker, so loading marks it.
+	want := []agentapi.Message{agentapi.SummaryMessage("summary"), agentapi.UserMessage("latest")}
 	if got := loaded.Messages(); !reflect.DeepEqual(got, want) {
 		t.Errorf("loaded = %+v, want the checkpoint without the preamble %+v", got, want)
 	}
 	if compacted[0].Text() != "you are hint" {
 		t.Error("the recorder must not mutate the event's History")
+	}
+}
+
+// TestSessionMarksLoadedSummary pins the compatibility path for files
+// written before Message.Summary existed: their checkpoint opens with a
+// plain system message, and a reader must mark it so that a client which
+// prepends a fresh preamble does not mistake history for the prompt.
+func TestSessionMarksLoadedSummary(t *testing.T) {
+	store := newStore(t, "marksummary")
+	sess, err := store.Create("/p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := []agentapi.Message{
+		agentapi.SystemMessage("earlier: the user asked about main.go"),
+		agentapi.SystemMessage("and then about the config loader"),
+		agentapi.UserMessage("carry on"),
+	}
+	if err := sess.AppendCompaction(agentapi.Compaction{
+		MessagesReplaced: 4, TokensBefore: 90, TokensAfter: 20,
+		Summary: history[0].Text(), History: history,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = sess.Close()
+
+	loaded, err := store.Open(sess.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = loaded.Close() }()
+
+	got := loaded.Messages()
+	if len(got) != 3 {
+		t.Fatalf("loaded %d messages, want 3", len(got))
+	}
+	// Every leading system message is checkpoint output, not just the
+	// first: an older writer could leave more than one in place.
+	for i := 0; i < 2; i++ {
+		if !got[i].Summary {
+			t.Errorf("messages[%d] = %+v, want Summary=true", i, got[i])
+		}
+	}
+	if got[2].Summary {
+		t.Errorf("the user message was marked as a summary: %+v", got[2])
 	}
 }
 
