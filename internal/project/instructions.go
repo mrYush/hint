@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mrYush/hint/internal/text"
 )
 
 // InstructionNames are the file names read for a project's agent
@@ -185,7 +187,7 @@ func readBounded(p string, limit int) (string, bool, error) {
 		return "", false, err
 	}
 	if len(data) > limit {
-		return string(data[:limit]), true, nil
+		return text.Cut(string(data), limit), true, nil
 	}
 	return string(data), false, nil
 }

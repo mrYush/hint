@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/mrYush/hint/internal/text"
 )
 
 // The escalation ladder of WP0.12: when the instruction files of a run do
@@ -141,16 +143,17 @@ func cutLines(s string, limit int) string {
 	if len(s) <= limit {
 		return s
 	}
-	if i := strings.LastIndex(s[:limit], "\n"); i >= 0 {
+	head := text.Cut(s, limit)
+	if i := strings.LastIndex(head, "\n"); i >= 0 {
 		return s[:i+1]
 	}
 	if strings.Contains(s, "\n") {
 		return ""
 	}
-	if i := strings.LastIndex(s[:limit], " "); i > 0 {
+	if i := strings.LastIndex(head, " "); i > 0 {
 		return s[:i]
 	}
-	return s[:limit]
+	return head
 }
 
 // fitInstructions lays files out under one shared byte budget and reports

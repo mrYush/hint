@@ -9,10 +9,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
+
+func TestSummarizeArgsCutsOnRuneBoundary(t *testing.T) {
+	got := SummarizeArgs([]byte(strings.Repeat("Привет ", 30)))
+	if !utf8.ValidString(got) {
+		t.Fatalf("SummarizeArgs returned invalid UTF-8: %q", got)
+	}
+	if strings.ContainsRune(got, utf8.RuneError) {
+		t.Fatalf("SummarizeArgs returned a replacement rune: %q", got)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("long arguments were not cut: %q", got)
+	}
+}
 
 func TestExplain(t *testing.T) {
 	auth := agentapi.NewError(agentapi.ErrAuth, "Unauthorized")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mrYush/hint/internal/console"
+	"github.com/mrYush/hint/internal/text"
 )
 
 // ErrNoChoice reports that the user picked nothing: an empty answer, EOF,
@@ -93,7 +94,7 @@ func firstLineOf(s string, max int) string {
 		s, cut = s[:i], true
 	}
 	if len(s) > max {
-		s, cut = s[:max], true
+		s, cut = text.Cut(s, max), true
 	}
 	if cut {
 		s += "..."

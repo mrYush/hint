@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	textutil "github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -148,7 +149,7 @@ func numberLines(ctx context.Context, r io.Reader, offset, limit int) (text stri
 		}
 		line := strings.TrimSuffix(sc.Text(), "\r")
 		if len(line) > maxLineLength {
-			line = line[:maxLineLength] + "... [line truncated]"
+			line = textutil.Cut(line, maxLineLength) + "... [line truncated]"
 		}
 		fmt.Fprintf(&b, "%6d\t%s\n", total, line)
 		shown++

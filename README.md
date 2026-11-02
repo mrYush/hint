@@ -701,6 +701,13 @@ past the shortened history, which crashed the turn with `slice bounds out
 of range` when the profile set `context_window` (or `HINT_CONTEXT_WINDOW` /
 `--context-window`); the baseline is now reset after every compaction.
 
+**Fixed in `v0.3.2`.** The UTF-8 truncation of
+[#41](https://github.com/mrYush/hint/issues/41), present since
+`v0.2.0-alpha`, cut prompts, instruction excerpts, tool arguments and long
+tool-output lines at a byte count in the middle of a UTF-8 rune.
+`encoding/json` then replaced the broken bytes with U+FFFD. Every such cut
+now goes through one helper that stops on a rune boundary.
+
 **Fixed in `v0.3.1`.** A gateway that answers a failed request with both a
 short `error` and a longer `message` — the NestJS shape
 `{"error":"Unauthorized","message":"Invalid API key"}` — was reported by

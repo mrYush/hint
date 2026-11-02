@@ -15,6 +15,7 @@ import (
 
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/rpc"
+	"github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -186,7 +187,7 @@ func SummarizeArgs(raw []byte) string {
 	const max = 120
 	s := strings.Join(strings.Fields(string(raw)), " ")
 	if len(s) > max {
-		s = s[:max] + "..."
+		s = text.Cut(s, max) + "..."
 	}
 	return s
 }

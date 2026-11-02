@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/mrYush/hint/internal/text"
 )
 
 // markerReserve is the byte budget set aside for the truncation marker so
@@ -30,7 +32,7 @@ func Truncate(s string, limit int) string {
 	headLen := budget / 2
 	tailLen := budget - headLen
 
-	head := trimToLineEnd(s[:headLen])
+	head := trimToLineEnd(text.Cut(s, headLen))
 	tail := trimToLineStart(s[len(s)-tailLen:])
 	omitted := s[len(head) : len(s)-len(tail)]
 	return joinTruncated(head, tail, len(omitted), strings.Count(omitted, "\n"))

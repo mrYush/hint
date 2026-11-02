@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/console"
 	"github.com/mrYush/hint/internal/session"
@@ -68,6 +69,27 @@ func TestChooseListing(t *testing.T) {
 	}
 	if strings.Contains(out, "more") {
 		t.Errorf("listing shows a second line of the prompt:\n%s", out)
+	}
+}
+
+func TestChooseListingKeepsUTF8(t *testing.T) {
+	infos := []session.Info{{
+		Path:        "/s/1.jsonl",
+		ID:          "beefbeefbeefbeef",
+		Cwd:         "/p",
+		Modified:    time.Now(),
+		Messages:    1,
+		FirstPrompt: strings.Repeat("Привет ", 20),
+	}}
+	var out bytes.Buffer
+	if _, err := session.Choose(context.Background(), &out, console.NewLineReader(strings.NewReader("1\n")), infos); err != nil {
+		t.Fatalf("Choose: %v", err)
+	}
+	if !utf8.ValidString(out.String()) {
+		t.Fatalf("listing is not valid UTF-8: %q", out.String())
+	}
+	if strings.ContainsRune(out.String(), utf8.RuneError) {
+		t.Fatalf("listing contains a replacement rune: %q", out.String())
 	}
 }
 
