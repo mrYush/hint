@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-11-01
+> Status: living document · Last updated: 2026-11-02
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -187,7 +187,7 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** `v0.3.2`, then Phase 2 (`v0.4`).
+- **Next:** `v0.3.2` (in progress on `release/v0.3.2`), then Phase 2 (`v0.4`).
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0` and `v0.3.1` are tagged; `v0.3.1` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository ([runbook](docs/plan/release-v0.3.1.md)).
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) shipped with `v0.3.1`.
@@ -277,16 +277,17 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
 18. ~~Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.~~ Done (2026-11-01), shipped in `v0.3.1`. [#50](https://github.com/mrYush/hint/issues/50) is closed. The tag and the `v0.1.0` Release stay.
 19. ~~`v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.~~ Done (2026-11-01). The tag is on `main` (`e0884e8`). The cask, the Scoop manifest, and the apt index name `0.3.1`.
-    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), which is step 20 (`v0.3.2` when it lands before that tag), and anything from Phase 2.
+    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), which is step 20 (`v0.3.2`), and anything from Phase 2.
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
-20. `v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop
+20. `v0.3.2`, a patch before Phase 2 (decided 2026-11-02; in progress on
+    `release/v0.3.2` at `075cce6`): the agent-loop
     fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction
     summary survives a prefix refresh, and the usage baseline is reset after
     a reactive compaction. The UTF-8 truncation of
-    [#41](https://github.com/mrYush/hint/issues/41) is in this patch when it
-    lands before the tag. The checklist is
-    [§7 of the v0.3.1 runbook](docs/plan/release-v0.3.1.md); the `v0.3.2`
-    runbook is written when that release branch is cut. Then Phase 2 (`v0.4`).
+    [#41](https://github.com/mrYush/hint/issues/41) is in this patch too.
+    The checklist is the
+    [`v0.3.2` runbook](docs/plan/release-v0.3.2.md); the §7 items of the
+    `v0.3.1` runbook are folded into it. Then Phase 2 (`v0.4`).
 
 ## Open questions
 

@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: Released v0.2.0 · WP0.14 shipped with v0.3.1 · Estimate: 6–10 weeks (part-time)
+> Status: Released v0.2.0 · WP0.14 shipped with v0.3.1 · B1/B2 and S20 fixed in v0.3.2 · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
