@@ -153,10 +153,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   a `v*` tag: archives, checksums, GitHub Release, Homebrew cask in
   `mrYush/homebrew-tap` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
-  tree). The Raspberry Pi 5 smoke run that closes WP0.10's last checkbox is
-  **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Decision
-  2026-10-11: that Pi 5 run is backlog and does not gate `v0.2.0` either.
-  The linux/arm64 record is the Pi 4 4 GB `pi-bench` run `20261011-105151`
+  tree). The Raspberry Pi 5 smoke was deferred past `v0.2.0-alpha`
+  (2026-09-14) and did not gate `v0.2.0` (2026-10-11). It is done
+  (2026-11-02). The measured linux/arm64 log is the Pi 4 4 GB `pi-bench`
+  run `20261011-105151`
   on commit `b2aee40`
   ([summary](docs/plan/evidence/pi-4-20261011-105151/summary.md),
   [runs.jsonl](docs/plan/evidence/pi-4-20261011-105151/runs.jsonl)).
@@ -187,16 +187,18 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   the conversation, so `-c` needs nothing new; `tool.Toucher` is how the
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
-- **Next:** Phase 2 (`v0.4`).
+- **Next:** `v0.3.2`, then Phase 2 (`v0.4`).
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0` and `v0.3.1` are tagged; `v0.3.1` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository ([runbook](docs/plan/release-v0.3.1.md)).
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) shipped with `v0.3.1`.
-  The audit fixes B1–B3 and M1–M2
-  ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md))
-  stay known issues and are backlog (decided 2026-10-11); they do not block
-  either tag. The Raspberry Pi 5 smoke
+  Audit fixes B1 and B2
+  ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md),
+  [#32](https://github.com/mrYush/hint/issues/32)) are fixed and ship in
+  `v0.3.2` (step 20). B3, M1 and M2 stay known issues and are backlog
+  (decided 2026-10-11); they did not block `v0.2.0` or `v0.3.0`. The
+  Raspberry Pi 5 smoke
   ([`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md))
-  is backlog on the same date. The linux/arm64 record is the Pi 4 bench
+  is done (2026-11-02). The measured linux/arm64 log is the Pi 4 bench
   [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
 - Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare
   `hint` opens an interactive session, `hint -p` answers once, and both
@@ -211,9 +213,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   parallel, and instruction files that outgrow the budget arrive as
   outlines the `instructions` tool expands, or split into rules that load
   when the conversation reaches their paths. CI and the release pipeline
-  are in place. `v0.2.0` and `v0.3.0` shipped with the Phase 0 backlog
-  unchanged: the audit fixes and the Pi 5 smoke stay backlog (2026-10-11),
-  and criterion 5 is the Pi 4 bench cited above.
+  are in place. `v0.2.0` and `v0.3.0` shipped while the audit fixes and the
+  Pi 5 smoke were still backlog (2026-10-11); criterion 5 for those tags is
+  the Pi 4 bench cited above. The Pi 5 smoke is done (2026-11-02). B1 and
+  B2 ship in `v0.3.2`; B3, M1 and M2 stay backlog.
 
 ## Compatibility decision
 
@@ -240,7 +243,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 5. ~~JSONL sessions + `-c`.~~ Done — see
    [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done).
 6. ~~CI, goreleaser, Homebrew.~~ Done — see
-   [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution).
+   [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution--done).
 7. ~~Tool schedule: parallel reads, ordered writes.~~ Done — see
    [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done).
 8. ~~WP0.12 rungs 0–3 (window-scaled budget, outlines, the
@@ -252,6 +255,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Known issues and the Pi 5 smoke did not block it (2026-10-11).
 11. ~~Tag `v0.2.0`.~~ Done — GitHub Release and Homebrew cask `0.2.0` in `mrYush/homebrew-tap`.
     The hardware record is the Pi 4 bench, not a Pi 5 run.
+    The Pi 5 smoke was accepted as done on 2026-11-02.
     The tag needed `HOMEBREW_TAP_TOKEN`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented.
@@ -273,8 +277,16 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
 18. ~~Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.~~ Done (2026-11-01), shipped in `v0.3.1`. [#50](https://github.com/mrYush/hint/issues/50) is closed. The tag and the `v0.1.0` Release stay.
 19. ~~`v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.~~ Done (2026-11-01). The tag is on `main` (`e0884e8`). The cask, the Scoop manifest, and the apt index name `0.3.1`.
-    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41) (a later patch) and anything from Phase 2.
+    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), which is step 20 (`v0.3.2` when it lands before that tag), and anything from Phase 2.
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
+20. `v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop
+    fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction
+    summary survives a prefix refresh, and the usage baseline is reset after
+    a reactive compaction. The UTF-8 truncation of
+    [#41](https://github.com/mrYush/hint/issues/41) is in this patch when it
+    lands before the tag. The checklist is
+    [§7 of the v0.3.1 runbook](docs/plan/release-v0.3.1.md); the `v0.3.2`
+    runbook is written when that release branch is cut. Then Phase 2 (`v0.4`).
 
 ## Open questions
 

@@ -57,6 +57,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 			// The prefix the last usage figure was measured with is gone:
 			// estimate the whole request afresh rather than trust it.
 			lastUsage = agentapi.Usage{}
+			usageBaseline = 0
 		}
 
 		if a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, lastUsage, usageBaseline)) {
@@ -70,22 +71,36 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 					agentapi.ErrUnknown, err, "proactive compaction")}
 			} else {
 				messages = compacted
+				lastUsage = agentapi.Usage{}
+				usageBaseline = 0
 			}
 		}
 
-		baseline := len(messages)
-		res, err := a.streamOnce(ctx, messages, out)
-		if err != nil {
-			if agentapi.KindOf(err) == agentapi.ErrCanceled {
-				endTurn(out, total, agentapi.FinishCanceled)
+		// One outer iteration is one logical round. A retry after
+		// ErrContextOverflow re-sends the same request against the
+		// compacted history; it is not a new round, so it does not spend
+		// the MaxIterations budget — but it is bounded by compaction
+		// itself, which refuses once nothing but summaries is left.
+		var res streamResult
+		for {
+			baseline := len(messages)
+			var err error
+			res, err = a.streamOnce(ctx, messages, out)
+			if err != nil {
+				if agentapi.KindOf(err) == agentapi.ErrCanceled {
+					endTurn(out, total, agentapi.FinishCanceled)
+					return
+				}
+				out <- agentapi.Event{Kind: agentapi.EventError, Err: toError(err)}
+				out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
 				return
 			}
-			out <- agentapi.Event{Kind: agentapi.EventError, Err: toError(err)}
-			out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
-			return
-		}
-
-		if res.overflow {
+			if !res.overflow {
+				total = total.Add(res.usage)
+				lastUsage = res.usage
+				usageBaseline = baseline
+				break
+			}
 			compacted, cerr := a.compact(ctx, messages, out)
 			if cerr != nil {
 				out <- agentapi.Event{Kind: agentapi.EventError, Err: toError(cerr)}
@@ -93,19 +108,12 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 				return
 			}
 			messages = compacted
-			// Retry the same iteration's Stream call against the
-			// compacted history without counting it as a tool-calling
-			// round: iter is the outer for-loop's own counter, and `continue`
-			// here skips straight back to the top without the implicit
-			// iter++ a plain loop-around would apply, since this is a retry
-			// of the current round, not the start of a new one.
-			iter--
-			continue
+			// The history the last usage figure was measured with is gone:
+			// the next attempt must estimate from scratch, and a stale
+			// baseline would index past the shorter history.
+			lastUsage = agentapi.Usage{}
+			usageBaseline = 0
 		}
-
-		total = total.Add(res.usage)
-		lastUsage = res.usage
-		usageBaseline = baseline
 
 		assistant := res.message
 		messages = append(messages, assistant)
@@ -141,8 +149,11 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 }
 
 // refreshPrefix asks the Preamble, when there is one, for the system
-// prefix of the next request and swaps it in for the leading run of
-// system messages. It reports whether the prefix changed. A Preamble that
+// prefix of the next request and swaps it in for the run of leading system
+// messages that belong to it. The run stops at the first
+// [agentapi.Message.Summary]: a compaction summary sits right after the
+// prefix but is history, not prompt, so rebuilding the prompt must leave
+// it in place. It reports whether the prefix changed. A Preamble that
 // fails is reported as a non-terminal EventError and the request keeps
 // the prefix it has: a rule that did not load is a worse prompt, not a
 // failed turn.
@@ -157,7 +168,7 @@ func (a *Agent) refreshPrefix(ctx context.Context, messages *[]agentapi.Message,
 		return false
 	}
 	n := 0
-	for n < len(*messages) && (*messages)[n].Role == agentapi.RoleSystem {
+	for n < len(*messages) && (*messages)[n].Role == agentapi.RoleSystem && !(*messages)[n].Summary {
 		n++
 	}
 	if samePrefix((*messages)[:n], prefix) {
@@ -185,9 +196,12 @@ func samePrefix(a, b []agentapi.Message) bool {
 // When the last Stream call reported real usage, that InputTokens count is
 // exact for the messages as they stood at that call, so only the messages
 // appended since (baseline) need estimating; otherwise the whole history is
-// estimated from scratch, e.g. before the first call of the turn.
+// estimated from scratch, e.g. before the first call of the turn. A
+// baseline past the end of messages can only come from a stale figure —
+// history shrank under it — so that case falls back to the whole-history
+// estimate rather than slicing out of range.
 func (a *Agent) occupancy(messages []agentapi.Message, lastUsage agentapi.Usage, baseline int) int64 {
-	if lastUsage.InputTokens > 0 {
+	if lastUsage.InputTokens > 0 && baseline <= len(messages) {
 		return lastUsage.InputTokens + a.estimator.Estimate(messages[baseline:])
 	}
 	return a.estimator.Estimate(messages)

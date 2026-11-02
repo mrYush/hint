@@ -167,7 +167,7 @@ func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
 	if result[0].Text() != "sys" {
 		t.Errorf("result[0] = %+v, want the original system prompt", result[0])
 	}
-	if result[1].Role != agentapi.RoleSystem || result[1].Text() != "SUMMARY" {
+	if result[1].Role != agentapi.RoleSystem || result[1].Text() != "SUMMARY" || !result[1].Summary {
 		t.Errorf("result[1] = %+v, want a system message carrying the summary", result[1])
 	}
 	if result[2].Text() != "second question" {
@@ -247,5 +247,97 @@ func TestCharEstimator(t *testing.T) {
 	messages := []agentapi.Message{agentapi.UserMessage("12345678")} // 8 chars
 	if got, want := e.Estimate(messages), int64(2); got != want {
 		t.Errorf("Estimate() = %d, want %d", got, want)
+	}
+}
+
+// TestCompact_ReplacesPreviousSummary checks that an earlier summary is
+// part of the body of the next compaction, not of the prefix: it is folded
+// into the new summary instead of accumulating beside it.
+func TestCompact_ReplacesPreviousSummary(t *testing.T) {
+	compactor := &stubCompactor{summary: "NEW"}
+	messages := []agentapi.Message{
+		agentapi.SystemMessage("sys"),
+		agentapi.SummaryMessage("old"),
+		agentapi.UserMessage("first question"),
+		agentapi.AssistantMessage("first answer"),
+		agentapi.UserMessage("second question"),
+	}
+	a := &Agent{
+		limits:    Limits{MaxContextTokens: 0, CompactThreshold: 0.8},
+		compactor: compactor,
+		estimator: charEstimator{},
+	}
+
+	out := make(chan agentapi.Event, 10)
+	result, err := a.compact(context.Background(), messages, out)
+	close(out)
+	if err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+
+	if len(compactor.got) != 3 || !compactor.got[0].Summary || compactor.got[0].Text() != "old" {
+		t.Fatalf("Compactor got %+v, want the old summary followed by the finished exchange", compactor.got)
+	}
+	if len(result) != 3 {
+		t.Fatalf("result = %+v, want [system, NEW, second question]", result)
+	}
+	if result[1].Text() != "NEW" || !result[1].Summary {
+		t.Errorf("result[1] = %+v, want the new summary", result[1])
+	}
+	summaries := 0
+	for _, m := range result {
+		if m.Summary {
+			summaries++
+		}
+	}
+	if summaries != 1 {
+		t.Errorf("result holds %d summaries, want exactly 1", summaries)
+	}
+}
+
+// TestCompact_OnlySummariesIsFatal checks the bound on the retry loop: a
+// history whose whole body is already a summary cannot be shrunk by
+// summarizing it again, so compact refuses instead of letting an
+// overflowing provider spin forever.
+func TestCompact_OnlySummariesIsFatal(t *testing.T) {
+	compactor := &stubCompactor{summary: "should not be called"}
+	messages := []agentapi.Message{
+		agentapi.SystemMessage("sys"),
+		agentapi.SummaryMessage("old"),
+		agentapi.UserMessage("only question"),
+	}
+	a := &Agent{
+		limits:    Limits{MaxContextTokens: 0, CompactThreshold: 0.8},
+		compactor: compactor,
+		estimator: charEstimator{},
+	}
+
+	out := make(chan agentapi.Event, 10)
+	_, err := a.compact(context.Background(), messages, out)
+	close(out)
+
+	if err == nil {
+		t.Fatal("compact must fail when the body is nothing but summaries")
+	}
+	if agentapi.KindOf(err) != agentapi.ErrContextOverflow {
+		t.Errorf("KindOf(err) = %q, want %q", agentapi.KindOf(err), agentapi.ErrContextOverflow)
+	}
+	if compactor.calls != 0 {
+		t.Errorf("Compactor called %d times, want 0", compactor.calls)
+	}
+}
+
+// TestOccupancy_StaleBaselineFallsBackToEstimate pins the guard behind the
+// B2 fix: the reset is the invariant, but a baseline left past the end of
+// a shortened history must not slice out of range on the way there.
+func TestOccupancy_StaleBaselineFallsBackToEstimate(t *testing.T) {
+	a := &Agent{estimator: charEstimator{}}
+	messages := []agentapi.Message{agentapi.UserMessage("12345678")} // 2 tokens
+
+	if got := a.occupancy(messages, agentapi.Usage{InputTokens: 100}, 5); got != 2 {
+		t.Errorf("occupancy with a baseline past the end = %d, want the whole-history estimate 2", got)
+	}
+	if got := a.occupancy(messages, agentapi.Usage{InputTokens: 100}, 1); got != 100 {
+		t.Errorf("occupancy with a baseline at the end = %d, want the reported usage 100", got)
 	}
 }

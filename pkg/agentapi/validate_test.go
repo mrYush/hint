@@ -66,6 +66,10 @@ func TestMessageValidate(t *testing.T) {
 		{"silent tool result", agentapi.Message{Role: agentapi.RoleTool, ToolCallID: "c1"}, false},
 		{"user with call id", agentapi.Message{Role: agentapi.RoleUser, Content: []agentapi.ContentPart{agentapi.Text("hi")}, ToolCallID: "c1"}, true},
 		{"assistant with malformed call", agentapi.Message{Role: agentapi.RoleAssistant, ToolCalls: []agentapi.ToolCall{{ID: "c1", Name: "glob", Arguments: json.RawMessage(`{`)}}}, true},
+		{"summary", agentapi.SummaryMessage("earlier turns"), false},
+		{"summary without content", agentapi.Message{Role: agentapi.RoleSystem, Summary: true}, true},
+		{"summary on a user message", agentapi.Message{Role: agentapi.RoleUser, Content: []agentapi.ContentPart{agentapi.Text("hi")}, Summary: true}, true},
+		{"summary on an assistant message", agentapi.Message{Role: agentapi.RoleAssistant, Content: []agentapi.ContentPart{agentapi.Text("hi")}, Summary: true}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -96,12 +96,12 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 	}
 
 	prefix, body, tail := splitForCompaction(messages, a.estimator.Estimate, int64(a.limits.MaxContextTokens))
-	if len(body) == 0 {
+	if onlySummaries(body) {
 		// Nothing left to compact: dropping thinking did not save it, and
-		// the whole remaining history is either the leading system prompt
-		// or the tail we refuse to cut a ToolCall/RoleTool pair out of.
-		// Retrying will not change that, so this is fatal rather than
-		// another retry loop.
+		// the whole remaining history is either the leading system prompt,
+		// the tail we refuse to cut a ToolCall/RoleTool pair out of, or a
+		// summary and nothing else. Summarizing a summary cannot shrink
+		// the request, so a retry would only repeat this call forever.
 		return nil, agentapi.NewError(agentapi.ErrContextOverflow, "context overflow: nothing left to compact")
 	}
 
@@ -112,7 +112,7 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 
 	result := make([]agentapi.Message, 0, len(prefix)+1+len(tail))
 	result = append(result, prefix...)
-	result = append(result, agentapi.SystemMessage(summary))
+	result = append(result, agentapi.SummaryMessage(summary))
 	result = append(result, tail...)
 
 	out <- agentapi.Event{Kind: agentapi.EventCompaction, Compaction: &agentapi.Compaction{
@@ -123,6 +123,20 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 		History:          result,
 	}}
 	return result, nil
+}
+
+// onlySummaries reports whether messages holds nothing but compaction
+// summaries, or nothing at all. Summarizing them again cannot shrink the
+// request — the new summary stands in for the old one, so the provider
+// would see the same history a second time. [Agent.compact] therefore
+// treats this as the fatal "nothing left" case instead of another retry.
+func onlySummaries(messages []agentapi.Message) bool {
+	for _, m := range messages {
+		if !m.Summary {
+			return false
+		}
+	}
+	return true
 }
 
 // dropThinking returns a copy of messages with every PartThinking content
@@ -148,7 +162,10 @@ func dropThinking(messages []agentapi.Message) (out []agentapi.Message, dropped 
 // splitForCompaction partitions messages into three regions:
 //
 //   - prefix: the leading run of RoleSystem messages (the system prompt,
-//     and later HINT.md) — never summarized, always kept verbatim.
+//     and later HINT.md) — never summarized, always kept verbatim. The
+//     run ends at the first [agentapi.Message.Summary]: a summary is
+//     history, not prompt, so a later compaction folds it into the new
+//     summary instead of letting summaries pile up untouched.
 //   - tail: from the last RoleUser message onward — the current,
 //     unanswered exchange. Cutting into it would show the model a summary
 //     of a conversation turn it has not finished yet.
@@ -163,7 +180,7 @@ func dropThinking(messages []agentapi.Message) (out []agentapi.Message, dropped 
 // separated from its own result.
 func splitForCompaction(messages []agentapi.Message, estimate func([]agentapi.Message) int64, window int64) (prefix, body, tail []agentapi.Message) {
 	i := 0
-	for i < len(messages) && messages[i].Role == agentapi.RoleSystem {
+	for i < len(messages) && messages[i].Role == agentapi.RoleSystem && !messages[i].Summary {
 		i++
 	}
 	prefix = messages[:i]

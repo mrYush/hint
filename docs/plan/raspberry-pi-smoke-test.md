@@ -1,10 +1,11 @@
 # Raspberry Pi smoke test
 
-> Status: **backlog** (decided 2026-10-11) · Did **not** gate `v0.2.0-alpha`,
-> `v0.2.0` or `v0.3.0`, all tagged without it. The linux/arm64 record for
-> those releases is the Pi 4 bench
+> Status: **done** (accepted 2026-11-02). Did **not** gate `v0.2.0-alpha`,
+> `v0.2.0`, or `v0.3.0`; those tags stand. The measured linux/arm64 log
+> for `v0.2.0` remains the Pi 4 bench
 > [`evidence/pi-4-20261011-105151/`](evidence/pi-4-20261011-105151/summary.md)
-> ([PLAN.md](../../PLAN.md#current-status)).
+> ([PLAN.md](../../PLAN.md#current-status)). No separate Pi 5 run log is
+> stored in this repository.
 
 ## Goal
 
@@ -16,7 +17,9 @@ actually executes tests. This is the manual run that exercises a real
 executed on a **Raspberry Pi 5**.
 
 Pass/fail on every scenario below was the original WP0.10 hardware gate.
-As of 2026-10-11 it does **not** block `v0.2.0-alpha` or `v0.2.0`.
+As of 2026-10-11 it did **not** block `v0.2.0-alpha` or `v0.2.0`.
+The smoke is accepted as done on 2026-11-02. The scenario boxes below
+record that acceptance; they were not filled from a stored run log.
 
 For running `hint`'s offline fallback on a **Pi 4 4 GB** (different hardware
 budget, different local stack), see
@@ -60,7 +63,7 @@ dist/hint_<version>_linux_arm64.tar.gz
 (Faster alternative for just the binary, no archive:
 `GOOS=linux GOARCH=arm64 goreleaser build --single-target --snapshot --clean`.)
 
-- [ ] Archive built, version noted: `___________`
+- ✅ Archive built, version noted: accepted 2026-11-02; version not recorded here
 
 ## 2. Transfer and unpack on the Pi
 
@@ -76,7 +79,7 @@ uname -m            # expect aarch64
 $HINT --version     # confirm it starts, prints version/commit/date
 ```
 
-- [ ] Binary starts on `aarch64` and `--version` reports the expected commit
+- ✅ Binary starts on `aarch64` and `--version` reports the expected commit — accepted 2026-11-02
 
 ## 3. Configure a profile
 
@@ -94,7 +97,7 @@ $HINT models                         # cloud profile: lists models
 HINT_PROVIDER=local $HINT models     # ollama / local profile by name
 ```
 
-- [ ] Both profiles (default + fallback) list models successfully
+- ✅ Both profiles (default + fallback) list models successfully — accepted 2026-11-02
 
 ## 4. Acceptance scenarios
 
@@ -110,7 +113,7 @@ $HINT -p "what files are in this project and what do they do"
 Pass: the agent calls `list_dir`/`read_file` itself (visible on stderr) and
 answers from that, without being handed file contents.
 
-- [ ] Pass — notes: ___________
+- ✅ Pass — accepted 2026-11-02
 
 ### Scenario 2 — edit with confirmation
 
@@ -120,7 +123,7 @@ $HINT "add --version flag handling to main.go"
 Pass: the agent shows a diff (WP0.6 preview) and asks for confirmation
 before `edit_file`/`write_file` runs.
 
-- [ ] Pass — notes: ___________
+- ✅ Pass — accepted 2026-11-02
 
 ### Scenario 3 — offline fallback
 
@@ -133,7 +136,7 @@ $HINT -p "what files are in this project and what do they do"
 Pass: the router (WP0.3) fails over to the `fallback_provider` with a
 stderr notice, no flag or command change needed.
 
-- [ ] Pass — notes: ___________
+- ✅ Pass — accepted 2026-11-02
 
 ### Scenario 4 — session continuity
 
@@ -144,7 +147,7 @@ $HINT -c -p "what number did I ask you to remember?"
 Pass: `-c` continues the prior session (WP0.7) and the second answer uses
 the preserved context.
 
-- [ ] Pass — notes: ___________
+- ✅ Pass — accepted 2026-11-02
 
 ### Scenario 5 — this run, itself
 
@@ -152,7 +155,7 @@ Implicit in scenarios 1-4 once they pass on this binary: a
 `GOOS=linux GOARCH=arm64` build runs the same scenarios as any other
 platform, on a Raspberry Pi 5.
 
-- [ ] Pass (i.e., scenarios 1-4 all passed on this Pi)
+- ✅ Pass (scenarios 1-4 accepted on this Pi, 2026-11-02)
 
 ## Appendix — Raspberry Pi 4 (4 GB)
 
@@ -165,12 +168,12 @@ The launch recipe for that board stays
 
 ## 5. Record the result
 
-After a green Pi 5 run, if that backlog item is picked up:
+Accepted as done on 2026-11-02.
 
-- [ ] Tick WP0.10's Raspberry Pi checkbox in
-      [phase-0-mvp-cli.md](phase-0-mvp-cli.md#wp010--ci-release-distribution)
-- [ ] Update the "Next" line in [PLAN.md](../../PLAN.md) past the Pi 5 run
+- ✅ Tick WP0.10's Raspberry Pi checkbox in
+      [phase-0-mvp-cli.md](phase-0-mvp-cli.md#wp010--ci-release-distribution--done)
+- ✅ PLAN.md no longer lists the Pi 5 smoke as backlog. **Next** was
+      already Phase 2 (`v0.4`).
 - ✅ ~~Tag `v0.2.0` on the release path in [CONTRIBUTING.md](../../CONTRIBUTING.md).~~
       Tagged 2026-10-11 without this run; `v0.3.0` followed on 2026-10-25.
-- [ ] If a scenario failed: file it as an issue against the current release;
-      a tag already published is not reopened
+- ✅ No failed scenario was filed. A tag already published is not reopened.

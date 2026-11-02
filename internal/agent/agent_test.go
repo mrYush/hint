@@ -487,7 +487,7 @@ func TestRunTurn_ProactiveCompaction(t *testing.T) {
 	if len(second) != 5 {
 		t.Fatalf("second request has %d messages, want 5 (system, summary, user, assistant+tool_calls, tool)", len(second))
 	}
-	if second[1].Role != agentapi.RoleSystem || second[1].Text() != "SUMMARY" {
+	if second[1].Role != agentapi.RoleSystem || second[1].Text() != "SUMMARY" || !second[1].Summary {
 		t.Errorf("second request[1] = %+v, want the summary system message", second[1])
 	}
 	// The compaction event is what a session store checkpoints from, so
@@ -563,6 +563,69 @@ func TestRunTurn_SecondOverflowWithNothingLeftToCompactIsFatal(t *testing.T) {
 	errEv := lastEvent(events, agentapi.EventError)
 	if errEv == nil || errEv.Err.Kind != agentapi.ErrContextOverflow {
 		t.Fatalf("error = %+v, want ErrContextOverflow", errEv)
+	}
+}
+
+// messageCounter estimates one token per message, so only the usage a
+// scripted provider reports can cross the proactive threshold. That keeps
+// the trigger in the test's hands: the B2 case needs the loop to reach the
+// overflow with a real window configured and without compacting earlier.
+type messageCounter struct{}
+
+func (messageCounter) Estimate(messages []agentapi.Message) int64 { return int64(len(messages)) }
+
+// TestRunTurn_ReactiveCompactionWithWindowDoesNotPanic is #32's B2: after a
+// reactive compaction the history is shorter than the baseline the last
+// usage figure was measured against. Before the fix the next occupancy
+// check sliced messages[baseline:] on the shorter history and panicked
+// with "slice bounds out of range"; here it must estimate afresh, retry
+// once, and finish.
+func TestRunTurn_ReactiveCompactionWithWindowDoesNotPanic(t *testing.T) {
+	compactor := &stubCompactor{summary: "SUMMARY2"}
+	p := &fakeProvider{scripts: []script{
+		{events: []agentapi.ChatEvent{
+			toolCallEvent("c1", "echo", `{"text":"a"}`),
+			usageEvent(1),
+			done(agentapi.FinishToolCalls),
+		}},
+		{events: []agentapi.ChatEvent{
+			toolCallEvent("c2", "echo", `{"text":"b"}`),
+			usageEvent(1),
+			done(agentapi.FinishToolCalls),
+		}},
+		{events: []agentapi.ChatEvent{failure(agentapi.ErrContextOverflow)}},
+		{events: []agentapi.ChatEvent{delta("recovered"), done(agentapi.FinishStop)}},
+	}}
+	a := agent.New(p, agent.WithTools(echoTool{}), agent.WithCompactor(compactor),
+		agent.WithEstimator(messageCounter{}),
+		agent.WithLimits(agent.Limits{MaxIterations: 10, MaxContextTokens: 9, CompactThreshold: 0.9}))
+
+	events := collect(t, a.RunTurn(context.Background(), history4()))
+
+	end := lastEvent(events, agentapi.EventTurnEnd)
+	if end == nil || end.FinishReason != agentapi.FinishStop {
+		t.Fatalf("turn_end = %+v, want FinishStop after the retry", end)
+	}
+	if len(p.calls) != 4 {
+		t.Fatalf("provider called %d times, want 4 (two tool rounds, the overflow, the retry)", len(p.calls))
+	}
+	if compactor.calls != 1 {
+		t.Fatalf("Compactor called %d times, want 1", compactor.calls)
+	}
+	// Exactly one compaction, not a second proactive one in the same
+	// iteration: the reset makes the retry estimate the shorter history.
+	if got := countEvents(events, agentapi.EventCompaction); got != 1 {
+		t.Errorf("want 1 EventCompaction, got %d", got)
+	}
+	retry := p.calls[3].Messages
+	found := false
+	for _, m := range retry {
+		if m.Summary && m.Text() == "SUMMARY2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("retry request = %+v, want it to carry the compaction summary", retry)
 	}
 }
 

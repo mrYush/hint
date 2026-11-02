@@ -1,6 +1,6 @@
 # Release v0.3.1 — runbook
 
-> Status: published, merge back open · Created: 2026-10-31 · Target: `v0.3.1`
+> Status: published, merged back · Created: 2026-10-31 · Target: `v0.3.1`
 > Scope and release status: [`PLAN.md` §19](../../PLAN.md#L275) and
 > [`WP0.14`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
 > This file is an execution checklist, not a second scope document. If it
@@ -168,7 +168,7 @@ and §5 is where the version is read back.
       [`docs/plan/phase-0-mvp-cli.md`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
 - ✅ Update `PLAN.md`: `v0.3.1` is the latest release, §19 is done, and the
       next item is Phase 2 / `v0.4`.
-- [ ] Merge `release/v0.3.1` back into `develop` and delete the branch.
+- ✅ Merge `release/v0.3.1` back into `develop` and delete the branch.
 - ✅ Post-release docs change: any status text that could only be final
       after the tag, plus the remaining runbook checkboxes. The README
       known-issues header and limits were done in §1.

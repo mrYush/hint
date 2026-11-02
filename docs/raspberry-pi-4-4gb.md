@@ -6,7 +6,7 @@ How to run `hint` with a local OpenAI-compatible model on a **4 GB Raspberry Pi 
 This is a **product guide**: devices, use cases, why this stack, launch recipe,
 and examples. The recorded `v0.2.0` hardware run is the Pi 4 `pi-bench`
 [`20261011-105151`](plan/evidence/pi-4-20261011-105151/summary.md), not this
-guide. A Raspberry Pi 5 + Ollama smoke remains backlog
+guide. A Raspberry Pi 5 + Ollama smoke is done (2026-11-02)
 ([checklist](plan/raspberry-pi-smoke-test.md)).
 
 ## Devices and use cases
@@ -16,7 +16,7 @@ guide. A Raspberry Pi 5 + Ollama smoke remains backlog
 | Raspberry Pi 4 Model B, **4 GB** | Yes (primary target) | Desk / lab board: cloud primary, local failover when the net drops |
 | Pi 4 **2 GB** | Marginal | Only with a smaller GGUF and lower `-c`; expect swapping and poor tokens/s |
 | Pi 4 **8 GB** | Yes, with headroom | Same recipe; optional larger Q4 (e.g. ~3B) once 1.5B tool quality is not enough |
-| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Pi 5 + Ollama smoke is backlog (2026-10-11); `v0.2.0`'s hardware record is the Pi 4 bench |
+| Pi 5 **4–8 GB** | Prefer Ollama + plan defaults | Pi 5 + Ollama smoke is done (2026-11-02); `v0.2.0`'s measured log is the Pi 4 bench |
 | Other `aarch64` SBCs (~4 GiB) | Yes if CPU-only | Same memory math; retune `-t` to core count |
 
 **When to use this setup**
@@ -29,7 +29,7 @@ guide. A Raspberry Pi 5 + Ollama smoke remains backlog
 
 **When not to**
 
-- You need the original Pi 5 + Ollama checklist → that item is backlog, not the `v0.2.0` gate.
+- You need the Pi 5 + Ollama checklist → that smoke is done (2026-11-02); this page is the Pi 4 recipe.
 - You insist on stock Ollama + 7B on 4 GB → it does not fit the working set.
 - You need strong agent quality offline → use a larger host, or stay on cloud.
 
@@ -252,5 +252,5 @@ summary table per run.
   the prompt at ~3 tokens/s and generated at ~2 tokens/s.
 - The `v0.2.0` hardware record is
   [`plan/evidence/pi-4-20261011-105151/summary.md`](plan/evidence/pi-4-20261011-105151/summary.md).
-  A later Pi 5 + Ollama pass still uses
+  The Pi 5 + Ollama smoke is done (2026-11-02). The checklist is
   [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).

@@ -84,8 +84,22 @@ func (s *Session) Warnings() []string { return append([]string(nil), s.warnings.
 // call the file never answered — the run was interrupted mid-batch —
 // gets a synthesized error result so the history stays sendable: every
 // supported dialect rejects a tool call without a response.
+//
+// The leading system messages are marked as compaction summaries. A
+// session never stores the run's prompt — the Recorder strips it before
+// writing a checkpoint — so a system message at the head of a stored
+// conversation is compaction output, including in files written before
+// [agentapi.Message.Summary] existed. Marking it is what tells a caller
+// that prepends a fresh preamble where the prompt ends and history begins.
 func (s *Session) Messages() []agentapi.Message {
-	return repairDangling(s.messages)
+	out := repairDangling(s.messages)
+	for i := range out {
+		if out[i].Role != agentapi.RoleSystem {
+			break
+		}
+		out[i].Summary = true
+	}
+	return out
 }
 
 // Len returns the number of conversation messages.

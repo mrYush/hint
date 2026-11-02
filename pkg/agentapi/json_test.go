@@ -77,6 +77,7 @@ func TestMessageRoundTrip(t *testing.T) {
 				agentapi.ImagePart(agentapi.Image{Data: []byte{1, 2, 3}, MediaType: "image/jpeg"}),
 			},
 		},
+		"compaction summary": agentapi.SummaryMessage("earlier: the config loader was refactored"),
 	}
 	for name, msg := range cases {
 		t.Run(name, func(t *testing.T) { roundTrip(t, msg) })
