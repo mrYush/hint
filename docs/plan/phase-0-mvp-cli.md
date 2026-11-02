@@ -348,6 +348,7 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - ✅ Per-tool unit tests incl. truncation and timeout behavior
 - [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
 - [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -380,6 +381,12 @@ depend on them:
   the tail so a command printing gigabytes cannot exhaust memory — and a
   test pins that it renders byte-for-byte what `Truncate` would on the
   same bytes.
+- **UTF-8 cuts go through `internal/text.Cut`.** It returns the longest
+  prefix within a byte budget that ends on a rune boundary; the session
+  picker, project context, tools and shells use it instead of slicing a
+  string at a byte count. `Truncate` keeps its head-and-tail marker but
+  uses the same cut for the head, so a Cyrillic prompt or line no longer
+  ends in bytes that `encoding/json` turns into U+FFFD.
 - **Schemas are generated from the argument structs with
   `invopop/jsonschema`** (chat decision; the alternatives were hand-written
   JSON literals, which drift from the struct, or a ~150-line reflection
@@ -618,6 +625,7 @@ depend on them:
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
 - [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -715,6 +723,7 @@ depend on them:
 
 - ✅ Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - ✅ Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in instruction excerpts, budget cuts and bounded reads — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:

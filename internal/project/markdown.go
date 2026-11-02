@@ -3,6 +3,8 @@ package project
 import (
 	"regexp"
 	"strings"
+
+	"github.com/mrYush/hint/internal/text"
 )
 
 // Section is one heading of a Markdown instruction file together with the
@@ -129,9 +131,10 @@ func FirstSentence(body string) string {
 		s = s[:end]
 	}
 	if len(s) > maxFirstSentence {
-		cut := strings.LastIndex(s[:maxFirstSentence], " ")
+		head := text.Cut(s, maxFirstSentence)
+		cut := strings.LastIndex(head, " ")
 		if cut <= 0 {
-			cut = maxFirstSentence
+			cut = len(head)
 		}
 		s = s[:cut] + "…"
 	}

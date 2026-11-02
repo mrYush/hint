@@ -17,6 +17,7 @@ import (
 
 	"github.com/mrYush/hint/internal/glob"
 	"github.com/mrYush/hint/internal/project"
+	"github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -125,11 +126,11 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	}
 	var b strings.Builder
 	for _, m := range matches {
-		text := m.text
-		if len(text) > maxGrepLine {
-			text = text[:maxGrepLine] + "... [line truncated]"
+		line := m.text
+		if len(line) > maxGrepLine {
+			line = text.Cut(line, maxGrepLine) + "... [line truncated]"
 		}
-		fmt.Fprintf(&b, "%s:%d: %s\n", t.root.Rel(m.path), m.line, text)
+		fmt.Fprintf(&b, "%s:%d: %s\n", t.root.Rel(m.path), m.line, line)
 	}
 	if truncated {
 		fmt.Fprintf(&b, "\n(showing the first %d matches; narrow the pattern, path or include to see others)", maxGrepMatches)

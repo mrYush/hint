@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -103,6 +104,20 @@ func TestDescribe_LongArgsAreCut(t *testing.T) {
 	req := tool.Describe(context.Background(), call("plain", `{"text":"`+long+`"}`), plainTool{})
 	if len(req.Summary) > 100 || !strings.HasSuffix(req.Summary, "...") {
 		t.Fatalf("summary not cut: %d bytes", len(req.Summary))
+	}
+}
+
+func TestDescribe_LongArgsCutOnRuneBoundary(t *testing.T) {
+	long := strings.Repeat("Привет", 50)
+	req := tool.Describe(context.Background(), call("plain", `{"text":"`+long+`"}`), plainTool{})
+	if !utf8.ValidString(req.Summary) {
+		t.Fatalf("summary is not valid UTF-8: %q", req.Summary)
+	}
+	if strings.ContainsRune(req.Summary, utf8.RuneError) {
+		t.Fatalf("summary contains a replacement rune: %q", req.Summary)
+	}
+	if !strings.HasSuffix(req.Summary, "...") {
+		t.Fatalf("summary was not cut: %q", req.Summary)
 	}
 }
 

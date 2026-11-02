@@ -3,6 +3,7 @@ package builtin_test
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
@@ -96,6 +97,22 @@ func TestReadFile_EmptyAndLongLines(t *testing.T) {
 	}
 	if got := ok(t, run(t, tl, `{"path":"crlf.txt"}`)); strings.Contains(got, "\r") {
 		t.Fatalf("carriage returns leaked into the output: %q", got)
+	}
+}
+
+func TestReadFile_TruncatesLineOnRuneBoundary(t *testing.T) {
+	long := strings.Repeat("Привет", 400)
+	root := newRoot(t, map[string]string{"long.txt": long + "\n"})
+	got := ok(t, run(t, builtin.NewReadFile(root), `{"path":"long.txt"}`))
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("read_file returned invalid UTF-8")
+	}
+	if strings.ContainsRune(got, utf8.RuneError) {
+		t.Fatalf("read_file returned a replacement rune")
+	}
+	if !strings.Contains(got, "... [line truncated]") {
+		t.Fatalf("long line was not truncated: %q", got[len(got)-40:])
 	}
 }
 

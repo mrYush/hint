@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/tool/builtin"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -76,6 +77,22 @@ func TestGrep_CapsMatches(t *testing.T) {
 	}
 	if n := strings.Count(got, "hay.txt:"); n != 200 {
 		t.Fatalf("%d matches shown, want 200", n)
+	}
+}
+
+func TestGrep_TruncatesLineOnRuneBoundary(t *testing.T) {
+	long := "needle " + strings.Repeat("Привет", 200)
+	root := newRoot(t, map[string]string{"a.txt": long + "\n"})
+	got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep("")), `{"pattern":"needle"}`))
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("grep returned invalid UTF-8")
+	}
+	if strings.ContainsRune(got, utf8.RuneError) {
+		t.Fatalf("grep returned a replacement rune")
+	}
+	if !strings.Contains(got, "... [line truncated]") {
+		t.Fatalf("long line was not truncated: %q", got[len(got)-40:])
 	}
 }
 
