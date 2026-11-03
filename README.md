@@ -675,28 +675,38 @@ your convenience.
 
 ### Known issues
 
-`v0.2.0-alpha`, `v0.2.0`, `v0.3.0` and `v0.3.1` ship with these confirmed
-bugs. They are backlog (decided 2026-10-11) and did not block those tags.
+`v0.3.2` ships with these confirmed bugs. They are backlog (decided
+2026-10-11) and did not block this patch.
 Details and the full audit:
 [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
-1. **Compaction loses the summary.** When a long conversation is
-   compacted, the summary is dropped on the next request, so the model
-   continues with the system prompt and the current exchange only. Keep
-   conversations short or start a new session when the compaction notice
-   appears.
-2. **Crash after a compaction that follows a context-overflow error**
-   (`slice bounds out of range`) when the profile sets `context_window`
-   (or `HINT_CONTEXT_WINDOW` / `--context-window`). Leave it unset to
-   avoid the path.
-3. **A session file can become unreadable** if `hint` is interrupted at
+1. **A session file can become unreadable** if `hint` is interrupted at
    the exact end of a write; the next `hint -c` then fails to open it.
    Start a new session; the old file can be repaired by adding a newline
    after the last complete line.
-4. `grep` on a single file with more than 200 matches reports an error
+2. `grep` on a single file with more than 200 matches reports an error
    instead of a truncated list; search a directory or narrow the pattern.
-5. `write_file` on a file `hint` cannot read shows the overwrite prompt
+3. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
+
+**Fixed in `v0.3.2`.** Two agent-loop bugs, both present since
+`v0.2.0-alpha`. A compaction summary was erased by the next rebuild of the
+system prompt: it was stored as an ordinary system message right after the
+prefix, and the prefix refresh replaced the whole leading run of system
+messages, so the model continued with the prompt and the current exchange
+only. The summary is now marked, and both the refresh and the next
+compaction treat it as history rather than prompt. Separately, a reactive
+compaction after a context-overflow error left the usage baseline pointing
+past the shortened history, which crashed the turn with `slice bounds out
+of range` when the profile set `context_window` (or `HINT_CONTEXT_WINDOW` /
+`--context-window`); the baseline is now reset after every compaction.
+
+**Fixed in `v0.3.2`.** The UTF-8 truncation of
+[#41](https://github.com/mrYush/hint/issues/41), present since
+`v0.2.0-alpha`, cut prompts, instruction excerpts, tool arguments and long
+tool-output lines at a byte count in the middle of a UTF-8 rune.
+`encoding/json` then replaced the broken bytes with U+FFFD. Every such cut
+now goes through one helper that stops on a rune boundary.
 
 **Fixed in `v0.3.1`.** A gateway that answers a failed request with both a
 short `error` and a longer `message` — the NestJS shape
@@ -705,7 +715,7 @@ the `error` field alone. Present since `v0.3.0`. The message now comes
 first, with the error as a suffix when the two differ.
 
 **Limits of this release.** Three things are known and accepted for
-`v0.3.1` (unchanged from `v0.3.0`), not bugs to be fixed in a patch:
+`v0.3.2` (unchanged from `v0.3.1`), not bugs to be fixed in a patch:
 
 - `bash` is not sandboxed. The file tools refuse hint's own config and
   session files, and every tool result is scrubbed against the configured

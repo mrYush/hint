@@ -203,11 +203,26 @@ type Message struct {
 	// ToolCallID links a RoleTool message to the ToolCall it answers.
 	// Required on RoleTool, empty otherwise.
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// Summary marks a RoleSystem message as compaction output: a stand-in
+	// for turns a client replaced to fit the context window. It is never
+	// set by a provider and never sent upstream; it tells a client which
+	// leading system messages are history rather than the run's prompt, so
+	// that a prompt rebuilt between requests leaves them in place.
+	Summary bool `json:"summary,omitempty"`
 }
 
 // SystemMessage returns a text message with RoleSystem.
 func SystemMessage(text string) Message {
 	return Message{Role: RoleSystem, Content: []ContentPart{Text(text)}}
+}
+
+// SummaryMessage returns a system message marked as compaction output. It
+// says "these turns were replaced by this text", which a [SystemMessage]
+// cannot say: a system message may also be the run's own prompt.
+func SummaryMessage(text string) Message {
+	m := SystemMessage(text)
+	m.Summary = true
+	return m
 }
 
 // UserMessage returns a text message with RoleUser.
@@ -275,6 +290,9 @@ func (m Message) Validate() error {
 	}
 	if m.Role != RoleTool && m.ToolCallID != "" {
 		return fmt.Errorf("agentapi: %s message has a tool_call_id", m.Role)
+	}
+	if m.Summary && m.Role != RoleSystem {
+		return fmt.Errorf("agentapi: %s message is marked as a compaction summary", m.Role)
 	}
 	// A tool message may legitimately be empty: a tool that succeeds silently
 	// (write_file, todo, a quiet command) produces no output, and the message

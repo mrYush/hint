@@ -13,8 +13,9 @@ roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
-| `raspberry-pi-smoke-test.md` | Checklist for a Raspberry Pi **5** + Ollama smoke. Backlog as of 2026-10-11; does not gate `v0.2.0` |
+| `raspberry-pi-smoke-test.md` | Checklist for a Raspberry Pi **5** + Ollama smoke. Done as of 2026-11-02; did not gate `v0.2.0` |
 | `completion-quality-eval.md` | How to measure what WP1.6's completion is worth on small models: acceptance rate, latency, cost, residency, and the pass criteria for a README recommendation or a default. Backlog as of 2026-10-19; does not gate `v0.3` |
+| Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `completion-quality-eval.md` and `delegation.md` |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
 | [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
@@ -23,14 +24,30 @@ examples, rationale for chosen solutions, device coverage, and use cases.
 Chronological field / incident logs for a later article are kept out of this
 index and are not part of the product doc set.
 
+### Design spikes
+
+A question that is answered on paper before any code — a design spike — gets a
+file here once its row in `PLAN.md` is no longer enough. The file carries
+`Status: Design spike`, the Q number it settles, the alternatives considered
+and what each costs; it has no branch and no checkboxes, because there is no
+work package yet. `subscription-access.md` (Q9, WP7.6),
+`completion-quality-eval.md` and `delegation.md` (Q11) are the existing
+examples. When work starts, the
+spike becomes a work package with a branch and the status moves to that
+branch; until then the Q row in `PLAN.md` is the only status, and a spike with
+no file remains a Q row.
+
 ## Source of truth and issue tracking
 
 - **Files here are the source of truth** for scope and status. GitHub Issues
   mirror the work packages of the *active* phase (one issue per work package,
   titled `[Phase N][WPx.y] Title`) for day-to-day tracking and discussion.
 - For a work package, the issue body repeats the branch line from the phase
-  file, and the pull request body carries `Closes #N`, so merging into
-  `develop` closes the issue automatically. The templates are
+  file, and the pull request body carries `Closes #N`. GitHub closes the
+  issue only when the PR merges into the default branch; this repository's
+  default branch is `main`, so a `develop` merge does not close it. Carry
+  `Closes` on the release PR to `main`, or close the issue after the
+  `develop` merge. Use `Refs #N` for a partial PR. The templates are
   [`work-package.md`](../../.github/ISSUE_TEMPLATE/work-package.md) and
   [`pull_request_template.md`](../../.github/pull_request_template.md).
 - When an issue closes, tick the corresponding checkboxes in the phase file in

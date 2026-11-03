@@ -12,15 +12,23 @@ line, some integrate on `main`. Do not import those habits here.
 
 ## How to take a task
 
+- Stay inside the request. The ask names the whole scope: if it says plan,
+  write down, or check, it does not also authorize a commit, a push, a pull
+  request, or an issue. Do the named part, show it, and stop; the next step
+  is the user's call.
 - One task at a time. Do not start the next until the current one is done
   or stopped with a recorded reason and the next action.
 - One concern per branch and per commit. A fix does not carry an unrelated
   formatting sweep, a docs rewrite, or an editor ignore.
 - Look through the existing code before adding a function, a type, or a
   dependency. Extend what is there.
-- Do not commit, push, or open a pull request unless the user asks. Say
-  what is ready. Never force-push, and never rewrite a branch someone else
-  may have checked out.
+- Never commit or push without the user's explicit verbal request in the
+  current conversation. A plan, an approval of a plan, a step table that
+  says "PR to develop", or an instruction to implement something that does
+  not name `commit` or `push` is not that request. When in doubt, stop with
+  the working tree ready and ask. Do not open a pull request without a
+  request that names it. Say what is ready. Never force-push, and never
+  rewrite a branch someone else may have checked out.
 - Do not expand a fix past the behavior the issue describes. A speculative
   shape that no gateway in the issue sends stays out.
 
@@ -32,6 +40,11 @@ build and pass tests. `main` is releases only. Work branches off
 `docs/<short-name>`. Pull requests target `develop`, except `release/*`
 and `hotfix/*`, which target `main`.
 
+- Follow the flow this repository already has — the GitFlow branches, the
+  issue, the `**Branch:**` line, the pull request — as written in
+  [CONTRIBUTING.md](CONTRIBUTING.md) and
+  [docs/plan/README.md](docs/plan/README.md). Do not improvise a shortcut
+  around it, and when a request would take you outside it, ask first.
 - [docs/plan/](docs/plan/) is the source of truth for scope and status.
   [docs/plan/README.md](docs/plan/README.md) has the status legend and the
   work-package rules. An agreement that exists only in an issue comment
@@ -51,10 +64,12 @@ and `hotfix/*`, which target `main`.
   name is the phase-file heading, the branch, and the PR. One issue, one
   branch, one PR. Use `dev/wpx.y-<short-name>`, `feature/`, `fix/`, `docs/`,
   `release/`, or `hotfix/`; work branches start at `develop`.
-- A PR body carries `Closes #N` on its own line, which is what closes the
-  issue when the PR merges into `develop`. Use `Refs #N` for a partial PR
-  and do not close an issue by hand. The description also says what changed,
-  why, and what was run to verify it.
+- A PR body carries `Closes #N` on its own line. GitHub only closes an
+  issue when the PR merges into the default branch; this repository's
+  default branch is `main`, so a merge into `develop` does not close it.
+  Put `Closes` on the release PR to `main`, or close the issue after the
+  `develop` merge. Use `Refs #N` for a partial PR. The description also
+  says what changed, why, and what was run to verify it.
 - Answer review comments with a change or a reason; do not resolve a
   conversation silently. Add commits instead of rewriting a reviewed branch.
 

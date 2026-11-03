@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-10-31
+> Status: living document · Last updated: 2026-11-02
 > Source of truth for the roadmap. Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
 ## Vision
@@ -98,12 +98,12 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   The shell is a real client, not a shortcut: it dials the core over a `net.Pipe` with `internal/rpc.Client`, so every message is marshalled and parsed rather than passed as a Go value, and it never calls `rpc.Engine` directly (decided 2026-10-12, confirmed 2026-10-15; [phase-1](docs/plan/phase-1-core-service-tui.md#work-packages), decisions).
   WP1.4–WP1.7 are in the tree: the TUI is the default on a terminal (`--plain` keeps the REPL), profile switch and fork go over RPC, completion is behind `completion.mode`, keys live in the OS secret store.
   The three Phase 1 acceptance criteria are met (2026-10-20).
-- **In parallel:** [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) (apt repository, Scoop bucket, cask cleanup).
+- **WP0.14:** [done](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) with `v0.3.1` (apt repository, Scoop bucket, cask cleanup).
   It did not block `v0.3.0`.
   The apt side is done: nFPM `.deb` packages, `scripts/apt-repo.sh` and a `release.yml` step publish a signed repository to `gh-pages`; the signing key (`APT_SIGNING_KEY`, and `APT_SIGNING_PASSPHRASE`) was set 2026-10-22.
   `v0.3.0` published that repository and Pages serves it from `https://mryush.github.io/hint` (2026-10-25).
   `v0.2.0` was built before the packages existed and is not republished.
-  The cask on `install_steps` and the `scoops` block are in the tree, and the root formula `hint.rb` (`0.1.0`) is out of `mrYush/homebrew-tap`; `v0.3.1` confirms the first two with the tag and publishes the Scoop manifest (step 19).
+  `v0.3.1` published the cask with `postflight_steps` and the Scoop manifest (`64bit` and `arm64`); the root formula `hint.rb` (`0.1.0`) is out of `mrYush/homebrew-tap`.
 - **Done:** WP0.1 — the public contract `pkg/agentapi` (wire types, event
   streams, modality interfaces, `Tool`, `ActionClass`, classified errors).
   WP0.2 — config profiles and sources (provider profiles,
@@ -153,13 +153,13 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   a `v*` tag: archives, checksums, GitHub Release, Homebrew cask in
   `mrYush/homebrew-tap` for final versions; `hint --version` from ldflags
   with a `debug.ReadBuildInfo` fallback; the lint gate applied to the whole
-  tree). The Raspberry Pi 5 smoke run that closes WP0.10's last checkbox is
-  **deferred to the tag after `v0.2.0-alpha`** (decided 2026-09-14). Decision
-  2026-10-11: that Pi 5 run is backlog and does not gate `v0.2.0` either.
-  The linux/arm64 record is the Pi 4 4 GB `pi-bench` run `20261011-105151`
+  tree). The Raspberry Pi 5 smoke was deferred past `v0.2.0-alpha`
+  (2026-09-14) and did not gate `v0.2.0` (2026-10-11). It is done
+  (2026-11-02). The measured linux/arm64 log is the Pi 4 4 GB `pi-bench`
+  run `20261011-105151`
   on commit `b2aee40`
-  ([summary](docs/plan/evidence/pi-4-20261011-105151/summary.md),
-  [runs.jsonl](docs/plan/evidence/pi-4-20261011-105151/runs.jsonl)).
+  ([summary](docs/plan/evidence/pi-4-20261011-105151/summary.md); the raw
+  `runs.jsonl` stays local).
   The product guide for that board stays
   [`docs/raspberry-pi-4-4gb.md`](docs/raspberry-pi-4-4gb.md).
   WP0.11 — tool schedule (`internal/agent/schedule.go`: a sealed
@@ -188,16 +188,21 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   file tools name what they touch; the glob matcher is now
   `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
-  `v0.2.0-alpha`, `v0.2.0` and `v0.3.0` are tagged; `v0.3.0` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap` and the package in the apt repository.
-  `v0.3.1` is in progress on `release/v0.3.1` ([runbook](docs/plan/release-v0.3.1.md)); nothing is tagged for it yet.
+  `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged;
+  `v0.3.2` is the latest GitHub Release, the Homebrew cask in
+  `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and
+  the package in the apt repository ([runbook](docs/plan/release-v0.3.2.md)).
   WP0.1–WP0.12 have landed.
-  [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) proceeds on its own and does not have to finish first.
-  The audit fixes B1–B3 and M1–M2
-  ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md))
-  stay known issues and are backlog (decided 2026-10-11); they do not block
-  either tag. The Raspberry Pi 5 smoke
+  [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) shipped with `v0.3.1`.
+  Audit fixes B1 and B2 and the UTF-8 truncation S20
+  ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md),
+  [#32](https://github.com/mrYush/hint/issues/32),
+  [#41](https://github.com/mrYush/hint/issues/41)) are fixed and ship in
+  `v0.3.2` (step 20). B3, M1 and M2 stay known issues and are backlog
+  (decided 2026-10-11); they did not block `v0.2.0` or `v0.3.0`. The
+  Raspberry Pi 5 smoke
   ([`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md))
-  is backlog on the same date. The linux/arm64 record is the Pi 4 bench
+  is done (2026-11-02). The measured linux/arm64 log is the Pi 4 bench
   [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
 - Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare
   `hint` opens an interactive session, `hint -p` answers once, and both
@@ -212,9 +217,10 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   parallel, and instruction files that outgrow the budget arrive as
   outlines the `instructions` tool expands, or split into rules that load
   when the conversation reaches their paths. CI and the release pipeline
-  are in place. `v0.2.0` and `v0.3.0` shipped with the Phase 0 backlog
-  unchanged: the audit fixes and the Pi 5 smoke stay backlog (2026-10-11),
-  and criterion 5 is the Pi 4 bench cited above.
+  are in place. `v0.2.0` and `v0.3.0` shipped while the audit fixes and the
+  Pi 5 smoke were still backlog (2026-10-11); criterion 5 for those tags is
+  the Pi 4 bench cited above. The Pi 5 smoke is done (2026-11-02). B1, B2
+  and S20 ship in `v0.3.2`; B3, M1 and M2 stay backlog.
 
 ## Compatibility decision
 
@@ -241,7 +247,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 5. ~~JSONL sessions + `-c`.~~ Done — see
    [WP0.7](docs/plan/phase-0-mvp-cli.md#wp07--sessions--done).
 6. ~~CI, goreleaser, Homebrew.~~ Done — see
-   [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution).
+   [WP0.10](docs/plan/phase-0-mvp-cli.md#wp010--ci-release-distribution--done).
 7. ~~Tool schedule: parallel reads, ordered writes.~~ Done — see
    [WP0.11](docs/plan/phase-0-mvp-cli.md#wp011--tool-schedule-groups-and-chains--done).
 8. ~~WP0.12 rungs 0–3 (window-scaled budget, outlines, the
@@ -253,15 +259,16 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Known issues and the Pi 5 smoke did not block it (2026-10-11).
 11. ~~Tag `v0.2.0`.~~ Done — GitHub Release and Homebrew cask `0.2.0` in `mrYush/homebrew-tap`.
     The hardware record is the Pi 4 bench, not a Pi 5 run.
+    The Pi 5 smoke was accepted as done on 2026-11-02.
     The tag needed `HOMEBREW_TAP_TOKEN`.
 12. WP0.14, in parallel with Phase 1: apt repository (Debian family) and Scoop bucket (Windows) for the current final version.
     apt: implemented.
     `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` are set (2026-10-22).
     `v0.3.0` published the signed repository to `gh-pages` and Pages serves it (2026-10-25); `apt install hint` from `https://mryush.github.io/hint` verified on clean Debian 12 and Ubuntu 24.04 containers (amd64).
-    The arm64 package is in the index but has not been installed on a Raspberry Pi yet.
-    Scoop: the bucket repository `mrYush/scoop-bucket` exists (2026-10-28); the manifest arrives with `v0.3.1`.
+    The arm64 package was installed from apt on Ubuntu 24.04 arm64 for `v0.3.1`; a Raspberry Pi install is not recorded.
+    Scoop: `mrYush/scoop-bucket` published `hint.json` `0.3.1` for `64bit` and `arm64` with the `v0.3.1` tag.
     The Homebrew cask field `homebrew_casks.binary` is replaced by `binaries` so `goreleaser check` passes.
-    Still open after that: the Scoop bucket, the cask on `install_steps` and the root formula `hint.rb` (`0.1.0`) in `mrYush/homebrew-tap`; see step 19.
+    `v0.3.1` also published the cask on `install_steps`, and the root formula `hint.rb` (`0.1.0`) is out of `mrYush/homebrew-tap` (step 19).
     The cask already covers macOS.
     This did not gate `v0.3.0`.
     Official catalogs stay a separate parallel path and do not gate either track.
@@ -272,11 +279,18 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
     Backlog, not gating `v0.3`: the quality and cost evaluation on small models ([`docs/plan/completion-quality-eval.md`](docs/plan/completion-quality-eval.md)); until it has run, `off` is the only default.
 17. ~~WP1.7: secrets out of the agent's reach.~~ Done (2026-10-19): keys in the OS secret store with `api_key: keyring:<profile>` and a `secrets.store` policy, `hint config show-key` as the only way to see one again, tool subprocesses without the key variables (by name and by value), every tool result scrubbed against the configured keys, hint's own files denied to the file tools, and `tool.Root` on `os.Root` (R8).
     Today the `bash` tool inherits the whole environment and can `cat` the config file; a sandbox for `bash`, which a same-user process needs to be truly kept out, is a later package.
-18. Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.
-    Independent of every tag and of Phase 1.
-19. `v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.
-    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41) (a later patch) and anything from Phase 2.
+18. ~~Release leftovers from WP0.13, tracked in [#50](https://github.com/mrYush/hint/issues/50): `retract v0.1.0` in `go.mod`, `SECURITY.md`, a superseded note on the `v0.1.0` Release.~~ Done (2026-11-01), shipped in `v0.3.1`. [#50](https://github.com/mrYush/hint/issues/50) is closed. The tag and the `v0.1.0` Release stay.
+19. ~~`v0.3.1`, a patch of `v0.3` (decided 2026-10-28): the WP0.14 leftovers (the Scoop manifest in `mrYush/scoop-bucket`, the cask on `install_steps`, the root formula out of the tap), the release leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway message fix of [#57](https://github.com/mrYush/hint/issues/57), and the status review of this file.~~ Done (2026-11-01). The tag is on `main` (`e0884e8`). The cask, the Scoop manifest, and the apt index name `0.3.1`.
+    Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), which is step 20 (`v0.3.2`), and anything from Phase 2.
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
+20. ~~`v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop
+    fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction
+    summary survives a prefix refresh, the usage baseline is reset after a
+    reactive compaction — and the UTF-8 truncation of
+    [#41](https://github.com/mrYush/hint/issues/41).~~ Done (2026-11-02),
+    tagged `v0.3.2`; the cask, the Scoop manifest and the apt index name
+    `0.3.2`. The checklist is the
+    [`v0.3.2` runbook](docs/plan/release-v0.3.2.md). Then Phase 2 (`v0.4`).
 
 ## Open questions
 
@@ -292,6 +306,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
 | Q8 | Where split instruction files live: `.hint/rules/*.md` (hidden, tool-specific, like `.cursor/rules`) or a visible `hint/` directory; and whether to honour `.cursor/rules` / `.claude/` trees as compatible sources the way `AGENTS.md`/`CLAUDE.md` are | WP0.12 rung 4 | **Decided 2026-09-07**: `.hint/rules/*.md`, with `.cursor/rules` read as a compatible source (`globs:` mapped onto `paths:`); `.claude/` trees are not read. Recorded in [WP0.12](docs/plan/phase-0-mvp-cli.md#wp012--instructions-beyond-the-budget--done) |
 | Q10 | A2A: which side first — `hint` as an A2A client that delegates to remote agents, or `hint serve` as an A2A server other agents call — and which Go implementation to build on (the A2A project's Go SDK, or a thin client over the JSON-RPC spec) | Phase 2 (WP2.6) | Spike at the start of WP2.6: read the current spec, run the reference samples against `hint serve`, decide; recorded in [phase-2](docs/plan/phase-2-memory-mcp.md#wp26--a2a-hint-among-other-agents) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
+| Q11 | A local *conductor*: may `hint` run another harness — a second `hint` in a git worktree, a foreign coding CLI, an A2A agent — as a delegated subtask, and on which seam: a `Runner` beside `Tool`, or A2A only? A delegated harness owns its own loop, so the permission ceiling, the secret boundary of WP1.7 and the event model are the constraints, not details. | Phase 2 (WP2.6 fixes the seam); adapters come later | **Spike:** [`delegation.md`](docs/plan/delegation.md). No code before a spike, in this order: the `bash` sandbox layer ([architecture](docs/plan/architecture.md#implications-noted-for-the-plan)), then `hint`-in-`hint` over `-p --output json` in a worktree, then A2A (WP2.6), then a subprocess adapter for a foreign CLI. The hosted multi-tenant runner is a non-goal ([why-hint](docs/plan/why-hint.md#non-goals-stated-first)); only the local conductor is in scope. |
 
 ## How this plan is maintained
 
@@ -299,7 +314,7 @@ by WP0.9 (2026-09-07); the alias prints a one-line note pointing at `-p`.
   [`docs/plan/why-hint.md`](docs/plan/why-hint.md); it carries a falsification
   table that is re-checked at every phase boundary.
 - Files under `docs/plan/` are the **source of truth**; GitHub Issues mirror
-  the near-term work packages (currently Phase 1) for tracking and discussion.
+  the near-term work packages (currently Phase 2) for tracking and discussion.
   See [`docs/plan/README.md`](docs/plan/README.md) for conventions.
 - When scope changes, update the phase file and this roadmap table in the same
   PR as the change (or the decision record).

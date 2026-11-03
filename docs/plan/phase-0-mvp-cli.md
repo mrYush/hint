@@ -1,6 +1,6 @@
 # Phase 0 — MVP CLI
 
-> Status: Released v0.2.0 · WP0.14 runs in parallel with Phase 1 and does not gate v0.3 · Estimate: 6–10 weeks (part-time)
+> Status: Released v0.2.0 · WP0.14 shipped with v0.3.1 · B1/B2 and S20 fixed in v0.3.2 · Estimate: 6–10 weeks (part-time)
 > Platforms: macOS (arm64/amd64), Linux (arm64/amd64 incl. Raspberry Pi), Windows (amd64)
 
 ## Goal
@@ -264,8 +264,8 @@ depend on them:
 - ✅ Limits: max iterations per turn (default 25), max context tokens
 - ✅ Compaction at 80% of the window: summarize old turns into one system block
 - ✅ Loop unit tests with a scripted fake provider (multi-tool turns, iteration limit, compaction trigger)
-- [ ] Backlog (audit 2026-09-28, B1; does not block `v0.2.0`, decided 2026-10-11): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh)
-- [ ] Backlog (audit 2026-09-28, B2; does not block `v0.2.0`, decided 2026-10-11): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic)
+- ✅ Backlog (audit 2026-09-28, B1; does not block `v0.2.0`, decided 2026-10-11): the compaction summary survives `refreshPrefix`; test Preamble + compaction together — [review](review-2026-09-28-go-practices.md#b1--compaction-summary-is-erased-by-the-next-prefix-refresh) ([#32](https://github.com/mrYush/hint/issues/32), `fix/compaction-refresh`)
+- ✅ Backlog (audit 2026-09-28, B2; does not block `v0.2.0`, decided 2026-10-11): reset `lastUsage`/`usageBaseline` after a reactive compaction; test with `MaxContextTokens > 0` — [review](review-2026-09-28-go-practices.md#b2--stale-usage-baseline-after-a-reactive-compaction-slice-panic) ([#32](https://github.com/mrYush/hint/issues/32), `fix/compaction-refresh`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -296,13 +296,14 @@ depend on them:
   to the `errorKindRouting` exhaustiveness table in
   `pkg/agentapi/error_test.go`; `WireVersion` was not bumped, since adding
   an `ErrorKind` value is additive.
-- **Compaction is one attempt per iteration, in two internal steps, not two
-  round-trips to the provider.** `Agent.compact` first drops every
-  `PartThinking` part (cheap, and the contract already promises this
-  happens first); only if the configured window says that was not enough
-  does it fall through, within the same call, to summarizing the middle of
-  the conversation via the injected `Compactor`. The loop only ever retries
-  the actual model `Stream` call once after `compact` returns.
+- **Compaction is two internal steps, not two round-trips to the provider.**
+  `Agent.compact` first drops every `PartThinking` part (cheap, and the
+  contract already promises this happens first); only if the configured
+  window says that was not enough does it fall through, within the same
+  call, to summarizing the middle of the conversation via the injected
+  `Compactor`. A reactive overflow retries `Stream` against the compacted
+  history inside the same round, so the retry does not spend
+  `MaxIterations`. The retry stops when `compact` refuses.
 - **Occupancy tracking reuses the last call's real `Usage` when there is
   one:** `lastUsage.InputTokens` plus an estimate of the messages appended
   since, rather than re-estimating the whole history every iteration. The
@@ -314,11 +315,12 @@ depend on them:
 - **The prefix/body/tail split never cuts a `ToolCall`/`RoleTool` pair
   apart.** The tail (from the last `RoleUser` message onward) is only
   shrunk, when it alone is heavier than half the window, to whole
-  assistant+tool groups. A compaction summary is itself a `RoleSystem`
-  message, so it is absorbed into the fixed prefix on any later compaction
-  pass — this is what actually bounds a repeated compact-and-retry cycle:
-  once a pass finds nothing left between prefix and tail, it fails fatally
-  instead of retrying forever.
+  assistant+tool groups. A compaction summary is a `RoleSystem` message
+  marked `Summary`. The prefix is the leading system run before the first
+  summary, so a later compaction folds the old summary into the new one
+  instead of keeping both, and a prefix refresh leaves the summary in
+  place. The retry bound is that body: once it holds nothing but
+  summaries, `compact` fails instead of trying again.
 - **`cmd/hint`'s one-shot path now calls `agent.New(chat).RunTurn`** instead
   of `chat.Stream` directly, with no tools registered yet — WP0.5's
   built-in tools plug into the same `WithTools` option once they exist,
@@ -346,6 +348,7 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - ✅ Per-tool unit tests incl. truncation and timeout behavior
 - [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
 - [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -378,6 +381,12 @@ depend on them:
   the tail so a command printing gigabytes cannot exhaust memory — and a
   test pins that it renders byte-for-byte what `Truncate` would on the
   same bytes.
+- **UTF-8 cuts go through `internal/text.Cut`.** It returns the longest
+  prefix within a byte budget that ends on a rune boundary; the session
+  picker, project context, tools and shells use it instead of slicing a
+  string at a byte count. `Truncate` keeps its head-and-tail marker but
+  uses the same cut for the head, so a Cyrillic prompt or line no longer
+  ends in bytes that `encoding/json` turns into U+FFFD.
 - **Schemas are generated from the argument structs with
   `invopop/jsonschema`** (chat decision; the alternatives were hand-written
   JSON literals, which drift from the struct, or a ~150-line reflection
@@ -616,6 +625,7 @@ depend on them:
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
 - [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -650,10 +660,11 @@ depend on them:
   between runs; a frozen copy would go stale. `cmd/hint` prepends a fresh
   preamble every run and tells `session.Recorder` its length, and the
   Recorder strips exactly that many leading messages from a checkpoint's
-  History — safe because compaction keeps the leading system run
-  verbatim and inserts its summary after it. Earlier summaries are
-  `RoleSystem` too and stay in the file; the preamble count, not the
-  role, is what tells them apart.
+  History. The count stays right because compaction keeps the prompt
+  verbatim and inserts the marked summary after it. On load the file has
+  no prompt, so `Session.Messages` marks every leading system message as
+  a summary, including files written before `Message.Summary` existed.
+  A later compaction folds an old summary into the new one.
 - **"Always" grants stay in the process** (chat decision). `hint -c`
   starts with an empty allow-list: a grant given yesterday must not run a
   command silently today. A `grant` record kind can be added later
@@ -712,6 +723,7 @@ depend on them:
 
 - ✅ Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - ✅ Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in instruction excerpts, budget cuts and bounded reads — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -923,22 +935,25 @@ depend on them:
   question; `hint sessions` and `--session` see the working directory's
   sessions only; the trace directory is never pruned.
 
-### WP0.10 — CI, release, distribution
+### WP0.10 — CI, release, distribution — **done**
 
 - ✅ GitHub Actions: build matrix {darwin,linux,windows} × {amd64,arm64}, test + lint (golangci-lint) gates
 - ✅ goreleaser config; binaries attached to GitHub Releases
 - ✅ Homebrew tap
 - ✅ linux/arm64 hardware run: Pi 4 4 GB `pi-bench` `20261011-105151` on
       commit `b2aee40`
-      ([summary](evidence/pi-4-20261011-105151/summary.md),
-      [runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
+      ([summary](evidence/pi-4-20261011-105151/summary.md); the raw
+      `runs.jsonl` stays local).
       Cold turn, `-c` follow-up, new session, and failover (notice present,
       all exits 0). The board thermally throttled (max 85.7 °C, clock down
       to 600 MHz); the 2048-token raw row is not a cool-board ceiling.
       The run does not exercise criterion 2's edit-confirmation prompt.
-- [ ] Backlog: Raspberry Pi 5 + Ollama smoke of the acceptance scenarios
-      (no longer a `v0.2.0` gate, decided 2026-10-11; checklist
-      [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md))
+- ✅ Raspberry Pi 5 + Ollama smoke of the acceptance scenarios, accepted
+      as done on 2026-11-02. It did not gate `v0.2.0` (decided 2026-10-11).
+      The checklist is
+      [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md). No
+      separate run log is stored; the measured linux/arm64 log remains
+      the Pi 4 bench above.
 - ✅ Update README for the new CLI surface
 
 Decisions (2026-09-07):
@@ -979,6 +994,16 @@ Decision (2026-10-11):
   `pi-bench` run `20261011-105151`, not a Pi 5 + Ollama pass. The Pi 5
   checklist remains the procedure for that backlog item. The Pi 4 product
   guide is still a launch recipe, not the record of the run.
+
+Decision (2026-11-02):
+
+- **The Pi 5 + Ollama smoke is done.** It closes WP0.10's last checkbox.
+  The 2026-10-11 decision still holds for the tags: the smoke did not
+  gate `v0.2.0-alpha`, `v0.2.0`, or `v0.3.0`, and the measured
+  linux/arm64 log for `v0.2.0` remains the Pi 4 bench. B1, B2 and S20
+  ship in `v0.3.2` ([#32](https://github.com/mrYush/hint/issues/32),
+  [#41](https://github.com/mrYush/hint/issues/41)); B3, M1 and M2 stay
+  backlog.
 
 ### WP0.11 — Tool schedule: groups and chains — **done**
 
@@ -1308,25 +1333,26 @@ Pre-releases stay off every index, as they already stay off the cask.
 
 - ✅ macOS: Homebrew cask in `mrYush/homebrew-tap` (`brew install --cask mrYush/tap/hint`), shipped with `v0.2.0`.
       Later final tags keep updating it.
-- [ ] macOS: the next cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
+- ✅ macOS: the cask publish emits `postflight_steps` instead of the deprecated `postflight` block.
       Editing the generated `Casks/hint.rb` by hand does not survive the following release.
-      `.goreleaser.yaml` carries `hooks.post.install_steps` since the `v0.3.1` config; the tag confirms the generated cask.
-- [ ] macOS: `homebrew-tap` still has a root formula `hint.rb` at `0.1.0`.
-      `brew install` without `--cask` selects that formula.
-      Remove it, or the tap does not install the current version.
+      `v0.3.1` published `Casks/hint.rb` `0.3.1` with `postflight_steps` from `hooks.post.install_steps`.
+- ✅ macOS: the root formula `hint.rb` at `0.1.0` is removed from `mrYush/homebrew-tap`.
+      `brew install` without `--cask` no longer selects that formula.
+      Removed before the `v0.3.1` tag; the tap root has no `hint.rb`.
 - ✅ Debian family: nFPM `.deb` packages for `linux/amd64` and `linux/arm64`, depending on `ripgrep`, attached to the GitHub Release by the same tag workflow (`nfpms` in `.goreleaser.yaml`; checked with a snapshot build, 2026-10-15).
 - ✅ Debian family: an apt repository we operate.
       Suite `stable`, signed `Release`, index rebuilt from the current debs on each final tag.
       Implemented by `scripts/apt-repo.sh` and the last step of `release.yml`, served from the `gh-pages` branch at `https://mryush.github.io/hint`.
       Published by `v0.3.0` (2026-10-25); Pages enabled for `gh-pages` the same day.
       `apt install hint` with the README lines verified on clean `debian:bookworm` and `ubuntu:24.04` containers (amd64): signature accepted, `ripgrep` pulled in, `hint -v` reports `0.3.0`.
-      The arm64 package is indexed but not yet installed on a Raspberry Pi.
+      `v0.3.1` installed the arm64 package on Ubuntu 24.04 arm64 (`hint -v` reported `0.3.1`). A Raspberry Pi install is not recorded.
       One suite covers Ubuntu, Debian, Mint, Pop!_OS and Raspberry Pi OS, because the binary is built with `CGO_ENABLED=0` and does not need a per-distro-release archive.
 - ✅ The apt signing key is its own Actions secret, not `HOMEBREW_TAP_TOKEN`.
       The public half is what users add as the repository key.
       Workflow reads `APT_SIGNING_KEY` (+ optional `APT_SIGNING_PASSPHRASE`); both set 2026-10-22, used by the `v0.3.0` run.
-- [ ] Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
-      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`; the first manifest arrives with `v0.3.1`.
+- ✅ Windows: a Scoop bucket we operate, updated on the same final tag, so `scoop install hint` tracks the current version on amd64 and arm64.
+      The bucket `mrYush/scoop-bucket` exists (2026-10-28) and `scoops` in `.goreleaser.yaml` pushes the manifest with `SCOOP_BUCKET_TOKEN`.
+      `v0.3.1` published `hint.json` `0.3.1` for `64bit` and `arm64`.
 - ✅ README installation section names the apt source and the Scoop bucket, and the Homebrew command is `mrYush/tap/hint`.
       The Scoop lines landed with the `scoops` config, ahead of the first manifest.
 
@@ -1362,23 +1388,23 @@ Decisions (2026-10-11):
 4. `hint -c` continues yesterday's dialogue with preserved context.
 5. A binary built with `GOOS=linux GOARCH=arm64` runs on a Raspberry Pi.
    For `v0.2.0` this is the Pi 4 4 GB `pi-bench` run `20261011-105151`
-   ([evidence](evidence/pi-4-20261011-105151/summary.md)). A Pi 5 + Ollama
-   pass of the same scenarios is backlog
-   ([`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md)).
+   ([evidence](evidence/pi-4-20261011-105151/summary.md)). The Pi 5 + Ollama
+   smoke of the same scenarios is done (2026-11-02;
+   [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md)).
 
 Criteria 1–4 are the functional Phase 0 bar. Criterion 5 is the
-`linux/arm64` hardware record. The Pi 5 checklist does not block
-`v0.2.0-alpha` or `v0.2.0` (2026-10-11).
+`linux/arm64` hardware record. The Pi 5 smoke is done (2026-11-02) and
+did not block `v0.2.0-alpha` or `v0.2.0` (2026-10-11).
 
 ## Suggested order
 
 WP0.1 → WP0.2 → WP0.3 → WP0.4 → WP0.5 (all tools built; only read-only
 ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
-WP0.9 (done) → WP0.10 (CI/release done; Pi 4 bench is the hardware
-record) → WP0.11 (done) → WP0.12 (done) → tag `v0.2.0-alpha` → tag
-`v0.2.0`.
-WP0.14 (apt repository and Scoop bucket) runs in parallel with Phase 1 and does not gate `v0.3` (2026-10-11).
-Pi 5 smoke and the audit fixes are backlog (2026-10-11).
+WP0.9 (done) → WP0.10 (done) → WP0.11 (done) → WP0.12 (done) → tag
+`v0.2.0-alpha` → tag `v0.2.0`.
+WP0.14 (apt repository and Scoop bucket) did not gate `v0.3` (2026-10-11) and shipped in `v0.3.1`.
+Audit fixes B1 and B2 and the UTF-8 truncation S20 ship in `v0.3.2`.
+B3, M1 and M2 stay backlog (2026-10-11). The Pi 5 smoke is done (2026-11-02).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -96,7 +97,7 @@ func compactArgs(raw json.RawMessage, max int) string {
 	}
 	s := strings.Join(strings.Fields(buf.String()), " ")
 	if len(s) > max {
-		s = s[:max] + "..."
+		s = text.Cut(s, max) + "..."
 	}
 	return s
 }

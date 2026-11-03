@@ -79,6 +79,17 @@ Which side goes first and which Go implementation to build on is open question Q
 - [ ] Integration test: two `hint serve` processes in two directories, one delegating a read-only question to the other through A2A, with a recorded fixture for CI
 - [ ] Decision to record: what of a delegated task lands in the session file (the request, the final answer, the remote task id — not the remote agent's intermediate output)
 
+Decisions (2026-11-01):
+
+- **WP2.6 settles the seam for agents that speak A2A; it does not settle delegation to a *harness*.**
+  An A2A agent owns its own loop, credentials and permissions and can be asked about its state; a harness is a process with its own loop and no protocol to ask it anything.
+  That shape is Q11 in [PLAN.md](../../PLAN.md#open-questions) — a `Runner` beside `Tool`, or A2A only — not a checkbox here.
+- **The order is the `bash` sandbox layer, then `hint`-in-`hint` over `-p --output json` in a worktree, then A2A (WP2.6), then a subprocess adapter for a foreign CLI.**
+  Chosen over "A2A first" and over "wrap a foreign CLI in a bash-like tool": a child harness is less observable than a command the user confirmed and would run outside the file confinement of `tool.Root`.
+  The price is that delegation does not ship before the sandbox layer exists.
+- **The name is `runner`/`delegate`, not `harness`.**
+  `harness` already means the evaluation bench ([architecture](architecture.md#implications-noted-for-the-plan)) and the coding-agent category ([why-hint](why-hint.md#why-start-with-a-solved-problem)).
+
 ### WP2.7 — Open integration surfaces beyond MCP and A2A
 
 The ways an operator connects tools, instructions and knowledge without writing Go. Each is a small adapter onto what the core already has (the tool registry, the instruction files, the permission gate); none adds a second model loop.

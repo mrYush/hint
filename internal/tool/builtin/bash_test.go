@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
@@ -82,6 +83,23 @@ func TestBash_CanceledByCaller(t *testing.T) {
 		t.Fatalf("machinery error: %v", err)
 	}
 	failed(t, res, "[canceled]")
+}
+
+func TestBashDescribeCutsCommandOnRuneBoundary(t *testing.T) {
+	tl := builtin.NewBash(newRoot(t, nil))
+	cmd := strings.Repeat("Привет ", 30)
+	args := json.RawMessage(`{"command":"` + cmd + `"}`)
+	req := tool.Describe(context.Background(), agentapi.ToolCall{ID: "c1", Name: "bash", Arguments: args}, tl)
+
+	if !utf8.ValidString(req.Summary) {
+		t.Fatalf("summary is not valid UTF-8: %q", req.Summary)
+	}
+	if strings.ContainsRune(req.Summary, utf8.RuneError) {
+		t.Fatalf("summary contains a replacement rune: %q", req.Summary)
+	}
+	if !strings.Contains(req.Summary, "...") {
+		t.Fatalf("long command was not cut: %q", req.Summary)
+	}
 }
 
 func TestBash_LargeOutputIsBounded(t *testing.T) {
