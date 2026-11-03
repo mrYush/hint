@@ -175,15 +175,9 @@ and §5 is where the version is read back.
 
 ## 7. After v0.3.1
 
-- [ ] `v0.3.2`: fix [#32](https://github.com/mrYush/hint/issues/32) — the
-      compaction summary must survive `refreshPrefix`, and the usage
-      baseline must be reset after a reactive compaction. Add the missing
-      tests.
-- [ ] Include or follow with
-      [#41](https://github.com/mrYush/hint/issues/41): one UTF-8-safe
-      truncation helper at every byte-slicing site.
-- [ ] Then Phase 2 / `v0.4`: close the Q6 spike and start WP2.1, the MCP
-      client.
+`v0.3.2` and the start of Phase 2 are tracked in
+[release-v0.3.2.md](release-v0.3.2.md). This section records the decision
+that scheduled them; do not duplicate the checkboxes here.
 
 ## Exit criteria
 
