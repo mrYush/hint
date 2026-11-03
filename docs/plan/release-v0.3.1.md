@@ -1,11 +1,10 @@
 # Release v0.3.1 — runbook
 
 > Status: published, merged back · Created: 2026-10-31 · Target: `v0.3.1`
-> Scope and release status: [`PLAN.md` §19](../../PLAN.md#L275) and
-> [`WP0.14`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
-> This file is an execution checklist, not a second scope document. If it
-> disagrees with `PLAN.md` or the phase file, those win. Mark each item as
-> it is executed; the closing change in §6 updates the remaining boxes.
+> Scope and release status: [`PLAN.md` §19](../../PLAN.md) and [`WP0.14`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
+> This file is an execution checklist, not a second scope document.
+> If it disagrees with `PLAN.md` or the phase file, those win.
+> Mark each item as it is executed; the closing change in §6 updates the remaining boxes.
 
 `v0.3.1` is a patch of `v0.3`: the WP0.14 index leftovers, the release
 leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway
@@ -175,15 +174,9 @@ and §5 is where the version is read back.
 
 ## 7. After v0.3.1
 
-- [ ] `v0.3.2`: fix [#32](https://github.com/mrYush/hint/issues/32) — the
-      compaction summary must survive `refreshPrefix`, and the usage
-      baseline must be reset after a reactive compaction. Add the missing
-      tests.
-- [ ] Include or follow with
-      [#41](https://github.com/mrYush/hint/issues/41): one UTF-8-safe
-      truncation helper at every byte-slicing site.
-- [ ] Then Phase 2 / `v0.4`: close the Q6 spike and start WP2.1, the MCP
-      client.
+`v0.3.2` and the start of Phase 2 are tracked in
+[release-v0.3.2.md](release-v0.3.2.md). This section records the decision
+that scheduled them; do not duplicate the checkboxes here.
 
 ## Exit criteria
 

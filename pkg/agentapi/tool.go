@@ -45,8 +45,9 @@ type ToolSchema struct {
 	// carries most of the tool's usability.
 	Description string `json:"description,omitempty"`
 	// InputSchema is a JSON Schema object describing the tool's arguments.
-	// Held raw so that a tool can ship a hand-written schema and so that an
-	// MCP server's schema passes through untouched.
+	// Held raw so that a tool can ship a hand-written schema. An MCP adapter
+	// may re-encode a server's schema; JSON structure is preserved, but
+	// numeric literals are not guaranteed byte-identical.
 	InputSchema json.RawMessage `json:"input_schema,omitempty"`
 }
 

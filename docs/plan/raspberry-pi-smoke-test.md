@@ -63,7 +63,7 @@ dist/hint_<version>_linux_arm64.tar.gz
 (Faster alternative for just the binary, no archive:
 `GOOS=linux GOARCH=arm64 goreleaser build --single-target --snapshot --clean`.)
 
-- ✅ Archive built, version noted: accepted 2026-11-02; version not recorded here
+- ✅ Archive built — accepted 2026-11-02; the version was not recorded
 
 ## 2. Transfer and unpack on the Pi
 
@@ -161,8 +161,8 @@ platform, on a Raspberry Pi 5.
 
 The `v0.2.0` hardware record is the Pi 4 `pi-bench` run
 `20261011-105151`
-([summary](evidence/pi-4-20261011-105151/summary.md),
-[runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
+([summary](evidence/pi-4-20261011-105151/summary.md); the raw
+`runs.jsonl` stays local).
 The launch recipe for that board stays
 [`docs/raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md).
 

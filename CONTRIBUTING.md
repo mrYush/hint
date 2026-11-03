@@ -270,9 +270,10 @@ after it is merged into `develop`/`main`.
 - Title: imperative English, under ~72 characters; it becomes the squash
   commit on `develop`.
 - Body: **What**, **Why**, and a line `Closes #123` on its own line. GitHub
-  closes the issue automatically when the PR merges into the default branch
-  (`develop`). Use `Refs #123` instead when the PR does not complete the
-  issue; do not close the issue by hand.
+  closes the issue only when the PR merges into the default branch; this
+  repository's default branch is `main`, so a PR into `develop` does not
+  close it. Put `Closes` on the release PR to `main`, or close the issue
+  after the `develop` merge. Use `Refs #123` for a partial PR.
 - If the PR completes more than one issue, put one `Closes #N` per line.
 - Add a scope note when the branch carries work beyond its work package, per
   the exception in [docs/plan/README.md](docs/plan/README.md). Tick the

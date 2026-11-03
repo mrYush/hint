@@ -675,8 +675,8 @@ your convenience.
 
 ### Known issues
 
-`v0.2.0-alpha`, `v0.2.0`, `v0.3.0` and `v0.3.1` ship with these confirmed
-bugs. They are backlog (decided 2026-10-11) and did not block those tags.
+`v0.3.2` ships with these confirmed bugs. They are backlog (decided
+2026-10-11) and did not block this patch.
 Details and the full audit:
 [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
@@ -715,7 +715,7 @@ the `error` field alone. Present since `v0.3.0`. The message now comes
 first, with the error as a suffix when the two differ.
 
 **Limits of this release.** Three things are known and accepted for
-`v0.3.1` (unchanged from `v0.3.0`), not bugs to be fixed in a patch:
+`v0.3.2` (unchanged from `v0.3.1`), not bugs to be fixed in a patch:
 
 - `bash` is not sandboxed. The file tools refuse hint's own config and
   session files, and every tool result is scrubbed against the configured
