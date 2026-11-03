@@ -1,9 +1,11 @@
 # Release v0.3.2 — runbook
 
 > Status: in progress · Created: 2026-11-02 · Target: `v0.3.2`
-> Scope: [`PLAN.md` §20](../../PLAN.md#L282-L289), the B1/B2/S20
-> backlog lines in [phase-0](phase-0-mvp-cli.md#L261-L268) and
-> [§7 of the v0.3.1 runbook](release-v0.3.1.md#L176-L186). This is an
+> Scope: [`PLAN.md` §20](../../PLAN.md#L286-L293), B1/B2 in
+> [WP0.4](phase-0-mvp-cli.md#wp04--agent-loop--done), and S20 in
+> [WP0.5](phase-0-mvp-cli.md#wp05--built-in-tools--done),
+> [WP0.7](phase-0-mvp-cli.md#wp07--sessions--done) and
+> [WP0.8](phase-0-mvp-cli.md#wp08--project-context--done). This is an
 > execution checklist, not a second scope document; `PLAN.md` and the
 > phase file win if they disagree.
 
@@ -14,17 +16,24 @@ out of scope.
 
 ## Current state (2026-11-02)
 
-- ✅ `develop` and `release/v0.3.2` are at `075cce6`, the merge of PR
-      [#83](https://github.com/mrYush/hint/pull/83). PR
+- ✅ `develop` is at `075cce6`, the merge of PR
+      [#83](https://github.com/mrYush/hint/pull/83); `release/v0.3.2` is at
+      `f4f3b6d` with the release documentation. PR
       [#82](https://github.com/mrYush/hint/pull/82) is merged too; CI on
-      the merge commit is green.
+      `075cce6` is green.
 - ✅ The release branch carries #32 and #41 and nothing from Phase 2.
 - ✅ README Known issues and Limits, `PLAN.md` step 20 and the Phase 0
-      status line are prepared for `v0.3.2` in the working tree.
-- [ ] Commit and push the release documentation on `release/v0.3.2`.
+      status line are updated for `v0.3.2`.
+- ✅ Commit and push the first release documentation commit on
+      `release/v0.3.2` (`f4f3b6d`).
+- [ ] Commit and push the docs audit: `AGENTS.md`, `CONTRIBUTING.md`,
+      `docs/plan/README.md`, `after-v0.3.1.md`, `release-v0.3.1.md`, the
+      final `PLAN.md` status and the Phase 0 closing note.
 - [ ] Open the release PR `release/v0.3.2` → `main`.
 - [ ] Tag `v0.3.2`.
-- `v0.3.1` is still the latest release and tag.
+- The status documents already carry the post-tag state and name
+  `v0.3.2`; the tag and the published artifacts are the only remaining
+  steps. If the tag is aborted, revert those status lines.
 
 ## 0. Pre-flight
 
@@ -80,7 +89,7 @@ out of scope.
 
 ## 2. Dry run before the merge
 
-Already executed on `075cce6`; repeat only if a commit lands after it.
+Already executed on `075cce6`; repeat only if a code commit lands after it.
 
 - [ ] `goreleaser check`
 - [ ] `goreleaser release --snapshot --clean`
@@ -124,15 +133,14 @@ Already executed on `075cce6`; repeat only if a commit lands after it.
 
 - [ ] #32 and #41 are closed by the release PR; if not, close them
       manually with a comment linking the release.
-- [ ] Tick the `v0.3.2` and #41 items in
-      [§7 of the v0.3.1 runbook](release-v0.3.1.md#L176-L186).
-- [ ] Update `PLAN.md`: step 20 is done, `v0.3.2` is the latest release,
-      and the next item is Phase 2 / `v0.4`.
-- [ ] Update the Phase 0 header and the B1/B2/S20 lines if they are not
-      already final.
+- [ ] Confirm `PLAN.md` already says step 20 is done, `v0.3.2` is the
+      latest release and the next item is Phase 2 / `v0.4`. If the tag is
+      aborted, revert those status lines before merging back.
 - [ ] Merge `release/v0.3.2` back into `develop` and delete the branch.
-- [ ] Post-release docs change: any status text that could only be final
-      after the tag.
+
+The project-status documents are already final on this branch: README,
+`PLAN.md`, the Phase 0 header and the B1/B2/S20 lines. Only the execution
+checkboxes above remain; there is no separate post-release docs commit.
 
 ## Exit criteria
 

@@ -348,7 +348,7 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - ✅ Per-tool unit tests incl. truncation and timeout behavior
 - [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
 - [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
-- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -625,7 +625,7 @@ depend on them:
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
 - [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
-- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -723,7 +723,7 @@ depend on them:
 
 - ✅ Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - ✅ Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
-- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in instruction excerpts, budget cuts and bounded reads — [review](review-2026-09-28-go-practices.md#s20--byte-slicing-cuts-utf-8-runes) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
+- ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in instruction excerpts, budget cuts and bounded reads — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -942,8 +942,8 @@ depend on them:
 - ✅ Homebrew tap
 - ✅ linux/arm64 hardware run: Pi 4 4 GB `pi-bench` `20261011-105151` on
       commit `b2aee40`
-      ([summary](evidence/pi-4-20261011-105151/summary.md),
-      [runs.jsonl](evidence/pi-4-20261011-105151/runs.jsonl)).
+      ([summary](evidence/pi-4-20261011-105151/summary.md); the raw
+      `runs.jsonl` stays local).
       Cold turn, `-c` follow-up, new session, and failover (notice present,
       all exits 0). The board thermally throttled (max 85.7 °C, clock down
       to 600 MHz); the 2048-token raw row is not a cool-board ceiling.
@@ -1000,9 +1000,10 @@ Decision (2026-11-02):
 - **The Pi 5 + Ollama smoke is done.** It closes WP0.10's last checkbox.
   The 2026-10-11 decision still holds for the tags: the smoke did not
   gate `v0.2.0-alpha`, `v0.2.0`, or `v0.3.0`, and the measured
-  linux/arm64 log for `v0.2.0` remains the Pi 4 bench. B1 and B2 ship in
-  `v0.3.2` ([#32](https://github.com/mrYush/hint/issues/32)); B3, M1 and
-  M2 stay backlog.
+  linux/arm64 log for `v0.2.0` remains the Pi 4 bench. B1, B2 and S20
+  ship in `v0.3.2` ([#32](https://github.com/mrYush/hint/issues/32),
+  [#41](https://github.com/mrYush/hint/issues/41)); B3, M1 and M2 stay
+  backlog.
 
 ### WP0.11 — Tool schedule: groups and chains — **done**
 
@@ -1402,8 +1403,8 @@ ones wired) → WP0.6 (wires write/execute tools) → WP0.7 → WP0.8 →
 WP0.9 (done) → WP0.10 (done) → WP0.11 (done) → WP0.12 (done) → tag
 `v0.2.0-alpha` → tag `v0.2.0`.
 WP0.14 (apt repository and Scoop bucket) did not gate `v0.3` (2026-10-11) and shipped in `v0.3.1`.
-Audit fixes B1 and B2 ship in `v0.3.2`. B3, M1 and M2 stay backlog
-(2026-10-11). The Pi 5 smoke is done (2026-11-02).
+Audit fixes B1 and B2 and the UTF-8 truncation S20 ship in `v0.3.2`.
+B3, M1 and M2 stay backlog (2026-10-11). The Pi 5 smoke is done (2026-11-02).
 WP0.11 sat after WP0.6 (it needed per-call gating to exist) and WP0.12 sits
 after WP0.9 (it needs the config knobs). Neither was required for
 `v0.2.0-alpha`; both landed before the tag anyway (decision of 2026-09-07).

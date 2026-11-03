@@ -1,7 +1,7 @@
 # After v0.3.1 — implementation plan
 
-> Status: Draft, not yet ratified · Created: 2026-11-01
-> Target: `v0.3.2`, then Phase 2 / `v0.4`
+> Status: steps 1–2 done, `v0.3.2` in progress · Created: 2026-11-01
+> Last updated: 2026-11-02 · Target: `v0.3.2`, then Phase 2 / `v0.4`
 > Scope source: §7 of [release-v0.3.1.md](release-v0.3.1.md#L176-L186),
 > [PLAN.md](../../PLAN.md), [phase-0](phase-0-mvp-cli.md) and
 > [phase-2](phase-2-memory-mcp.md). This file is a plan, not a second scope
@@ -10,60 +10,67 @@
 This plan covers the three items left after `v0.3.1`: the `v0.3.2` patch
 for [#32](https://github.com/mrYush/hint/issues/32), the UTF-8 truncation
 of [#41](https://github.com/mrYush/hint/issues/41), and the start of
-Phase 2 with the Q6 spike and WP2.1, the MCP client. It records the order,
-the code and test changes, the release chores, and the documentation that
-must change before the order becomes the project's own.
+Phase 2 with the Q6 spike and WP2.1, the MCP client. Steps 1 and 2 are
+done; the release is tracked in
+[release-v0.3.2.md](release-v0.3.2.md). The body below records the plan
+as it was written.
 
-## State at writing
+## State (2026-11-02)
 
-- `develop` and `release/v0.3.2` are at `5f95a57`, the merge of the
-  `v0.3.1` release branch. The release branch was cut before its scope was
-  complete; it currently carries no commits of its own.
-- The working tree has an uncommitted documentation change in
-  [release-v0.3.1.md](release-v0.3.1.md#L171): the merge-back box is
-  ticked. It is unrelated to #32 and #41 and should not be mixed into
-  their pull requests.
-- The affected packages pass locally with a temporary `GOCACHE`. The full
-  gate still has to run in CI on the pull requests.
+- `develop` is at `075cce6`; `release/v0.3.2` is at `f4f3b6d` with the
+  release documentation. #32 (PR [#82](https://github.com/mrYush/hint/pull/82))
+  and #41 (PR [#83](https://github.com/mrYush/hint/pull/83)) are merged.
+- The release runbook is [release-v0.3.2.md](release-v0.3.2.md); the PR to
+  `main` and the tag are still pending. `PLAN.md` already carries the
+  post-tag status; if the release aborts, revert it.
+- The affected packages and CI on `075cce6` are green. The release gate was
+  run before the documentation commit; the release PR repeats it.
+- #32 and #41 are still open because the fix PRs merged into `develop`,
+  not the default branch. The release PR to `main` carries `Closes` for
+  both; otherwise close them after the merge.
 
 ## Order
 
-| Step | Branch | Result | Estimate |
-|---|---|---|---|
-| 1 | `fix/compaction-refresh` | PR to `develop`, `Closes #32` | 1–2 days |
-| 2 | `fix/utf8-truncation` | PR to `develop`, `Closes #41` | 1–2 days |
-| 3 | `release/v0.3.2` | runbook, checks, PR to `main`, tag, merge back | 0.5–1 day |
-| 4 | `docs/q6-mcp-spike` | spike document and Q6 decision | 2–3 days |
-| 5 | `dev/wp2.1-mcp-client` | issue, branch line, first MCP slice | 3–4 weeks for WP2.1 |
+| Step | Branch | State | Result | Estimate |
+|---|---|---|---|---|
+| 1 | `fix/compaction-refresh` | done | PR [#82](https://github.com/mrYush/hint/pull/82), `Closes #32` | 1–2 days |
+| 2 | `fix/utf8-truncation` | done | PR [#83](https://github.com/mrYush/hint/pull/83), `Closes #41` | 1–2 days |
+| 3 | `release/v0.3.2` | in progress | docs committed; PR to `main` and tag pending | 0.5–1 day |
+| 4 | `docs/q6-mcp-spike` | not started | spike document and Q6 decision | 2–3 days |
+| 5 | `dev/wp2.1-mcp-client` | not started | issue, branch line, first MCP slice | 3–4 weeks for WP2.1 |
 
-Steps 1 and 2 are independent and can be written in parallel. Merge #32
-first, then rebase or merge `develop` into #41 before its PR, because the
-two changes touch the same README and phase-file paragraphs. If #41 does
-not make `v0.3.2`, step 2 moves to `v0.3.3` and step 3 contains only #32.
+Steps 1 and 2 are done and #41 is in `v0.3.2`. Steps 4 and 5 remain; Q6
+blocks WP2.1. The release is the only work between them.
 
 ## Alignment with PLAN.md
 
-The order above follows §7 of the `v0.3.1` runbook. [PLAN.md](../../PLAN.md)
-step 20 now records it: `v0.3.2` comes before Phase 2, B1 and B2 ship in
-that patch, and B3, M1 and M2 stay backlog. #41 is in `v0.3.2` when it
-lands before the tag.
+[PLAN.md](../../PLAN.md) step 20 records the order: `v0.3.2` comes before
+Phase 2, B1 and B2 ship in that patch, and B3, M1 and M2 stay backlog.
+#41 is in `v0.3.2` too ([PLAN.md](../../PLAN.md#L286-L293)).
 
 - The runbook is an execution checklist and says that `PLAN.md` wins when
-  the two disagree ([runbook header](release-v0.3.1.md#L6-L8)).
+  the two disagree ([runbook header](release-v0.3.2.md#L6-L9)).
 - Q6 → WP2.1 is consistent: Q6 blocks WP2.1, and WP2.1 is the first work
   package of Phase 2 ([PLAN.md](../../PLAN.md),
   [phase-2](phase-2-memory-mcp.md#L24-L35)).
 
-Still open, and not part of the #32 change:
+Done since this plan was written:
 
-1. Add the #41 backlog line to WP0.5, WP0.7 and WP0.8 when that fix starts.
-2. Write `docs/plan/release-v0.3.2.md` when the release branch is cut.
-3. When WP2.1 starts, change the Phase 2 status to `In progress` and add
-   its `**Branch:**` line.
+1. The #41 backlog lines are in WP0.5, WP0.7 and WP0.8.
+2. `docs/plan/release-v0.3.2.md` is written and committed.
+3. The README, `PLAN.md` and Phase 0 status texts are updated.
 
-This file stays a draft for those steps. `PLAN.md` remains the authority.
+Still open:
 
-## v0.3.2: #32
+1. The release PR, tag and published-artifact verification.
+2. Q6 and WP2.1; when WP2.1 starts, change the Phase 2 status to
+   `In progress` and add its `**Branch:**` line.
+
+## v0.3.2: #32 — done
+
+Implemented on `fix/compaction-refresh`; merged in PR
+[#82](https://github.com/mrYush/hint/pull/82). The body below records the
+change as planned.
 
 ### Branch and pull request
 
@@ -211,7 +218,11 @@ Out of scope for this patch: S4, S5, S12 and S28 from #32. They are
 separate hardening, and S28 (`WithLimits` zero values) changes the
 public `Limits` contract; keep it out of a patch.
 
-## #41: one UTF-8-safe truncation helper
+## #41: one UTF-8-safe truncation helper — done
+
+Implemented on `fix/utf8-truncation`; merged in PR
+[#83](https://github.com/mrYush/hint/pull/83). The body below records the
+change as planned.
 
 ### Branch and pull request
 
@@ -278,39 +289,19 @@ Audit and leave alone, with the reason in the PR:
 - `shell`: `TestSummarizeArgsCutsOnRuneBoundary`.
 - Assert both `utf8.ValidString` and the absence of `\uFFFD`; the latter
   is what `encoding/json` substitutes.
-- Add the #41 backlog line to the affected Phase 0 packages and tick it
-  in this PR.
+- Add the #41 backlog lines to the affected Phase 0 packages; they are
+  ticked now.
 
 Acceptance: no listed site cuts a valid UTF-8 string, ASCII output is
 unchanged, and the full gate is green.
 
-## Release v0.3.2
+## Release v0.3.2 — in progress
 
-1. After #32 (and #41, if it is in this release) merges into `develop`,
-   merge `develop` into `release/v0.3.2`. Do not develop on the release
-   branch; do not rebase or force-push it.
-2. Add `docs/plan/release-v0.3.2.md`, a short runbook:
-   - scope: #32, plus #41 when it lands;
-   - pre-flight: CI on `develop` green; secrets unchanged
-     (`HOMEBREW_TAP_TOKEN` is valid until 2027-10-28,
-     `SCOOP_BUCKET_TOKEN`, `APT_SIGNING_KEY`, `APT_SIGNING_PASSPHRASE`);
-   - `goreleaser check` and `goreleaser release --snapshot --clean`;
-     inspect archives, the two `.deb` packages, the cask and the Scoop
-     manifest;
-   - PR `release/v0.3.2` → `main` with a merge commit, not squash;
-   - annotated tag `v0.3.2` on the merge commit, push the tag;
-   - verify the GitHub Release, cask, Scoop, apt, `hint -v` from an
-     archive, and `go install github.com/mrYush/hint/cmd/hint@v0.3.2`;
-   - close #32 (and #41), tick §7 of the `v0.3.1` runbook, merge back into
-     `develop`, delete the release branch.
-3. Update README: the remaining Known issues, the Limits line, and the
-   `Fixed in v0.3.2` note.
-4. Update `PLAN.md`: step 20 done, `v0.3.2` is the latest release, next is
-   Phase 2 / `v0.4`.
-5. If #41 did not make it, say so in the release notes and keep #41 open
-   for `v0.3.3`.
+The release checklist is [release-v0.3.2.md](release-v0.3.2.md).
+`release/v0.3.2` is at `f4f3b6d`; the PR to `main` and the tag are
+pending. Do not duplicate the checklist here.
 
-## Q6 spike: MCP client
+## Q6 spike: MCP client — not started
 
 ### Branch and document
 
@@ -356,7 +347,7 @@ unchanged, and the full gate is green.
 Acceptance: WP2.1 can start without choosing the SDK again, and every
 argument has a measured price.
 
-## WP2.1: MCP client
+## WP2.1: MCP client — not started
 
 ### Branch, issue and phase file
 
@@ -457,14 +448,15 @@ Rules:
 | MCP schemas fill the prompt | Measure in the spike; cap or hide tools; full solution is WP2.5. |
 | One huge WP2.1 PR | Decide the split before starting; a split needs new work-package numbers. |
 
-Decisions to confirm before implementation:
+Decisions taken:
 
-1. B1: the `Message.Summary` marker (recommended) or the minimal
-   prefix-length fallback.
-2. #41: in `v0.3.2` or a separate `v0.3.3`.
-3. What to do with the uncommitted `release-v0.3.1.md` edit: a separate
-   docs commit, a stash, or leave it for the release.
-4. WP2.1: one large PR or separate M0–M3 and M4–M5 work packages.
+1. B1 uses the `Message.Summary` marker, implemented in #32.
+2. #41 is in `v0.3.2`, implemented in PR #83.
+3. The `release-v0.3.1.md` merge-back edit is committed.
+
+Still open:
+
+1. WP2.1: one large PR or separate M0–M3 and M4–M5 work packages.
 
 ## Verification
 
