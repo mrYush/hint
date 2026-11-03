@@ -1,13 +1,8 @@
 # Release v0.3.2 — runbook
 
 > Status: in progress · Created: 2026-11-02 · Target: `v0.3.2`
-> Scope: [`PLAN.md` §20](../../PLAN.md#L286-L293), B1/B2 in
-> [WP0.4](phase-0-mvp-cli.md#wp04--agent-loop--done), and S20 in
-> [WP0.5](phase-0-mvp-cli.md#wp05--built-in-tools--done),
-> [WP0.7](phase-0-mvp-cli.md#wp07--sessions--done) and
-> [WP0.8](phase-0-mvp-cli.md#wp08--project-context--done). This is an
-> execution checklist, not a second scope document; `PLAN.md` and the
-> phase file win if they disagree.
+> Scope: [`PLAN.md` §20](../../PLAN.md), B1/B2 in [WP0.4](phase-0-mvp-cli.md#wp04--agent-loop--done), and S20 in [WP0.5](phase-0-mvp-cli.md#wp05--built-in-tools--done), [WP0.7](phase-0-mvp-cli.md#wp07--sessions--done) and [WP0.8](phase-0-mvp-cli.md#wp08--project-context--done).
+> This is an execution checklist, not a second scope document; `PLAN.md` and the phase file win if they disagree.
 
 `v0.3.2` is a patch of `v0.3.1`: the agent-loop fixes of
 [#32](https://github.com/mrYush/hint/issues/32) and the UTF-8 truncation

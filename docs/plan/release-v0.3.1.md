@@ -1,11 +1,10 @@
 # Release v0.3.1 — runbook
 
 > Status: published, merged back · Created: 2026-10-31 · Target: `v0.3.1`
-> Scope and release status: [`PLAN.md` §19](../../PLAN.md#L275) and
-> [`WP0.14`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
-> This file is an execution checklist, not a second scope document. If it
-> disagrees with `PLAN.md` or the phase file, those win. Mark each item as
-> it is executed; the closing change in §6 updates the remaining boxes.
+> Scope and release status: [`PLAN.md` §19](../../PLAN.md) and [`WP0.14`](phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows).
+> This file is an execution checklist, not a second scope document.
+> If it disagrees with `PLAN.md` or the phase file, those win.
+> Mark each item as it is executed; the closing change in §6 updates the remaining boxes.
 
 `v0.3.1` is a patch of `v0.3`: the WP0.14 index leftovers, the release
 leftovers of [#50](https://github.com/mrYush/hint/issues/50), the gateway
