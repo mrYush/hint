@@ -14,7 +14,6 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
-| `raspberry-pi-smoke-test.md` | Checklist for a Raspberry Pi **5** + Ollama smoke. Done as of 2026-11-02; did not gate `v0.2.0` |
 | `completion-quality-eval.md` | How to measure what WP1.6's completion is worth on small models: acceptance rate, latency, cost, residency, and the pass criteria for a README recommendation or a default. Backlog as of 2026-10-19; does not gate `v0.3` |
 | Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `completion-quality-eval.md`, `delegation.md` and `mcp-client-spike.md` |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |

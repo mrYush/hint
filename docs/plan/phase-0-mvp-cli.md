@@ -950,9 +950,7 @@ depend on them:
       The run does not exercise criterion 2's edit-confirmation prompt.
 - ✅ Raspberry Pi 5 + Ollama smoke of the acceptance scenarios, accepted
       as done on 2026-11-02. It did not gate `v0.2.0` (decided 2026-10-11).
-      The checklist is
-      [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md). No
-      separate run log is stored; the measured linux/arm64 log remains
+      No separate run log is stored; the measured linux/arm64 log remains
       the Pi 4 bench above.
 - ✅ Update README for the new CLI surface
 
@@ -1389,8 +1387,7 @@ Decisions (2026-10-11):
 5. A binary built with `GOOS=linux GOARCH=arm64` runs on a Raspberry Pi.
    For `v0.2.0` this is the Pi 4 4 GB `pi-bench` run `20261011-105151`
    ([evidence](evidence/pi-4-20261011-105151/summary.md)). The Pi 5 + Ollama
-   smoke of the same scenarios is done (2026-11-02;
-   [`raspberry-pi-smoke-test.md`](raspberry-pi-smoke-test.md)).
+   smoke of the same scenarios is done (2026-11-02).
 
 Criteria 1–4 are the functional Phase 0 bar. Criterion 5 is the
 `linux/arm64` hardware record. The Pi 5 smoke is done (2026-11-02) and
