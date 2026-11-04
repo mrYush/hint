@@ -285,6 +285,7 @@ type fileMCPServer struct {
 	Permission     string            `yaml:"permission"`
 	Timeout        *time.Duration    `yaml:"timeout"`
 	Tools          *fileMCPTools     `yaml:"tools"`
+	Resources      []string          `yaml:"resources"`
 	DescriptionMax *int              `yaml:"description_max"`
 	Project        bool              `yaml:"-"`
 }
@@ -309,6 +310,7 @@ func buildMCPServers(in []fileMCPServer) []MCPServer {
 			URL:        s.URL,
 			Headers:    cloneStrings(s.Headers),
 			Permission: s.Permission,
+			Resources:  append([]string(nil), s.Resources...),
 			Project:    s.Project,
 		}
 		if s.Timeout != nil {

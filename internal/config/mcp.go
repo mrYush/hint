@@ -51,6 +51,8 @@ type MCPServer struct {
 	// Tools narrows what the server may contribute. At most one of Allow
 	// and Deny is set.
 	Tools MCPToolFilter
+	// Resources names resource URIs loaded as instruction documents.
+	Resources []string
 	// DescriptionMax, when positive, caps a tool description in bytes.
 	// It is an explicit opt-in for a server worth keeping under budget.
 	DescriptionMax int
@@ -120,6 +122,12 @@ func validateMCPServer(s MCPServer) error {
 		}
 		if strings.ContainsAny(name, " \t\r\n") {
 			return fmt.Errorf("%s: tool name %q contains whitespace", where, name)
+		}
+	}
+	for _, uri := range s.Resources {
+		u, err := url.Parse(uri)
+		if err != nil || u.Scheme == "" || strings.TrimSpace(uri) != uri {
+			return fmt.Errorf("%s: resource URI %q must be absolute", where, uri)
 		}
 	}
 	for name := range s.Env {

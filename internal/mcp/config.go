@@ -79,6 +79,8 @@ type ServerConfig struct {
 	Timeout time.Duration
 	// Tools is the optional allow or deny list.
 	Tools ToolFilter
+	// Resources names resource URIs loaded as instruction documents.
+	Resources []string
 	// DescriptionMax, when positive, caps a tool description in bytes.
 	DescriptionMax int
 	// Project marks a server that came from the project file. Such a
@@ -135,6 +137,12 @@ func (c ServerConfig) Validate() error {
 	for _, name := range append(append([]string{}, c.Tools.Allow...), c.Tools.Deny...) {
 		if name == "" {
 			return fmt.Errorf("mcp: server %q: tool filter names cannot be empty", c.Name)
+		}
+	}
+	for _, uri := range c.Resources {
+		u, err := url.Parse(uri)
+		if err != nil || u.Scheme == "" || strings.TrimSpace(uri) != uri {
+			return fmt.Errorf("mcp: server %q: resource URI %q must be absolute", c.Name, uri)
 		}
 	}
 	for name := range c.Env {

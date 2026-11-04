@@ -166,8 +166,11 @@ Acceptance: with more MCP tools than the budget, the agent finds and calls a hid
 
 Follow-up to WP2.1 ([#86](https://github.com/mrYush/hint/issues/86)), using the pinned SDK and the decisions recorded above.
 
-- [ ] A resource named in the config loads like an instruction file, with the existing budget, outline and `instructions` tool.
-- [ ] A model-requested resource is read on demand through `resource_read`; its contents remain data, never instructions.
+The configuration names instruction resources as `mcp_servers.<name>.resources: [<uri>, ...]`.
+They load during the existing first-turn MCP initialization and share the instruction budget; on-demand reads use explicit `server` and `uri` arguments and remain tool data.
+
+- ✅ A resource named in the config loads like an instruction file, with the existing budget, outline and `instructions` tool.
+- ✅ A model-requested resource is read on demand through `resource_read`; its contents remain data, never instructions.
 - [ ] `/prompts` lists server prompts, and `/<server>:<prompt>` expands one into the turn with its arguments.
 - [ ] Prompt arguments and `completion/complete` are integrated into the TUI command table.
 - [ ] An integration test with a reference MCP server covers tools, resources and prompts; it skips when the server runtime is unavailable and does not require network access in CI.

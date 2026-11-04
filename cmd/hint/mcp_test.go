@@ -28,6 +28,7 @@ func TestMCPServersConversion(t *testing.T) {
 		Permission:     "read",
 		Timeout:        0,
 		Tools:          config.MCPToolFilter{Allow: []string{"read_file"}},
+		Resources:      []string{"test://rules"},
 		DescriptionMax: 100,
 		Project:        true,
 	}}}
@@ -50,8 +51,9 @@ func TestMCPServersConversion(t *testing.T) {
 	// or edit cannot change a running manager's server.
 	cfg.MCPServers[0].Env["TOKEN"] = "changed"
 	cfg.MCPServers[0].Args[0] = "changed"
-	if s.Env["TOKEN"] != "secret" || s.Args[0] != "server" {
-		t.Errorf("conversion aliased the config: env=%v args=%v", s.Env, s.Args)
+	cfg.MCPServers[0].Resources[0] = "test://changed"
+	if s.Env["TOKEN"] != "secret" || s.Args[0] != "server" || s.Resources[0] != "test://rules" {
+		t.Errorf("conversion aliased the config: env=%v args=%v resources=%v", s.Env, s.Args, s.Resources)
 	}
 }
 

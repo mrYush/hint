@@ -52,9 +52,9 @@ func InstructionBudgetFor(window int) int {
 	return max(min(DefaultInstructionBudget, scaled), MinInstructionBudget)
 }
 
-// Instruction is one instruction file as it goes into the prompt.
+// Instruction is one instruction document as it goes into the prompt.
 type Instruction struct {
-	// Path is the file's absolute path.
+	// Path is the file's absolute path or a configured source's stable identity.
 	Path string
 	// Content is what the prompt shows: the file, the file with some
 	// sections reduced to their heading and first sentence (Outlined), a
@@ -139,6 +139,14 @@ func ReadInstructions(dirs []string, names []string, budget int) ([]Instruction,
 // an error: instructions are a convenience, and a project with a broken
 // one still deserves an answer.
 func ReadInstructionFiles(ctx context.Context, paths []string, budget int, s Summarizer) ([]Instruction, []string) {
+	files, warnings := readInstructionFiles(ctx, paths)
+	out, fitWarnings := fitInstructions(ctx, files, budget, s)
+	return out, append(warnings, fitWarnings...)
+}
+
+// readInstructionFiles loads the raw documents that Layout shares with
+// configured in-memory sources before fitting them all under one budget.
+func readInstructionFiles(_ context.Context, paths []string) ([]rawFile, []string) {
 	var files []rawFile
 	var warnings []string
 	for _, p := range paths {
@@ -155,8 +163,7 @@ func ReadInstructionFiles(ctx context.Context, paths []string, budget int, s Sum
 		}
 		files = append(files, newRawFile(p, content))
 	}
-	out, fitWarnings := fitInstructions(ctx, files, budget, s)
-	return out, append(warnings, fitWarnings...)
+	return files, warnings
 }
 
 // firstInstruction returns the path of the first name that is a regular

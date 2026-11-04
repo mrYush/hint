@@ -40,6 +40,7 @@ mcp_servers:
       TOKEN: "${TOKEN_VALUE}"
     permission: read
     timeout: 5s
+    resources: ["test://rules", "test://guide"]
     tools:
       allow: ["read_file"]
     description_max: 200
@@ -71,6 +72,9 @@ mcp_servers:
 	}
 	if len(fs.Tools.Allow) != 1 || fs.Tools.Allow[0] != "read_file" {
 		t.Errorf("fs allow = %v", fs.Tools.Allow)
+	}
+	if len(fs.Resources) != 2 || fs.Resources[0] != "test://rules" || fs.Resources[1] != "test://guide" {
+		t.Errorf("fs resources = %v", fs.Resources)
 	}
 	web := cfg.MCPServers[1]
 	if web.Permission != "execute" {
@@ -220,6 +224,11 @@ func TestMCPServersValidation(t *testing.T) {
 			name: "unknown permission",
 			yaml: "mcp_servers:\n  s:\n    transport: stdio\n    command: c\n    permission: sudo\n",
 			want: "permission must be",
+		},
+		{
+			name: "relative resource",
+			yaml: "mcp_servers:\n  s:\n    transport: stdio\n    command: c\n    resources: [rules]\n",
+			want: "resource URI",
 		},
 		{
 			name: "negative timeout",

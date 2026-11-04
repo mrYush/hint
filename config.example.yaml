@@ -114,6 +114,7 @@ secrets:
 #     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
 #     permission: read
 #     timeout: 30s
+#     resources: ["docs://project/rules"]  # optional URIs loaded like instruction files
 #     tools:
 #       allow: ["read_text_file", "list_directory"]  # optional; deny is the other half
 #   github:

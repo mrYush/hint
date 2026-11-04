@@ -39,6 +39,7 @@ func mcpServers(cfg *config.Config) []mcp.ServerConfig {
 			Permission:     agentapi.ActionClass(s.Permission),
 			Timeout:        s.Timeout,
 			Tools:          mcp.ToolFilter{Allow: append([]string(nil), s.Tools.Allow...), Deny: append([]string(nil), s.Tools.Deny...)},
+			Resources:      append([]string(nil), s.Resources...),
 			DescriptionMax: s.DescriptionMax,
 			Project:        s.Project,
 		})
@@ -57,11 +58,11 @@ func copyStrings(in map[string]string) map[string]string {
 	return out
 }
 
-// ensureMCP starts the configured MCP servers and registers their tools
-// once. It runs before the first turn, not while the engine is built, so
-// a run that never needs MCP pays no process startup cost. A canceled
-// context is retried on the next turn; a registration error is permanent
-// and named on every turn until the run restarts.
+// ensureMCP starts the configured MCP servers, registers their tools and
+// loads configured resources once. It runs before the first turn, not while
+// the engine is built, so a run that never needs MCP pays no process startup
+// cost. A canceled context is retried on the next turn; a registration error
+// is permanent and named on every turn until the run restarts.
 func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 	e.mcpMu.Lock()
 	defer e.mcpMu.Unlock()
@@ -76,6 +77,11 @@ func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("MCP tools: %w", err)
 	}
+	resources, err := e.mcp.ConfiguredResources(ctx)
+	if err != nil {
+		return fmt.Errorf("MCP resources: %w", err)
+	}
+	e.addMCPResources(ctx, resources)
 	warnings := e.mcp.Warnings()
 	if e.mcpWarned < len(warnings) {
 		secrets := e.secrets()
@@ -83,6 +89,9 @@ func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 			fmt.Fprintf(e.notices, "hint: warning: %s\n", config.Redact(w, secrets))
 		}
 		e.mcpWarned = len(warnings)
+	}
+	if len(e.mcp.Servers()) > 0 {
+		tools = append([]agentapi.Tool{mcp.NewResourceReadTool(e.mcp)}, tools...)
 	}
 	for _, t := range tools {
 		if err := e.registry.Register(tool.Redacting(t, e.secrets)); err != nil {

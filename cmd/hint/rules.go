@@ -44,6 +44,23 @@ func newPreamble(pc *project.Context, registry *tool.Registry, notices io.Writer
 	return p
 }
 
+// refresh rebuilds the initial prompt after configured MCP resources join the
+// project context during the first turn's lazy initialization.
+func (p *preamble) refresh(ctx context.Context) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	active := p.activation.Active()
+	instructions, warnings := p.pc.Layout(ctx, active)
+	for _, w := range warnings {
+		if !p.warned[w] {
+			p.warned[w] = true
+			fmt.Fprintf(p.notices, "hint: warning: %s\n", w)
+		}
+	}
+	p.prompt = systemPrompt(p.pc, instructions, p.activation.Pending())
+	p.key = activeKey(active)
+}
+
 // Prefix implements agent.Preamble.
 func (p *preamble) Prefix(ctx context.Context, messages []agentapi.Message) ([]agentapi.Message, error) {
 	var touched []string
