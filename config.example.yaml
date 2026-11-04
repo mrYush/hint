@@ -105,7 +105,7 @@ secrets:
 # the `permission` class (read, write or execute; execute is the default).
 # Credentials belong in this global file. A project .hint/config.yaml may add
 # a server, but never env or headers, and the project's server does not start
-# until the user approves it outside the repository.
+# until `hint mcp enable <name>` records the user's approval outside the repository.
 #
 # mcp_servers:
 #   filesystem:

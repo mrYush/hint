@@ -138,6 +138,7 @@ keeps the line REPL.`,
   hint --session 3f2a                    # continue the session whose id starts with 3f2a
   hint sessions                          # list this directory's sessions
   hint models                            # list the models the profile serves
+  hint mcp status                        # connect to the configured MCP servers
   hint serve                             # JSON-RPC on a local socket
   hint --connect -c                      # join that server from another terminal
   hint --mode rpc                        # the same protocol on stdin/stdout`,
@@ -249,7 +250,7 @@ keeps the line REPL.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags), newConfigCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags), newConfigCommand(&flags), newMCPCommand(&flags))
 	return rootCmd
 }
 

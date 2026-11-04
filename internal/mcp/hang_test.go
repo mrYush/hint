@@ -21,6 +21,10 @@ type hangingConn struct {
 	done    chan struct{}
 	once    sync.Once
 	lists   atomic.Int32
+	pings   atomic.Int32
+	// toolsReply answers tools/list with an empty list instead of hanging;
+	// a status test uses it to reach the ping path.
+	toolsReply bool
 }
 
 func newHangingConn() *hangingConn {
@@ -57,9 +61,15 @@ func (c *hangingConn) Write(_ context.Context, msg jsonrpc.Message) error {
 		c.enqueue(&jsonrpc.Response{ID: req.ID, Result: json.RawMessage(
 			`{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"hang","version":"v0"}}`,
 		)})
+	case "ping":
+		c.pings.Add(1)
+		c.enqueue(&jsonrpc.Response{ID: req.ID, Result: json.RawMessage(`{}`)})
 	case "tools/list":
 		c.lists.Add(1)
-		// Deliberately no response: the test is about the timeout.
+		if c.toolsReply {
+			c.enqueue(&jsonrpc.Response{ID: req.ID, Result: json.RawMessage(`{"tools":[]}`)})
+		}
+		// Otherwise deliberately no response: the test is about the timeout.
 	default:
 		c.enqueue(&jsonrpc.Response{ID: req.ID, Error: &jsonrpc.Error{
 			Code:    jsonrpc.CodeMethodNotFound,

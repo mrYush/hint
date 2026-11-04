@@ -44,7 +44,7 @@ Done since this plan was written:
 
 Still open:
 
-1. WP2.1 is in progress on `dev/wp2.1-mcp-client`: the M0–M3 core slice (client, config, tools) is in the tree; lazy start, MCP resources and prompts, `hint mcp list|status`, and the live reference-server test remain.
+1. WP2.1 is in progress on `dev/wp2.1-mcp-client`: the M0–M3 core and M2 (lazy start, ping health, `hint mcp list|status|enable`) are in the tree; MCP resources and prompts (M4–M5), the live reference-server test and the final acceptance pass (M6) remain.
 
 ## v0.3.2: #32 — done
 
@@ -217,6 +217,9 @@ Q6 is resolved in [PLAN.md](../../PLAN.md).
 No further research is needed; start WP2.1 from the spike and the Phase 2 decisions.
 
 ## WP2.1: MCP client — in progress
+
+Progress (2026-11-04): M0–M3 and M2 are implemented on `dev/wp2.1-mcp-client` — the client, config, manager, tool adapter, schema budget, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+M4–M6 remain.
 
 ### Branch, issue and phase file
 

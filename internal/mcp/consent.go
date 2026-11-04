@@ -70,10 +70,10 @@ func (s *ConsentStore) Check(root string, cfg ServerConfig) (bool, string) {
 	}
 	rec, ok := s.records[consentKey(root, cfg.Name)]
 	if !ok {
-		return false, fmt.Sprintf("MCP server %q comes from the project file and is disabled until consent is recorded outside the repository", cfg.Name)
+		return false, fmt.Sprintf("MCP server %q comes from the project file and is disabled until consent is recorded; run `hint mcp enable %s`", cfg.Name, cfg.Name)
 	}
 	if rec.Fingerprint != cfg.fingerprint() {
-		return false, fmt.Sprintf("MCP server %q is disabled: consent changed (%s)", cfg.Name, changedField(rec, cfg))
+		return false, fmt.Sprintf("MCP server %q is disabled: consent changed (%s); run `hint mcp enable %s`", cfg.Name, changedField(rec, cfg), cfg.Name)
 	}
 	return true, ""
 }

@@ -27,8 +27,9 @@ SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go
 - [ ] MCP **resources** as instruction and knowledge sources: a resource the config names is loaded like an instruction file (budget, outline, `instructions` tool), one the model asks for is read on demand through a `resource_read` tool
 - [ ] MCP **prompts** as reusable procedures: `/prompts` lists them, `/<server>:<prompt>` expands one into the turn, with its arguments completed from the prompt's argument list and `completion/complete` in the TUI command table
 - [x] Lifecycle: health check, restart on crash, timeout budget
-- [ ] Lazy start: connect a server only when its tools are first needed (this slice connects every enabled server while the engine is built)
-- [ ] `hint mcp list|status` to see it
+- [x] Lazy start: connect a server only when its tools are first needed
+- [x] `hint mcp list|status` to see it
+- [x] `hint mcp enable <name>` records project-server consent
 - [x] Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
 - [ ] Integration test with a reference MCP server (e.g. filesystem server) for tools, resources and prompts
 
@@ -64,9 +65,8 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
   `hint mcp status` names the changed field; a test changes `args` after enabling.
   A global-file server is enabled by its presence.
 
-Progress (2026-11-03, [#86](https://github.com/mrYush/hint/issues/86)): the M0–M3 core landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager and tool adapter, `mcp_servers:` layering, the schema budget, and tool registration under `<server>.<tool>`.
-Lazy start is not part of this slice: `newEngine` connects every enabled server while it is built, so the process startup cost is paid even if a server's tools are never used.
-MCP resources and prompts, lazy start, `hint mcp list|status`, and the live reference-server integration test remain on the same branch.
+Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+MCP resources and prompts (M4–M5), the live reference-server integration test, and the final acceptance pass (M6) remain for a follow-up branch.
 
 ### WP2.2 — Repo map
 

@@ -60,6 +60,7 @@ type Manager struct {
 	closed   bool
 	warnings []string
 	warned   map[string]bool
+	hidden   map[string]string
 }
 
 // NewManager validates the configurations and builds the run's servers.
@@ -72,6 +73,7 @@ func NewManager(cfgs []ServerConfig, opts Options) (*Manager, error) {
 		now:     opts.Now,
 		backoff: opts.Backoff,
 		warned:  map[string]bool{},
+		hidden:  map[string]string{},
 	}
 	if m.now == nil {
 		m.now = time.Now
@@ -109,7 +111,7 @@ func NewManager(cfgs []ServerConfig, opts Options) (*Manager, error) {
 			switch opts.Consent {
 			case nil:
 				srv.enabled = false
-				srv.reason = fmt.Sprintf("MCP server %q comes from the project file and is disabled until consent is recorded outside the repository", cfg.Name)
+				srv.reason = fmt.Sprintf("MCP server %q comes from the project file and is disabled until consent is recorded; run `hint mcp enable %s`", cfg.Name, cfg.Name)
 			default:
 				ok, reason := opts.Consent.Check(opts.ProjectRoot, cfg)
 				srv.enabled = ok
@@ -143,28 +145,48 @@ func (m *Manager) Tools(ctx context.Context) ([]agentapi.Tool, error) {
 		}
 		tools, err := srv.listTools(ctx)
 		if err != nil {
+			srv.setLastError(err)
+			m.clearHidden(srv.cfg.Name)
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
 			m.warnf("MCP server %q is unavailable: %v", srv.cfg.Name, err)
 			continue
 		}
+		srv.setLastError(nil)
 		size := 0
 		for _, t := range tools {
 			size += schemaSize(t)
 		}
 		if m.budget.PerServer > 0 && size > m.budget.PerServer {
-			m.warnf("%s", hideReasonServer(srv.cfg.Name, size, m.budget.PerServer))
+			reason := hideReasonServer(srv.cfg.Name, size, m.budget.PerServer)
+			m.setHidden(srv.cfg.Name, reason)
+			m.warnf("%s", reason)
 			continue
 		}
 		if m.budget.Total > 0 && total+size > m.budget.Total {
-			m.warnf("%s", hideReasonTotal(srv.cfg.Name, size, total, m.budget.Total))
+			reason := hideReasonTotal(srv.cfg.Name, size, total, m.budget.Total)
+			m.setHidden(srv.cfg.Name, reason)
+			m.warnf("%s", reason)
 			continue
 		}
+		m.clearHidden(srv.cfg.Name)
 		out = append(out, tools...)
 		total += size
 	}
 	return out, nil
+}
+
+func (m *Manager) setHidden(name, reason string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hidden[name] = reason
+}
+
+func (m *Manager) clearHidden(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.hidden, name)
 }
 
 // Warnings returns the run's MCP warnings, one per distinct problem, in
@@ -231,6 +253,7 @@ type server struct {
 	mu       sync.Mutex
 	sess     *mcp.ClientSession
 	tools    []agentapi.Tool
+	lastErr  error
 	failures int
 	next     time.Time
 }
@@ -355,6 +378,18 @@ func (s *server) connectLocked(ctx context.Context) error {
 // dropIf closes sess only if it is still the server's current session.
 // A concurrent call may already have replaced it; closing the new one
 // would make the next call fail for no reason.
+func (s *server) setLastError(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastErr = err
+}
+
+func (s *server) lastError() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastErr
+}
+
 func (s *server) dropIf(sess *mcp.ClientSession) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
