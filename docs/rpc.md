@@ -122,6 +122,23 @@ Like `complete`, it runs beside the connection's other requests, so its answer m
 
 `session.profile`, `session.fork`, `profile.list` (`v0.3`, WP1.5) and `complete`, `complete.cancel`, `complete.settings`, `profile.models` (WP1.6) were added without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
 
+### MCP prompts
+
+`prompt.list` returns `{"prompts":[{"server":"docs","name":"review","description":"Review a file.","arguments":[{"name":"path","required":true}]}]}`.
+It connects to configured MCP servers on demand; a server without prompts contributes an empty list.
+
+`prompt.get` expands a prompt with positional string arguments in the order declared by `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"prompt.get","params":{"server":"docs","name":"review","arguments":["main.go"]}}
+```
+
+The result is `{"text":"..."}`.
+A shell sends that text as a user turn, never as system text or a recorded assistant answer.
+
+`prompt.complete` accepts `{"server":"docs","prompt":"review","argument":"path","value":"ma"}` and returns `{"values":["main.go", ...]}` from MCP `completion/complete`.
+These three methods were added by WP2.9 without a protocol version bump; an older core answers `-32601 method not found`.
+
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.
 Another connection may attach, and may start the next turn once `turn.done` has arrived.

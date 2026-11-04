@@ -151,6 +151,18 @@ type modelsResult struct {
 	Models []string `json:"models"`
 }
 
+type promptsResult struct {
+	Prompts []PromptInfo `json:"prompts"`
+}
+
+type promptTextResult struct {
+	Text string `json:"text"`
+}
+
+type promptCompletionResult struct {
+	Values []string `json:"values"`
+}
+
 type listResult struct {
 	Sessions []Info `json:"sessions"`
 }

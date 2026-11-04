@@ -78,6 +78,11 @@ type model struct {
 	// completion of a question by a model (WP1.6).
 	comp *completion
 	cmpl *completer
+	// MCP prompts are discovered on demand for slash commands and completion.
+	prompts             []rpc.PromptInfo
+	promptsLoaded       bool
+	promptsLoading      bool
+	promptValuesLoading bool
 	// mouse is the terminal's mouse reporting. Off, the terminal's own
 	// selection works and copying text out of the transcript is a drag;
 	// on, the wheel scrolls and a click copies the block under it.
@@ -227,6 +232,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.warnTick(msg), nil
 	case modelsMsg:
 		return m.modelsLoaded(msg), nil
+	case promptListMsg:
+		return m.promptListLoaded(msg)
+	case promptCompletionMsg:
+		return m.promptCompleted(msg), nil
+	case promptExpansionMsg:
+		return m.promptExpanded(msg)
 
 	case tea.PasteMsg:
 		// Bracketed paste: the terminal hands pasted text over as one
@@ -356,6 +367,11 @@ func (m model) submit() (model, tea.Cmd) {
 		m.ta.Reset()
 		return m.runCommand(text)
 	}
+	return m.submitText(text)
+}
+
+// submitText sends a question or a user-invoked MCP prompt expansion.
+func (m model) submitText(text string) (model, tea.Cmd) {
 	if m.busy {
 		m.status = "an answer is being written; Ctrl-C stops it"
 		return m, nil
@@ -570,11 +586,12 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 	if name == "/quit" {
 		name = "/exit"
 	}
-	known := false
+	promptServer, promptName, isPrompt := rpc.ParsePromptCommand(name)
+	known := isPrompt
 	for _, c := range commands() {
 		known = known || c.name == name
 	}
-	enabled := false
+	enabled := isPrompt && !m.busy && m.sessionID != ""
 	for _, c := range m.available() {
 		enabled = enabled || c.name == name
 	}
@@ -585,6 +602,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 	case !enabled:
 		m.status = name + " is not available right now"
 		return m, nil
+	case isPrompt:
+		return m.expandPrompt(promptServer, promptName, fields[1:])
 	}
 	switch name {
 	case "/config":
@@ -595,6 +614,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		m.add(entry{kind: entryNotice, text: helpText(), done: true})
 	case "/sessions":
 		return m.openPicker()
+	case "/prompts":
+		return m.loadPrompts(true, "")
 	case "/completion":
 		return m.completionCommand(arg)
 	case "/profile":

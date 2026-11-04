@@ -253,6 +253,12 @@ func (c *conn) dispatch(req request) {
 		c.profileList(req)
 	case "profile.models":
 		c.profileModels(req)
+	case "prompt.list":
+		c.promptList(req)
+	case "prompt.get":
+		c.promptGet(req)
+	case "prompt.complete":
+		c.promptComplete(req)
 	case "complete":
 		c.complete(req)
 	case "complete.cancel":

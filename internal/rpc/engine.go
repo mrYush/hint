@@ -177,4 +177,10 @@ type Engine interface {
 	// Models lists the models the profile's endpoint serves, by name. An
 	// unknown profile is ErrNotFound.
 	Models(ctx context.Context, profile string) ([]string, error)
+	// Prompts lists the MCP prompts available as slash commands.
+	Prompts(ctx context.Context) ([]PromptInfo, error)
+	// ExpandPrompt expands one prompt with positional arguments.
+	ExpandPrompt(ctx context.Context, req PromptRequest) (string, error)
+	// CompletePrompt completes one named prompt argument.
+	CompletePrompt(ctx context.Context, req PromptCompleteRequest) ([]string, error)
 }

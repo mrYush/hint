@@ -53,12 +53,15 @@ type fakeEngine struct {
 	// profile.models answers per profile. completes records the texts
 	// Complete was asked about, completeDelay how long it takes,
 	// completeErr makes it fail and completionOff makes it disabled.
-	settings      rpc.CompletionSettings
-	models        map[string][]string
-	completes     []string
-	completeDelay time.Duration
-	completeErr   error
-	completionOff bool
+	settings       rpc.CompletionSettings
+	models         map[string][]string
+	completes      []string
+	completeDelay  time.Duration
+	completeErr    error
+	completionOff  bool
+	prompts        []rpc.PromptInfo
+	promptRequest  rpc.PromptRequest
+	promptComplete rpc.PromptCompleteRequest
 }
 
 // fakeSession is one session of a fakeEngine: its id and the questions
@@ -125,6 +128,20 @@ func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error)
 		return m, nil
 	}
 	return nil, fmt.Errorf("%w: unknown profile %q", rpc.ErrNotFound, profile)
+}
+
+func (e *fakeEngine) Prompts(context.Context) ([]rpc.PromptInfo, error) {
+	return e.prompts, nil
+}
+
+func (e *fakeEngine) ExpandPrompt(_ context.Context, req rpc.PromptRequest) (string, error) {
+	e.promptRequest = req
+	return "Review " + req.Arguments[0], nil
+}
+
+func (e *fakeEngine) CompletePrompt(_ context.Context, req rpc.PromptCompleteRequest) ([]string, error) {
+	e.promptComplete = req
+	return []string{"main.go", "model.go"}, nil
 }
 
 func (e *fakeEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {

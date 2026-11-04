@@ -477,7 +477,9 @@ type fakeEngine struct {
 	completes     int
 	cancelled     int
 	// modelsGate, when set, holds Models until it is closed.
-	modelsGate chan struct{}
+	modelsGate    chan struct{}
+	prompts       []PromptInfo
+	promptRequest PromptRequest
 }
 
 // find resolves id the way session.Store.Find does: the exact id, or
@@ -552,6 +554,19 @@ func (e *fakeEngine) Models(ctx context.Context, profile string) ([]string, erro
 		return nil, fmt.Errorf("%w: unknown profile %q", ErrNotFound, profile)
 	}
 	return []string{"qwen", "llama"}, nil
+}
+
+func (e *fakeEngine) Prompts(context.Context) ([]PromptInfo, error) {
+	return e.prompts, nil
+}
+
+func (e *fakeEngine) ExpandPrompt(_ context.Context, req PromptRequest) (string, error) {
+	e.promptRequest = req
+	return "Review " + req.Arguments[0], nil
+}
+
+func (e *fakeEngine) CompletePrompt(context.Context, PromptCompleteRequest) ([]string, error) {
+	return []string{"main.go", "model.go"}, nil
 }
 
 func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {

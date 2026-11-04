@@ -20,6 +20,8 @@ const replHelp = `Commands:
   /help                    show this help
   /profile                 list the provider profiles; the one in use is marked
   /profile <name> [model]  answer with that profile (and model) from now on
+  /prompts                 list MCP prompts
+  /<server>:<prompt> [args] expand an MCP prompt into a question
   /exit, /quit             leave (Ctrl-D does too)
 Anything else is a question for the assistant; each line is one question.
 Ctrl-C stops an answer that is being written and returns to the prompt.`
@@ -69,12 +71,29 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 				return nil
 			case "/help":
 				fmt.Fprintln(a.io.err, replHelp)
+				continue
 			case "/profile":
 				a.profileCommand(ctx, fields[1:])
+				continue
+			case "/prompts":
+				a.promptsCommand(ctx)
+				continue
 			default:
-				fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
+				if _, _, ok := rpc.ParsePromptCommand(cmd); !ok {
+					fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
+					continue
+				}
+				expanded, err := a.expandPrompt(ctx, cmd, fields[1:])
+				if err != nil {
+					fmt.Fprintln(a.io.err, "hint:", err)
+					continue
+				}
+				if strings.TrimSpace(expanded) == "" {
+					fmt.Fprintln(a.io.err, "hint: the MCP prompt returned no text")
+					continue
+				}
+				line = expanded
 			}
-			continue
 		}
 
 		turnCtx, cancel := context.WithCancel(ctx)

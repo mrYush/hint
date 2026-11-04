@@ -142,9 +142,9 @@ Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
 
 Tab completes `/commands` and their arguments; `/help` lists them:
 `/sessions` shows this directory's sessions as a tree and resumes one,
-`/profile` switches the provider profile, `/completion` shows or sets
-when a model continues what you type (see [Completion of what you
-type](#completion-of-what-you-type)), `/setup` and `/config` edit the
+`/profile` switches the provider profile, `/prompts` lists MCP prompts,
+`/completion` shows or sets when a model continues what you type (see
+[Completion of what you type](#completion-of-what-you-type)), `/setup` and `/config` edit the
 configuration, `/copy` and `ctrl+y` copy the last answer (or `question`,
 `code`, `all`), `/mouse` switches to a mode where the wheel scrolls and a
 click copies the block under it (off by default, so the terminal's own
@@ -642,8 +642,10 @@ The MCP schema budget is 48 KiB with a 20 KiB per-server cap; a server that does
 A project `.hint/config.yaml` may add a server but may not set `env` or `headers`; it stays disabled until `hint mcp enable <name>` is run in that repository, and any change to `command`, `args`, `url` or `permission` resets that approval.
 Resources named by `resources` load like instruction files, sharing their budget, outline and `instructions` tool.
 The model can read another resource with `resource_read` using `server` and `uri`; that result is untrusted tool data and never becomes an instruction.
+`/prompts` lists server prompts in the TUI and plain REPL, and `/<server>:<prompt> [args]` expands one as a user turn with positional arguments.
+In the TUI, Tab completes prompt commands and asks the server for argument values through `completion/complete`.
 
-MCP servers start on the first turn, not when hint launches, so a run that never needs them starts no process.
+MCP servers start on the first turn or an explicit prompt operation, not when hint launches, so a run that never uses MCP starts no process.
 `hint mcp list` shows the configured servers without connecting, `hint mcp status` connects, lists their tools under the budget, and checks each server with an MCP `ping` (the handshake is the check on servers that removed `ping`), and `hint mcp enable <name>` records the project-server approval.
 
 ### Environment variables

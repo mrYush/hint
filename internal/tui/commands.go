@@ -58,6 +58,7 @@ func commands() []command {
 		{name: "/config", help: "show | keys | set [--project] <key> <value> | unset [--project] <key>: any config key, checked before it is written",
 			next: configArgs, enabled: func(m model) bool { return m.setup != nil && m.setup.Set != nil }},
 		{name: "/sessions", help: "list this directory's sessions as a tree and resume one; f forks the row", enabled: func(m model) bool { return !m.busy }},
+		{name: "/prompts", help: "list MCP prompts; /<server>:<prompt> expands one with positional arguments", enabled: func(m model) bool { return !m.busy }},
 		{name: "/profile", help: "<name> [model]: answer with another provider profile from now on; alone, pick from the list",
 			next: profileArgs, enabled: func(m model) bool { return m.sessionID != "" && !m.busy }},
 		{name: "/completion", help: "[off|tab|idle|both]: when a model continues what you type, for this session; alone, the state and the cost so far",
@@ -140,6 +141,9 @@ func (m model) available() []command {
 		if c.enabled == nil || c.enabled(m) {
 			out = append(out, c)
 		}
+	}
+	if !m.busy {
+		out = append(out, m.promptCommands()...)
 	}
 	return out
 }
@@ -253,6 +257,18 @@ func (m model) tab() (model, tea.Cmd) {
 		return m, nil
 	}
 	m.comp = nil
+	if !m.promptsLoaded && strings.Contains(strings.Fields(cur)[0], ":") {
+		if !m.promptsLoading {
+			return m.loadPrompts(false, cur)
+		}
+		return m, nil
+	}
+	if req, ok := m.promptCompletionNeeded(cur); ok {
+		if !m.promptValuesLoading {
+			return m.loadPromptCompletion(req, cur)
+		}
+		return m, nil
+	}
 	if profile := m.modelsNeeded(cur); profile != "" {
 		return m.loadModels(profile)
 	}

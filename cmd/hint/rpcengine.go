@@ -253,9 +253,9 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
 	}
 	// MCP servers are created here but not started: the first turn calls
-	// ensureMCP, so a run that never needs MCP pays no process startup
-	// cost. Config and consent problems that are knowable without a
-	// connection are reported now.
+	// ensureMCP, and prompt operations connect explicitly, so a run that never
+	// uses MCP pays no process startup cost. Config and consent problems that
+	// are knowable without a connection are reported now.
 	manager, err := mcp.NewManager(mcpServers(as.cfg), mcp.Options{
 		Client:      mcp.ClientInfo{Name: "hint", Version: buildVersion()},
 		ProjectRoot: root.Dir(),

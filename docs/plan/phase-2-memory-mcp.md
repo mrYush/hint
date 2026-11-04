@@ -168,11 +168,12 @@ Follow-up to WP2.1 ([#86](https://github.com/mrYush/hint/issues/86)), using the 
 
 The configuration names instruction resources as `mcp_servers.<name>.resources: [<uri>, ...]`.
 They load during the existing first-turn MCP initialization and share the instruction budget; on-demand reads use explicit `server` and `uri` arguments and remain tool data.
+Prompt list and expansion are available in both the TUI and the plain REPL; `completion/complete` integrates with the TUI command table.
 
 - ✅ A resource named in the config loads like an instruction file, with the existing budget, outline and `instructions` tool.
 - ✅ A model-requested resource is read on demand through `resource_read`; its contents remain data, never instructions.
-- [ ] `/prompts` lists server prompts, and `/<server>:<prompt>` expands one into the turn with its arguments.
-- [ ] Prompt arguments and `completion/complete` are integrated into the TUI command table.
+- ✅ `/prompts` lists server prompts, and `/<server>:<prompt>` expands one into the turn with its arguments.
+- ✅ Prompt arguments and `completion/complete` are integrated into the TUI command table.
 - [ ] An integration test with a reference MCP server covers tools, resources and prompts; it skips when the server runtime is unavailable and does not require network access in CI.
 - [ ] Documentation and the full verification gate are updated, including `go test -race ./...` and the Linux ARM64 cross-build.
 
