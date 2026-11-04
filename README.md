@@ -613,6 +613,36 @@ such profiles.
 
 `max_tokens_field: max_completion_tokens` is for OpenAI's reasoning models (o-series, gpt-5), which refuse `max_tokens`; the default `max_tokens` is what local servers understand.
 
+### MCP servers
+
+`mcp_servers:` in the global config connects hint to servers that speak the [Model Context Protocol](https://modelcontextprotocol.io); their tools are offered to the model as `<server>.<tool>` next to the built-ins, under the permission class the entry declares (`execute` by default):
+
+```yaml
+mcp_servers:
+  filesystem:
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    permission: read
+    timeout: 30s
+    tools:
+      allow: ["read_text_file", "list_directory"]
+  github:
+    transport: http
+    url: https://api.githubcopilot.com/mcp/
+    headers:
+      Authorization: "Bearer ${GITHUB_TOKEN}"
+    permission: execute
+```
+
+A stdio server runs with the variables its entry declares plus a base stripped of hint's API keys; a project-added server gets only a minimal base (`PATH`, `HOME`, the locale).
+HTTP headers support `${VAR}`, are sent only to the configured origin, and a redirect to another host is refused before a credential can follow it.
+The MCP schema budget is 48 KiB with a 20 KiB per-server cap; a server that does not fit is hidden as a whole and a warning names it, and `tools.allow` or `tools.deny` narrows a large server.
+A project `.hint/config.yaml` may add a server but may not set `env` or `headers`; it stays disabled until `hint mcp enable <name>` is run in that repository, and any change to `command`, `args`, `url` or `permission` resets that approval.
+
+MCP servers start on the first turn, not when hint launches, so a run that never needs them starts no process.
+`hint mcp list` shows the configured servers without connecting, `hint mcp status` connects, lists their tools under the budget, and checks each server with an MCP `ping` (the handshake is the check on servers that removed `ping`), and `hint mcp enable <name>` records the project-server approval.
+
 ### Environment variables
 
 ```bash

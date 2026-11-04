@@ -1,6 +1,6 @@
 # Phase 2 — Memory, MCP, A2A, open integration surfaces, code maturity
 
-> Status: Planned · Target release: **v0.4** · Estimate: 8–10 weeks (part-time)
+> Status: In progress · Target release: **v0.4** · Estimate: 8–10 weeks (part-time)
 > Depends on: Phase 1
 > Exit bar: core parity with a mature coding agent, plus `hint` reachable by and able to reach other agents.
 
@@ -15,17 +15,24 @@ Added 2026-10-18 together with WP2.6 and WP2.7.
 
 ### WP2.1 — MCP client
 
+**Branch:** `dev/wp2.1-mcp-client`
+
+M0–M3 and M2 are merged in PR [#87](https://github.com/mrYush/hint/pull/87); M4–M6 remain and take a follow-up branch.
+
 SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) **`v1.8.0`, pinned** (Q6).
 
-- [ ] `mcp_servers:` section in config (stdio and streamable HTTP transports), layered like every other key: global file, project `.hint/config.yaml`, with the project able to add servers and never a key
-- [ ] Discovered MCP tools registered in the tool registry alongside built-ins, under `<server>.<tool>` names
-- [ ] MCP schemas preserve JSON and reject numbers with `abs(v) >= 2^53`; numeric normalization is documented and tested
-- [ ] Permission wrapper around every MCP tool (class declared in config, default `execute`)
-- [ ] MCP tool output treated as untrusted input (no instruction-following from tool results — architecture-level rule)
+- [x] `mcp_servers:` section in config (stdio and streamable HTTP transports), layered like every other key: global file, project `.hint/config.yaml`, with the project able to add servers and never a key
+- [x] Discovered MCP tools registered in the tool registry alongside built-ins, under `<server>.<tool>` names
+- [x] MCP schemas preserve JSON and reject numbers with `abs(v) >= 2^53`; numeric normalization is documented and tested
+- [x] Permission wrapper around every MCP tool (class declared in config, default `execute`)
+- [x] MCP tool output treated as untrusted input (no instruction-following from tool results — architecture-level rule)
 - [ ] MCP **resources** as instruction and knowledge sources: a resource the config names is loaded like an instruction file (budget, outline, `instructions` tool), one the model asks for is read on demand through a `resource_read` tool
 - [ ] MCP **prompts** as reusable procedures: `/prompts` lists them, `/<server>:<prompt>` expands one into the turn, with its arguments completed from the prompt's argument list and `completion/complete` in the TUI command table
-- [ ] Lifecycle: lazy start, health check, restart on crash, timeout budget; `hint mcp list|status` to see it
-- [ ] Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
+- [x] Lifecycle: health check, restart on crash, timeout budget
+- [x] Lazy start: connect a server only when its tools are first needed
+- [x] `hint mcp list|status` to see it
+- [x] `hint mcp enable <name>` records project-server consent
+- [x] Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
 - [ ] Integration test with a reference MCP server (e.g. filesystem server) for tools, resources and prompts
 
 Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
@@ -59,6 +66,9 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
   A change to any of those fields after `git pull` invalidates the record and disables the server until it is enabled again.
   `hint mcp status` names the changed field; a test changes `args` after enabling.
   A global-file server is enabled by its presence.
+
+Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+MCP resources and prompts (M4–M5), the live reference-server integration test, and the final acceptance pass (M6) remain for a follow-up branch.
 
 ### WP2.2 — Repo map
 

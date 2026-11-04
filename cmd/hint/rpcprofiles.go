@@ -221,6 +221,7 @@ func (s *rpcSession) use(chat agentapi.ChatProvider, asked, effective rpc.Profil
 	)
 	s.agMu.Lock()
 	s.ag, s.asked, s.profile = ag, asked, effective
+	s.agChat, s.agLimits = chat, limits
 	s.agMu.Unlock()
 }
 

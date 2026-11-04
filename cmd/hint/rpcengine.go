@@ -14,6 +14,7 @@ import (
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/debuglog"
+	"github.com/mrYush/hint/internal/mcp"
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/provider"
@@ -49,6 +50,12 @@ type assembly struct {
 	// directory: the configuration and session directories (WP1.7). The
 	// project's own .hint/config.yaml is denied regardless.
 	denied []string
+	// consent decides whether a project MCP server may start. Nil keeps
+	// every project server disabled, which is what a test without a
+	// config directory gets.
+	consent mcp.Consent
+	// mcpDial replaces the real MCP transport in tests.
+	mcpDial mcp.DialFunc
 }
 
 // rpcEngine is the core every entry point serves: one working directory,
@@ -65,9 +72,18 @@ type rpcEngine struct {
 	pc       *project.Context
 	mode     permission.Mode
 	limits   agent.Limits
-	notices  io.Writer
-	trace    *debuglog.Log
-	debugLog func(string)
+	// mcp owns the configured MCP servers; nil when none are configured.
+	mcp *mcp.Manager
+	// mcpMu guards the one-time lazy load of the MCP tools. mcpLoaded
+	// says Tools ran, mcpErr keeps a failed registration from retrying
+	// every turn, and mcpWarned is how many warnings were already shown.
+	mcpMu     sync.Mutex
+	mcpLoaded bool
+	mcpErr    error
+	mcpWarned int
+	notices   io.Writer
+	trace     *debuglog.Log
+	debugLog  func(string)
 	// setup describes the configuration the engine was built from, for a
 	// shell that has to say where a rejected key lives.
 	setup *setupInfo
@@ -145,6 +161,7 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	}
 	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
 	warnFileKeys(cfg, notices)
+	consent := mcpConsent(home)
 	eng, err := newEngine(ctx, assembly{
 		chat:    chat,
 		cfg:     cfg,
@@ -156,10 +173,16 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		notices: notices,
 		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
 		denied:  deniedPaths(home, cwd, os.LookupEnv, store.Dir()),
+		consent: consent,
 	})
 	if err != nil {
 		cleanup()
 		return nil, nil, err
+	}
+	baseCleanup := cleanup
+	cleanup = func() {
+		eng.closeMCP()
+		baseCleanup()
 	}
 	return eng, cleanup, nil
 }
@@ -229,14 +252,43 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		reload:    as.reload,
 		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
 	}
+	// MCP servers are created here but not started: the first turn calls
+	// ensureMCP, so a run that never needs MCP pays no process startup
+	// cost. Config and consent problems that are knowable without a
+	// connection are reported now.
+	manager, err := mcp.NewManager(mcpServers(as.cfg), mcp.Options{
+		Client:      mcp.ClientInfo{Name: "hint", Version: buildVersion()},
+		ProjectRoot: root.Dir(),
+		Environ:     e.environ(),
+		Consent:     as.consent,
+		Budget:      mcp.DefaultBudget(),
+		Dial:        as.mcpDial,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("MCP servers: %w", err)
+	}
 	// The tools read the secrets and the environment through the engine,
 	// so a configuration reloaded by a profile switch is what they see.
 	registry, err := toolRegistry(root, pc.InstructionPaths, e.secrets, e.environ)
 	if err != nil {
+		_ = manager.Close()
 		return nil, fmt.Errorf("registering tools: %w", err)
 	}
 	e.registry = registry
+	e.mcp = manager
+	secrets := e.secrets()
+	e.mcpWarned = len(manager.Warnings())
+	for _, w := range manager.Warnings() {
+		fmt.Fprintf(as.notices, "hint: warning: %s\n", config.Redact(w, secrets))
+	}
 	return e, nil
+}
+
+// closeMCP releases the MCP sessions and their subprocesses, if any.
+func (e *rpcEngine) closeMCP() {
+	if e.mcp != nil {
+		_ = e.mcp.Close()
+	}
 }
 
 // secrets is every configured API key, for the redaction of tool results.
@@ -446,6 +498,11 @@ type rpcSession struct {
 	ag      *agent.Agent
 	asked   rpc.ProfileRef
 	profile rpc.ProfileRef
+	// agChat and agLimits are what use built the agent from; applyMCP
+	// rebuilds it with the MCP tools once they are loaded.
+	agChat     agentapi.ChatProvider
+	agLimits   agent.Limits
+	mcpApplied bool
 
 	// warnedSave remembers that the "session not fully saved" notice was
 	// printed, so a conversation on a broken disk says it once, not per
@@ -490,6 +547,13 @@ func (s *rpcSession) Profile() rpc.ProfileRef {
 // read-only disk is better learned about now than after the answer.
 func (s *rpcSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
 	s.slot.set(ask)
+	// MCP servers start on the first turn, not while the engine is built.
+	// A failure here is a turn failure, before anything is recorded.
+	if err := s.eng.ensureMCP(ctx); err != nil {
+		s.slot.set(nil)
+		return nil, err
+	}
+	s.applyMCP()
 	user := agentapi.UserMessage(text)
 	if err := s.rec.Append(user); err != nil {
 		s.slot.set(nil)
@@ -622,15 +686,17 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 
 // toolRegistry builds the tool set the engine offers the model: every
 // built-in, write_file, edit_file and bash included, plus the
-// instructions tool over the instruction files this run discovered. They
-// are only safe to register because adopt() puts the agent behind a
-// permission.Gate; main_test.go pins both halves of that.
-func toolRegistry(root tool.Root, instructionPaths []string, secrets func() []string, environ func() []string) (*tool.Registry, error) {
+// instructions tool over the instruction files this run discovered and
+// any MCP tools the caller passes. They are only safe to register because
+// adopt() puts the agent behind a permission.Gate; main_test.go pins both
+// halves of that.
+func toolRegistry(root tool.Root, instructionPaths []string, secrets func() []string, environ func() []string, extra ...agentapi.Tool) (*tool.Registry, error) {
 	var opts []builtin.Option
 	if environ != nil {
 		opts = append(opts, builtin.WithEnviron(environ))
 	}
 	tools := append(builtin.All(root, opts...), builtin.NewInstructions(instructionPaths))
+	tools = append(tools, extra...)
 	for i, t := range tools {
 		// Every result passes the redaction, so a key that leaked some
 		// other way never reaches the model, an event or the session.
@@ -686,4 +752,25 @@ func systemPrompt(pc *project.Context, instructions []project.Instruction, pendi
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// applyMCP rebuilds the session's agent with the registry as it stands
+// after the one lazy MCP load. The permission gate, recorder and preamble
+// survive; only the tool list changes.
+func (s *rpcSession) applyMCP() {
+	s.agMu.Lock()
+	defer s.agMu.Unlock()
+	if s.mcpApplied {
+		return
+	}
+	s.mcpApplied = true
+	if s.agChat == nil {
+		return
+	}
+	s.ag = agent.New(s.agChat,
+		agent.WithTools(s.eng.registry.Tools()...),
+		agent.WithAuthorizer(s.gate),
+		agent.WithLimits(s.agLimits),
+		agent.WithPreamble(s.pre),
+	)
 }

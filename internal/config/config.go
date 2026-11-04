@@ -231,9 +231,16 @@ type Config struct {
 	Completion CompletionSettings
 	// SecretStore is the secrets: block (WP1.7).
 	SecretStore SecretsSettings
+	// MCPServers is the mcp_servers: block, in config order (WP2.1).
+	// A project file may add a server, never change a global one, and a
+	// project server starts disabled until consent is recorded.
+	MCPServers []MCPServer
 	// keyEnv are the variables the files' api_key values referred to
 	// (${VAR}); SecretEnv adds the well-known ones.
 	keyEnv []string
+	// mcpSecrets are the expanded MCP header and env values and the
+	// values behind their ${VAR} references.
+	mcpSecrets []string
 	// Warnings collects non-fatal findings (legacy paths, migrated flat
 	// keys, ignored values). The CLI prints them to stderr once per run.
 	Warnings []string
@@ -288,20 +295,26 @@ func (c *Config) Fallback() (Profile, bool) {
 	return p, true
 }
 
-// Secrets returns every distinct non-empty API key in the configuration —
-// the input for Redact when scrubbing log output.
+// Secrets returns every distinct non-empty API key and MCP credential in
+// the configuration — the input for Redact when scrubbing log output.
 func (c *Config) Secrets() []string {
-	seen := make(map[string]struct{}, len(c.Providers))
+	seen := make(map[string]struct{}, len(c.Providers)+len(c.mcpSecrets))
 	var out []string
+	add := func(s string) {
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
 	for _, p := range c.Providers {
-		if p.APIKey == "" {
-			continue
-		}
-		if _, ok := seen[p.APIKey]; ok {
-			continue
-		}
-		seen[p.APIKey] = struct{}{}
-		out = append(out, p.APIKey)
+		add(p.APIKey)
+	}
+	for _, s := range c.mcpSecrets {
+		add(s)
 	}
 	return out
 }
