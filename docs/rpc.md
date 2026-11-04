@@ -122,6 +122,32 @@ Like `complete`, it runs beside the connection's other requests, so its answer m
 
 `session.profile`, `session.fork`, `profile.list` (`v0.3`, WP1.5) and `complete`, `complete.cancel`, `complete.settings`, `profile.models` (WP1.6) were added without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
 
+### MCP prompts
+
+`prompt.servers` returns `{"servers":["docs"]}` from the enabled configuration without connecting to those servers.
+The TUI uses it to decide whether a command prefix needs prompt discovery; an unknown slash-command prefix does not start MCP servers.
+
+`prompt.list` returns `{"prompts":[{"server":"docs","name":"review","description":"Review a file.","arguments":[{"name":"path","required":true}]}]}`.
+It connects to configured MCP servers on demand; a server without prompts contributes an empty list.
+
+`prompt.get` expands a prompt with positional string arguments in the order declared by `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"prompt.get","params":{"server":"docs","name":"review","arguments":["main.go"]}}
+```
+
+The result is `{"text":"..."}`.
+A shell sends that text as a user turn, never as system text or a recorded assistant answer.
+
+`prompt.complete` accepts `{"server":"docs","prompt":"review","argument":"path","value":"ma","arguments":{"repo":"hint"}}` and returns `{"values":["main.go", ...]}` from MCP `completion/complete`.
+The optional `arguments` object carries already resolved arguments as MCP completion context.
+A server without completion support returns an empty `values` list.
+`has_more` is true when the server had further values it did not return.
+Missing `server`, `name`, `prompt` or `argument` fields produce `-32602 invalid params`; an unknown server or prompt produces `-32005 not found`.
+`prompt.list`, `prompt.get` and `prompt.complete` run beside the connection's other requests, like `complete` and `profile.models`, so `permission.reply` and `turn.cancel` are not delayed by an MCP call.
+Stopping the client does not cancel `prompt.get` or `prompt.complete` on the core; that work ends when the connection closes or the MCP timeout fires.
+These four methods were added by WP2.9 without a protocol version bump; an older core answers `-32601 method not found`.
+
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.
 Another connection may attach, and may start the next turn once `turn.done` has arrived.

@@ -285,6 +285,7 @@ type fileMCPServer struct {
 	Permission     string            `yaml:"permission"`
 	Timeout        *time.Duration    `yaml:"timeout"`
 	Tools          *fileMCPTools     `yaml:"tools"`
+	Resources      []string          `yaml:"resources"`
 	DescriptionMax *int              `yaml:"description_max"`
 	Project        bool              `yaml:"-"`
 }
@@ -309,6 +310,7 @@ func buildMCPServers(in []fileMCPServer) []MCPServer {
 			URL:        s.URL,
 			Headers:    cloneStrings(s.Headers),
 			Permission: s.Permission,
+			Resources:  append([]string(nil), s.Resources...),
 			Project:    s.Project,
 		}
 		if s.Timeout != nil {
@@ -630,7 +632,7 @@ func (l *loader) expandMCP(fc *fileConfig) {
 			// into a command it chose: a shell would expand the
 			// reference from the child's environment even though the
 			// file never set env. Leave it literal.
-			if envRefs.MatchString(s.Command) || envRefs.MatchString(s.URL) || anyMatches(s.Args) {
+			if envRefs.MatchString(s.Command) || envRefs.MatchString(s.URL) || anyMatches(s.Args) || anyMatches(s.Resources) {
 				l.warnf("mcp_servers.%s: a project server value is not expanded; ${VAR} stays literal", s.Name)
 			}
 			out = append(out, s)
@@ -641,6 +643,9 @@ func (l *loader) expandMCP(fc *fileConfig) {
 			s.Args[i] = expandValue(s.Args[i], l.opts.LookupEnv)
 		}
 		s.URL = l.expandMCPRefs(s.Name, "url", s.URL)
+		for i := range s.Resources {
+			s.Resources[i] = l.expandMCPRefs(s.Name, fmt.Sprintf("resources.%d", i), s.Resources[i])
+		}
 		for _, k := range sortedKeys(s.Env) {
 			s.Env[k] = l.expandMCPValue(s.Name, "env."+k, s.Env[k])
 		}

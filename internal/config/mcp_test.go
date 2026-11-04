@@ -40,6 +40,7 @@ mcp_servers:
       TOKEN: "${TOKEN_VALUE}"
     permission: read
     timeout: 5s
+    resources: ["test://rules", "test://guide"]
     tools:
       allow: ["read_file"]
     description_max: 200
@@ -71,6 +72,9 @@ mcp_servers:
 	}
 	if len(fs.Tools.Allow) != 1 || fs.Tools.Allow[0] != "read_file" {
 		t.Errorf("fs allow = %v", fs.Tools.Allow)
+	}
+	if len(fs.Resources) != 2 || fs.Resources[0] != "test://rules" || fs.Resources[1] != "test://guide" {
+		t.Errorf("fs resources = %v", fs.Resources)
 	}
 	web := cfg.MCPServers[1]
 	if web.Permission != "execute" {
@@ -222,6 +226,11 @@ func TestMCPServersValidation(t *testing.T) {
 			want: "permission must be",
 		},
 		{
+			name: "relative resource",
+			yaml: "mcp_servers:\n  s:\n    transport: stdio\n    command: c\n    resources: [rules]\n",
+			want: "resource URI",
+		},
+		{
 			name: "negative timeout",
 			yaml: "mcp_servers:\n  s:\n    transport: stdio\n    command: c\n    timeout: -1s\n",
 			want: "timeout must not be negative",
@@ -369,5 +378,60 @@ mcp_servers:
 	}
 	if !containsString(cfg.Secrets(), "tok_1234567890") {
 		t.Errorf("Secrets() = %v; a URL reference was not collected", cfg.Secrets())
+	}
+}
+
+func TestMCPServersResourceExpansion(t *testing.T) {
+	global := mcpProviderYAML + `
+mcp_servers:
+  fs:
+    transport: stdio
+    command: npx
+    resources: ["test://${RESOURCE_TOKEN}/rules"]
+`
+	cfg, err := loadMCP(t, global, "", map[string]string{"RESOURCE_TOKEN": "secret-token"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.MCPServers[0].Resources[0]; got != "test://secret-token/rules" {
+		t.Errorf("resource = %q", got)
+	}
+	if !containsString(cfg.Secrets(), "secret-token") {
+		t.Errorf("Secrets() = %v", cfg.Secrets())
+	}
+}
+
+func TestMCPServersProjectResourceNotExpanded(t *testing.T) {
+	project := `
+mcp_servers:
+  p:
+    transport: stdio
+    command: command
+    resources: ["test://${RESOURCE_TOKEN}/rules"]
+`
+	cfg, err := loadMCP(t, "", project, map[string]string{"RESOURCE_TOKEN": "secret-token"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.MCPServers[0].Resources[0]; got != "test://${RESOURCE_TOKEN}/rules" {
+		t.Errorf("project resource = %q", got)
+	}
+	if containsString(cfg.Secrets(), "secret-token") {
+		t.Errorf("Secrets() = %v", cfg.Secrets())
+	}
+	hasWarning(t, cfg, "not expanded")
+}
+
+func TestMCPServersDuplicateResource(t *testing.T) {
+	global := mcpProviderYAML + `
+mcp_servers:
+  fs:
+    transport: stdio
+    command: npx
+    resources: ["test://rules", "test://rules"]
+`
+	_, err := loadMCP(t, global, "", nil, false)
+	if err == nil || !strings.Contains(err.Error(), "more than once") {
+		t.Errorf("LoadFrom = %v", err)
 	}
 }

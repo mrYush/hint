@@ -106,6 +106,7 @@ secrets:
 # Credentials belong in this global file. A project .hint/config.yaml may add
 # a server, but never env or headers, and the project's server does not start
 # until `hint mcp enable <name>` records the user's approval outside the repository.
+# Global resource URIs expand ${VAR}; project resource URIs stay literal.
 #
 # mcp_servers:
 #   filesystem:
@@ -114,6 +115,7 @@ secrets:
 #     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
 #     permission: read
 #     timeout: 30s
+#     resources: ["file:///absolute/path/to/README.md"] # example; use a path this server may read
 #     tools:
 #       allow: ["read_text_file", "list_directory"]  # optional; deny is the other half
 #   github:

@@ -17,23 +17,23 @@ Added 2026-10-18 together with WP2.6 and WP2.7.
 
 **Branch:** `dev/wp2.1-mcp-client`
 
-M0–M3 and M2 are merged in PR [#87](https://github.com/mrYush/hint/pull/87); M4–M6 remain and take a follow-up branch.
+M0–M3 and the lifecycle/CLI slice are merged in PR [#87](https://github.com/mrYush/hint/pull/87); resources, prompts and final acceptance moved to WP2.9.
 
 SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) **`v1.8.0`, pinned** (Q6).
 
-- [x] `mcp_servers:` section in config (stdio and streamable HTTP transports), layered like every other key: global file, project `.hint/config.yaml`, with the project able to add servers and never a key
-- [x] Discovered MCP tools registered in the tool registry alongside built-ins, under `<server>.<tool>` names
-- [x] MCP schemas preserve JSON and reject numbers with `abs(v) >= 2^53`; numeric normalization is documented and tested
-- [x] Permission wrapper around every MCP tool (class declared in config, default `execute`)
-- [x] MCP tool output treated as untrusted input (no instruction-following from tool results — architecture-level rule)
-- [ ] MCP **resources** as instruction and knowledge sources: a resource the config names is loaded like an instruction file (budget, outline, `instructions` tool), one the model asks for is read on demand through a `resource_read` tool
-- [ ] MCP **prompts** as reusable procedures: `/prompts` lists them, `/<server>:<prompt>` expands one into the turn, with its arguments completed from the prompt's argument list and `completion/complete` in the TUI command table
-- [x] Lifecycle: health check, restart on crash, timeout budget
-- [x] Lazy start: connect a server only when its tools are first needed
-- [x] `hint mcp list|status` to see it
-- [x] `hint mcp enable <name>` records project-server consent
-- [x] Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
-- [ ] Integration test with a reference MCP server (e.g. filesystem server) for tools, resources and prompts
+- ✅ `mcp_servers:` section in config (stdio and streamable HTTP transports), layered like every other key: global file, project `.hint/config.yaml`, with the project able to add servers and never a key
+- ✅ Discovered MCP tools registered in the tool registry alongside built-ins, under `<server>.<tool>` names
+- ✅ MCP schemas preserve JSON and reject numbers with `abs(v) >= 2^53`; numeric normalization is documented and tested
+- ✅ Permission wrapper around every MCP tool (class declared in config, default `execute`)
+- ✅ MCP tool output treated as untrusted input (no instruction-following from tool results — architecture-level rule)
+- ✅ MCP **resources** as instruction and knowledge sources: moved to WP2.9
+- ✅ MCP **prompts** as reusable procedures: moved to WP2.9
+- ✅ Lifecycle: health check, restart on crash, timeout budget
+- ✅ Lazy start: connect a server only when its tools are first needed
+- ✅ `hint mcp list|status` to see it
+- ✅ `hint mcp enable <name>` records project-server consent
+- ✅ Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
+- ✅ Integration test with a reference MCP server for tools, resources and prompts: moved to WP2.9
 
 Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
 
@@ -67,8 +67,8 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
   `hint mcp status` names the changed field; a test changes `args` after enabling.
   A global-file server is enabled by its presence.
 
-Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
-MCP resources and prompts (M4–M5), the live reference-server integration test, and the final acceptance pass (M6) remain for a follow-up branch.
+Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the first slice landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+MCP resources and prompts, the live reference-server integration test, and the final acceptance pass moved to WP2.9.
 
 ### WP2.2 — Repo map
 
@@ -159,6 +159,59 @@ This package lets the model discover and load a hidden tool on demand instead of
 - [ ] Regression test with two fake servers whose schemas exceed the budget: a hidden tool is found and called while the full catalog never enters the prompt.
 
 Acceptance: with more MCP tools than the budget, the agent finds and calls a hidden tool in one session, and the prompt carries only the schemas it selected.
+
+### WP2.9 — MCP resources, prompts and acceptance
+
+**Branch:** `dev/wp2.9-mcp-resources-prompts`
+
+Follow-up to WP2.1 ([#86](https://github.com/mrYush/hint/issues/86)), using the pinned SDK and the decisions recorded above.
+
+The configuration names instruction resources as `mcp_servers.<name>.resources: [<uri>, ...]`.
+They load during the existing first-turn MCP initialization and share the instruction budget; on-demand reads use explicit `server` and `uri` arguments and remain tool data.
+Prompt list and expansion are available in both the TUI and the plain REPL; `completion/complete` integrates with the TUI command table.
+Tab learns server names from `prompt.servers` without connecting, and `prompt.list`, `prompt.get` and `prompt.complete` run beside the connection loop so a permission reply and `turn.cancel` are not stuck behind an MCP call.
+
+- ✅ A resource named in the config loads like an instruction file, with the existing budget, outline and `instructions` tool.
+- ✅ A model-requested resource is read on demand through `resource_read`; its contents remain data, never instructions.
+- ✅ `/prompts` lists server prompts, and `/<server>:<prompt>` expands one into the turn with its arguments.
+- ✅ Prompt arguments and `completion/complete` are integrated into the TUI command table.
+- ✅ An opt-in integration test with a cached reference MCP server covers tools, resources and prompts; it is skipped by default and does not require network access in CI.
+- ✅ Documentation and the full verification gate are updated, including `go test -race ./...` and the Linux ARM64 cross-build.
+
+The reference-server integration run is a manual local check enabled by `HINT_TEST_MCP_REFERENCE=1` because CI does not pre-cache `@modelcontextprotocol/server-everything`; once enabled, any dial or client error fails the test.
+
+### WP2.10 — `/new`: start a fresh session
+
+**Branch:** `dev/wp2.10-new-session`
+
+A fresh session starts only by leaving the shell and running `hint` again.
+`/sessions` resumes or forks an existing one, and Esc there opens a new session only when the shell has none yet (`hint -r` on a directory with no sessions).
+`session.open` already creates an empty session; neither shell offers it once one is open.
+
+- [ ] `/new` in the TUI calls `session.open` and moves the shell onto that session: an empty transcript, the new id in the header, and a notice that names the session just left.
+- [ ] The same command in the line REPL, so `--plain` is not left without it.
+  It prints the id it left and the id it opened, and the next question is a turn of the new session.
+- [ ] The command takes no argument and is neither offered nor run while a turn is in flight, the same rule as `/sessions`.
+- [ ] The new session answers with the default profile.
+  A `/profile` switch stays on the session that was left.
+- [ ] A run started with `--no-session` keeps the new session ephemeral (`session.open` with `{"ephemeral": true}`).
+- [ ] `/help` lists `/new` in both shells, and the README Sessions section says a new session starts with the command as well as with a fresh `hint`.
+- [ ] Tests cover the TUI move onto an empty recorded session whose previous id stays listable, the REPL switch, a busy turn that does not run the command, and an ephemeral run that still records nothing.
+
+Decisions (2026-11-04):
+
+- **No new RPC method.**
+  `/new` is `session.open`, which already returns an empty session on the default profile.
+  The shell drops its view of the previous session; the file stays, and another client of `hint serve` can still `session.attach` it.
+- **The default profile, not the one in use.**
+  A new `hint` already answers with the default.
+  Copying the switched profile would make `/new` a fork with an empty history.
+- **`--no-session` stays off disk.**
+  The flag asked the run to record nothing, so `/new` repeats `ephemeral: true` instead of opening a file.
+- **Both shells.**
+  WP1.5 put `/profile` in the REPL for the same reason: `--plain` is the same session, only a different client.
+- **Fork stays `f`.**
+  `/new` does not take an id or a turn, and the session list does not grow a "new" row.
 
 ## Acceptance criteria
 

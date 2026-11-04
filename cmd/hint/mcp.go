@@ -39,6 +39,7 @@ func mcpServers(cfg *config.Config) []mcp.ServerConfig {
 			Permission:     agentapi.ActionClass(s.Permission),
 			Timeout:        s.Timeout,
 			Tools:          mcp.ToolFilter{Allow: append([]string(nil), s.Tools.Allow...), Deny: append([]string(nil), s.Tools.Deny...)},
+			Resources:      append([]string(nil), s.Resources...),
 			DescriptionMax: s.DescriptionMax,
 			Project:        s.Project,
 		})
@@ -57,11 +58,11 @@ func copyStrings(in map[string]string) map[string]string {
 	return out
 }
 
-// ensureMCP starts the configured MCP servers and registers their tools
-// once. It runs before the first turn, not while the engine is built, so
-// a run that never needs MCP pays no process startup cost. A canceled
-// context is retried on the next turn; a registration error is permanent
-// and named on every turn until the run restarts.
+// ensureMCP starts the configured MCP servers, registers their tools and
+// loads configured resources once. It runs before the first turn, not while
+// the engine is built, so a run that never needs MCP pays no process startup
+// cost. A canceled context is retried on the next turn; a registration error
+// is permanent and named on every turn until the run restarts.
 func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 	e.mcpMu.Lock()
 	defer e.mcpMu.Unlock()
@@ -76,6 +77,11 @@ func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("MCP tools: %w", err)
 	}
+	resources, err := e.mcp.ConfiguredResources(ctx)
+	if err != nil {
+		return fmt.Errorf("MCP resources: %w", err)
+	}
+	e.addMCPResources(ctx, resources)
 	warnings := e.mcp.Warnings()
 	if e.mcpWarned < len(warnings) {
 		secrets := e.secrets()
@@ -83,6 +89,12 @@ func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 			fmt.Fprintf(e.notices, "hint: warning: %s\n", config.Redact(w, secrets))
 		}
 		e.mcpWarned = len(warnings)
+	}
+	for _, server := range e.mcp.Servers() {
+		if server.Enabled {
+			tools = append([]agentapi.Tool{mcp.NewResourceReadTool(e.mcp)}, tools...)
+			break
+		}
 	}
 	for _, t := range tools {
 		if err := e.registry.Register(tool.Redacting(t, e.secrets)); err != nil {
@@ -243,13 +255,17 @@ func enableMCPServer(servers []mcp.ServerConfig, root, name string, store mcp.Co
 
 func printMCPList(out io.Writer, infos []mcp.ServerInfo) error {
 	tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tTOOLS")
+	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tTOOLS\tRESOURCES")
 	for _, info := range infos {
 		state := "configured"
 		if !info.Enabled {
 			state = "disabled"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", info.Name, info.Transport, info.Permission, state, toolsSummary(info.Tools))
+		resources := strings.Join(info.Resources, ", ")
+		if resources == "" {
+			resources = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", info.Name, info.Transport, info.Permission, state, toolsSummary(info.Tools), resources)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -264,7 +280,7 @@ func printMCPList(out io.Writer, infos []mcp.ServerInfo) error {
 
 func printMCPStatus(out io.Writer, statuses []mcp.ServerStatus) error {
 	tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tPROTOCOL\tSERVER\tTOOLS\tBYTES\tHEALTH")
+	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tPROTOCOL\tSERVER\tTOOLS\tBYTES\tRESOURCES\tHEALTH")
 	for _, st := range statuses {
 		protocol, server, health := st.Protocol, st.ServerName, st.Health
 		if protocol == "" {
@@ -276,8 +292,8 @@ func printMCPStatus(out io.Writer, statuses []mcp.ServerStatus) error {
 		if health == "" {
 			health = "-"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
-			st.Name, st.Transport, st.Permission, st.State, protocol, server, st.Tools, st.Bytes, health)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+			st.Name, st.Transport, st.Permission, st.State, protocol, server, st.Tools, st.Bytes, len(st.Resources), health)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
