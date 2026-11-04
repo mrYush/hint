@@ -35,11 +35,13 @@ const help = "enter sends · shift+enter newline · ↑↓ pgup/pgdn scroll · e
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
 // (dialog, picker, renderer) are the state that outlives one Update.
 type model struct {
-	ctx           context.Context
-	cl            *rpc.Client
-	send          sender
-	sessionID     string
-	recorded      bool
+	ctx       context.Context
+	cl        *rpc.Client
+	send      sender
+	sessionID string
+	recorded  bool
+	// ephemeral is the run's --no-session. /new repeats it.
+	ephemeral     bool
 	profile       rpc.ProfileRef
 	serverVersion string
 	dark          bool
@@ -135,6 +137,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		send:          send,
 		sessionID:     opts.SessionID,
 		recorded:      opts.Recorded,
+		ephemeral:     opts.Ephemeral,
 		profile:       opts.Profile,
 		serverVersion: opts.ServerVersion,
 		setup:         opts.Setup,
@@ -629,6 +632,12 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		m.add(entry{kind: entryNotice, text: helpText(), done: true})
 	case "/sessions":
 		return m.openPicker()
+	case "/new":
+		if len(fields) > 1 {
+			m.status = "/new takes no argument"
+			return m, nil
+		}
+		return m.openFresh()
 	case "/prompts":
 		return m.loadPrompts(true, "")
 	case "/completion":

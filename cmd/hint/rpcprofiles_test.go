@@ -10,6 +10,7 @@ import (
 
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/rpc"
+	"github.com/mrYush/hint/pkg/agentapi"
 )
 
 // twoProfiles is a configuration with the fake default profile and a
@@ -294,6 +295,106 @@ func TestREPLProfileCommand(t *testing.T) {
 	}
 	if infos := sessionsOf(t, as); len(infos) != 1 || infos[0].Messages != 2 {
 		t.Errorf("sessions = %+v; want one with the exchange", infos)
+	}
+}
+
+func TestREPLNewSessionLeavesTheOldOne(t *testing.T) {
+	first := &fakeChat{reply: func(int) string { return "from fake" }}
+	second := &fakeChat{reply: func(int) string { return "from other" }}
+	as, sio, out, stderr := testAssembly(t, first, "/new extra\nhello\n/profile other\n/new\nthere\n/exit\n")
+	as.cfg = twoProfiles()
+	as.opts.session = sessionNew
+	a, err := assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := a.srv.Engine.(*rpcEngine)
+	eng.providers[rpc.ProfileRef{Profile: "other"}] = second
+	left := a.sessionID
+	if err := a.repl(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if a.sessionID == left {
+		t.Fatal("/new kept the same session")
+	}
+	if !strings.Contains(stderr.String(), "takes no argument") {
+		t.Errorf("stderr lacks the rejected argument:\n%s", stderr.String())
+	}
+	for _, id := range []string{left, a.sessionID} {
+		if !strings.Contains(stderr.String(), id) {
+			t.Errorf("stderr does not name session %s:\n%s", id, stderr.String())
+		}
+	}
+	if len(second.seen()) != 0 {
+		t.Errorf("the profile switched on the old session answered the new one: %d requests", len(second.seen()))
+	}
+	seen := first.seen()
+	if len(seen) != 2 {
+		t.Fatalf("default profile saw %d requests, want hello and there", len(seen))
+	}
+	var users []string
+	for _, msg := range seen[1].Messages {
+		if msg.Role == agentapi.RoleUser {
+			users = append(users, msg.Text())
+		}
+	}
+	if len(users) != 1 || users[0] != "there" {
+		t.Errorf("the new session's question carried %q", users)
+	}
+	if eng.live[left].Profile().Profile != "other" {
+		t.Errorf("the session left behind answers as %+v", eng.live[left].Profile())
+	}
+	if got := eng.live[a.sessionID].Profile(); got.Profile != "fake" || got.Model != "m" {
+		t.Errorf("the new session answers as %+v; want the default", got)
+	}
+	if infos := sessionsOf(t, as); len(infos) != 2 {
+		t.Errorf("sessions on disk = %d, want the one left and the new one", len(infos))
+	}
+	a.close()
+	if out.String() != "from fake\nfrom fake\n" {
+		t.Errorf("stdout = %q", out.String())
+	}
+}
+
+func TestREPLNewSessionStaysOffDisk(t *testing.T) {
+	chat := &fakeChat{reply: func(int) string { return "ok" }}
+	as, sio, out, stderr := testAssembly(t, chat, "/new\nhello\n/exit\n")
+	as.opts.session = sessionOff
+	a, err := assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := a.sessionID
+	if err := a.repl(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	eng := a.srv.Engine.(*rpcEngine)
+	if a.sessionID == left {
+		t.Fatal("/new kept the same session")
+	}
+	if !strings.Contains(stderr.String(), "left session "+left) || !strings.Contains(stderr.String(), "this is session "+a.sessionID) {
+		t.Errorf("stderr = %q", stderr.String())
+	}
+	var users []string
+	for _, msg := range eng.live[a.sessionID].Messages() {
+		if msg.Role == agentapi.RoleUser {
+			users = append(users, msg.Text())
+		}
+	}
+	if len(users) != 1 || users[0] != "hello" {
+		t.Errorf("new session messages = %q", users)
+	}
+	for _, msg := range eng.live[left].Messages() {
+		if msg.Role == agentapi.RoleUser {
+			t.Errorf("the session left behind got %q", msg.Text())
+		}
+	}
+	if infos := sessionsOf(t, as); len(infos) != 0 {
+		t.Errorf("an ephemeral /new reached the disk: %+v", infos)
+	}
+	a.close()
+	if out.String() != "ok\n" {
+		t.Errorf("stdout = %q", out.String())
 	}
 }
 

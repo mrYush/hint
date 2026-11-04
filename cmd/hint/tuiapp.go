@@ -16,6 +16,7 @@ func (a *app) tui(ctx context.Context) error {
 		Client:        a.client,
 		SessionID:     a.sessionID,
 		Recorded:      a.recorded,
+		Ephemeral:     a.opts.session == sessionOff,
 		History:       a.history,
 		Profile:       a.profile,
 		PickSession:   a.sessionID == "",

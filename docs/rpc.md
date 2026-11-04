@@ -39,6 +39,8 @@ Tools cannot leave that directory.
 
 `session.open` creates a session.
 With `{"ephemeral":true}` it is not written to disk: it has an id for the life of the server and nothing else (`hint --no-session`).
+Both shells' `/new` is this method: a recorded session, or an ephemeral one when the run itself is `--no-session`.
+It answers with the default profile.
 `session.attach` with `{"id":"..."}` continues one that already exists (an id prefix is enough when it is unique).
 Both return the session:
 

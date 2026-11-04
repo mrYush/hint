@@ -188,15 +188,15 @@ A fresh session starts only by leaving the shell and running `hint` again.
 `/sessions` resumes or forks an existing one, and Esc there opens a new session only when the shell has none yet (`hint -r` on a directory with no sessions).
 `session.open` already creates an empty session; neither shell offers it once one is open.
 
-- [ ] `/new` in the TUI calls `session.open` and moves the shell onto that session: an empty transcript, the new id in the header, and a notice that names the session just left.
-- [ ] The same command in the line REPL, so `--plain` is not left without it.
+- ✅ `/new` in the TUI calls `session.open` and moves the shell onto that session: an empty transcript, the new id in the header, and a notice that names the session just left.
+- ✅ The same command in the line REPL, so `--plain` is not left without it.
   It prints the id it left and the id it opened, and the next question is a turn of the new session.
-- [ ] The command takes no argument and is neither offered nor run while a turn is in flight, the same rule as `/sessions`.
-- [ ] The new session answers with the default profile.
+- ✅ The command takes no argument and is neither offered nor run while a turn is in flight, the same rule as `/sessions`.
+- ✅ The new session answers with the default profile.
   A `/profile` switch stays on the session that was left.
-- [ ] A run started with `--no-session` keeps the new session ephemeral (`session.open` with `{"ephemeral": true}`).
-- [ ] `/help` lists `/new` in both shells, and the README Sessions section says a new session starts with the command as well as with a fresh `hint`.
-- [ ] Tests cover the TUI move onto an empty recorded session whose previous id stays listable, the REPL switch, a busy turn that does not run the command, and an ephemeral run that still records nothing.
+- ✅ A run started with `--no-session` keeps the new session ephemeral (`session.open` with `{"ephemeral": true}`).
+- ✅ `/help` lists `/new` in both shells, and the README Sessions section says a new session starts with the command as well as with a fresh `hint`.
+- ✅ Tests cover the TUI move onto an empty recorded session whose previous id stays listable, the REPL switch, a busy turn that does not run the command, and an ephemeral run that still records nothing.
 
 Decisions (2026-11-04):
 
