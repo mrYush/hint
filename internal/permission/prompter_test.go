@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/mrYush/hint/internal/permission"
@@ -141,27 +142,56 @@ func TestReaderPrompter_EOFDeniesAndSaysSo(t *testing.T) {
 }
 
 func TestReaderPrompter_CancelWhileWaiting(t *testing.T) {
-	// A pipe that never delivers a line: the only way out is ctx.
-	pr, pw := io.Pipe()
-	defer func() { _ = pw.Close() }()
-	var out bytes.Buffer
-	p := permission.NewReaderPrompter(pr, &out)
+	// The pipe stays quiet until the answer is written, so the only way
+	// out of the first prompt is the context. The answer is written
+	// after that next prompt is already waiting: Prompt drops a line
+	// that is already queued, and writing it earlier leaves the prompt
+	// blocked on a line that will never come.
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		var out bytes.Buffer
+		p := permission.NewReaderPrompter(pr, &out)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
-	d, err := p.Prompt(ctx, permission.Ask{Request: execReq("ls")})
-	if d != permission.Deny || !errors.Is(err, context.Canceled) {
-		t.Fatalf("= %v, %v; want Deny, context.Canceled", d, err)
-	}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			time.Sleep(time.Second)
+			cancel()
+		}()
+		d, err := p.Prompt(ctx, permission.Ask{Request: execReq("ls")})
+		if d != permission.Deny || !errors.Is(err, context.Canceled) {
+			t.Fatalf("= %v, %v; want Deny, context.Canceled", d, err)
+		}
 
-	// The same prompter is usable for the next question: the reader
-	// goroutine survived the cancel and picks up the next line.
-	go func() { _, _ = io.WriteString(pw, "y\n") }()
-	d, err = p.Prompt(context.Background(), permission.Ask{Request: execReq("ls")})
-	if d != permission.Allow || err != nil {
-		t.Fatalf("second prompt = %v, %v; want Allow", d, err)
-	}
+		// The same prompter is usable for the next question: the reader
+		// goroutine survived the cancel and picks up the next line.
+		type answer struct {
+			d   permission.Decision
+			err error
+		}
+		got := make(chan answer, 1)
+		go func() {
+			d, err := p.Prompt(context.Background(), permission.Ask{Request: execReq("ls")})
+			got <- answer{d, err}
+		}()
+		synctest.Wait()
+		if _, err := io.WriteString(pw, "y\n"); err != nil {
+			t.Fatal(err)
+		}
+		res := <-got
+		if res.d != permission.Allow || res.err != nil {
+			t.Fatalf("second prompt = %v, %v; want Allow", res.d, res.err)
+		}
+
+		// Closing the pipe delivers EOF. Read it so the reader goroutine
+		// exits: synctest.Test waits for every goroutine in the bubble.
+		if err := pw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		d, err = p.Prompt(context.Background(), permission.Ask{Request: execReq("ls")})
+		if d != permission.Deny || err != nil {
+			t.Fatalf("prompt after EOF = %v, %v; want Deny", d, err)
+		}
+	})
 }
