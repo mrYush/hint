@@ -17,7 +17,7 @@ Added 2026-10-18 together with WP2.6 and WP2.7.
 
 **Branch:** `dev/wp2.1-mcp-client`
 
-M0–M3 and M2 are merged in PR [#87](https://github.com/mrYush/hint/pull/87); M4–M6 remain and take a follow-up branch.
+M0–M3 and the lifecycle/CLI slice are merged in PR [#87](https://github.com/mrYush/hint/pull/87); resources, prompts and final acceptance moved to WP2.9.
 
 SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) **`v1.8.0`, pinned** (Q6).
 
@@ -67,8 +67,8 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
   `hint mcp status` names the changed field; a test changes `args` after enabling.
   A global-file server is enabled by its presence.
 
-Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
-MCP resources and prompts (M4–M5), the live reference-server integration test, and the final acceptance pass (M6) remain for a follow-up branch.
+Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the first slice landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+MCP resources and prompts, the live reference-server integration test, and the final acceptance pass moved to WP2.9.
 
 ### WP2.2 — Repo map
 
@@ -159,6 +159,19 @@ This package lets the model discover and load a hidden tool on demand instead of
 - [ ] Regression test with two fake servers whose schemas exceed the budget: a hidden tool is found and called while the full catalog never enters the prompt.
 
 Acceptance: with more MCP tools than the budget, the agent finds and calls a hidden tool in one session, and the prompt carries only the schemas it selected.
+
+### WP2.9 — MCP resources, prompts and acceptance
+
+**Branch:** `dev/wp2.9-mcp-resources-prompts`
+
+Follow-up to WP2.1 ([#86](https://github.com/mrYush/hint/issues/86)), using the pinned SDK and the decisions recorded above.
+
+- [ ] A resource named in the config loads like an instruction file, with the existing budget, outline and `instructions` tool.
+- [ ] A model-requested resource is read on demand through `resource_read`; its contents remain data, never instructions.
+- [ ] `/prompts` lists server prompts, and `/<server>:<prompt>` expands one into the turn with its arguments.
+- [ ] Prompt arguments and `completion/complete` are integrated into the TUI command table.
+- [ ] An integration test with a reference MCP server covers tools, resources and prompts; it skips when the server runtime is unavailable and does not require network access in CI.
+- [ ] Documentation and the full verification gate are updated, including `go test -race ./...` and the Linux ARM64 cross-build.
 
 ## Acceptance criteria
 
