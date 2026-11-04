@@ -1,18 +1,18 @@
 # After v0.3.1 — implementation plan
 
-> Status: steps 1–4 done, `v0.3.2` released, WP2.1 next · Created: 2026-11-01
-> Last updated: 2026-11-03 · Target: Phase 2 / `v0.4`
+> Status: steps 1–5 done; WP2.1 M4–M6 remain · Created: 2026-11-01
+> Last updated: 2026-11-04 · Target: Phase 2 / `v0.4`
 > Scope source: §7 of [release-v0.3.1.md](release-v0.3.1.md), [PLAN.md](../../PLAN.md), [phase-0](phase-0-mvp-cli.md) and [phase-2](phase-2-memory-mcp.md).
 > This file is a plan, not a second scope document: if it disagrees with `PLAN.md` or a phase file, those win.
 
 This plan covers the three items left after `v0.3.1`: the `v0.3.2` patch for [#32](https://github.com/mrYush/hint/issues/32), the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), and the start of Phase 2 with the Q6 spike and WP2.1, the MCP client.
-Steps 1–4 are done; the body below records the plan as it was written.
+Steps 1–5 are done; the body below records the plan as it was written.
 
-## State (2026-11-03)
+## State (2026-11-04)
 
-- `develop` is at `d637d3d`; `v0.3.2` is tagged on `main`, and the release documentation is final.
+- `develop` is at `ffc6a18`; `v0.3.2` is tagged on `main`, and the release documentation is final.
 - #32 (PR [#82](https://github.com/mrYush/hint/pull/82)) and #41 (PR [#83](https://github.com/mrYush/hint/pull/83)) are merged and shipped in `v0.3.2`.
-- Q6 is settled by [mcp-client-spike.md](mcp-client-spike.md); WP2.1 is the next step.
+- Q6 is settled by [mcp-client-spike.md](mcp-client-spike.md); WP2.1 M0–M3 and M2 are merged in PR [#87](https://github.com/mrYush/hint/pull/87).
 
 ## Order
 
@@ -24,8 +24,8 @@ Steps 1–4 are done; the body below records the plan as it was written.
 | 4 | `docs/q6-mcp-spike` | done | spike document and Q6 decision; see [mcp-client-spike.md](mcp-client-spike.md) | 2–3 days |
 | 5 | `dev/wp2.1-mcp-client` | done | PR [#87](https://github.com/mrYush/hint/pull/87), `Refs #86`: M0–M3 and M2; M4–M6 remain in WP2.1 | 3–4 weeks for WP2.1 |
 
-Steps 1–4 are done.
-WP2.1 is the only remaining step; Q6 no longer blocks it.
+Steps 1–5 are done.
+WP2.1 continues with M4–M6; Q6 no longer blocks it.
 
 ## Alignment with PLAN.md
 
