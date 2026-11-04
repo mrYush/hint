@@ -30,6 +30,7 @@ hint/
 │   │   └── router/             # default/fallback routing
 │   ├── tool/                   # Tool registry, schema generation
 │   │   └── builtin/            # read,write,edit,ls,glob,grep,bash,todo
+│   ├── mcp/                    # MCP client: servers, tool adapters, schema budget (WP2.1)
 │   ├── permission/             # modes, allow-list, prompting
 │   ├── diff/                   # line diff + unified rendering (permission previews, TUI)
 │   ├── session/                # JSONL store, resume, list (WP0.7)

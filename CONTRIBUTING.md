@@ -47,7 +47,7 @@ but breaks `GOOS=linux GOARCH=arm64 go build ./...`, it will not be merged.
 Today's code is small (`cmd/hint`, `internal/config`, `internal/provider`,
 `internal/agent`, `internal/tool`, `internal/permission`, `internal/diff`,
 `internal/session`, `internal/console`, `internal/project`,
-`internal/debuglog`, `internal/rpc`). `cmd/hint` is a client of
+`internal/debuglog`, `internal/rpc`, `internal/mcp`). `cmd/hint` is a client of
 `internal/rpc`: only the engine wiring (the `rpc*.go` files) may import the
 agent loop, and a test enforces it. The target layout is
 described in

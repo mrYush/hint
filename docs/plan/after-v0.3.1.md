@@ -22,7 +22,7 @@ Steps 1–4 are done; the body below records the plan as it was written.
 | 2 | `fix/utf8-truncation` | done | PR [#83](https://github.com/mrYush/hint/pull/83), `Closes #41` | 1–2 days |
 | 3 | `release/v0.3.2` | done | PR [#84](https://github.com/mrYush/hint/pull/84) to `main`; tag `v0.3.2` | 0.5–1 day |
 | 4 | `docs/q6-mcp-spike` | done | spike document and Q6 decision; see [mcp-client-spike.md](mcp-client-spike.md) | 2–3 days |
-| 5 | `dev/wp2.1-mcp-client` | not started | issue, branch line, first MCP slice | 3–4 weeks for WP2.1 |
+| 5 | `dev/wp2.1-mcp-client` | in progress | issue [#86](https://github.com/mrYush/hint/issues/86), branch line, first MCP slice (M0–M3) | 3–4 weeks for WP2.1 |
 
 Steps 1–4 are done.
 WP2.1 is the only remaining step; Q6 no longer blocks it.
@@ -44,7 +44,7 @@ Done since this plan was written:
 
 Still open:
 
-1. WP2.1; when it starts, change the Phase 2 status to `In progress` and add its `**Branch:**` line.
+1. WP2.1 is in progress on `dev/wp2.1-mcp-client`: the M0–M3 core slice (client, config, tools) is in the tree; lazy start, MCP resources and prompts, `hint mcp list|status`, and the live reference-server test remain.
 
 ## v0.3.2: #32 — done
 
@@ -216,9 +216,11 @@ The result is [mcp-client-spike.md](mcp-client-spike.md): spec baseline `2026-07
 Q6 is resolved in [PLAN.md](../../PLAN.md).
 No further research is needed; start WP2.1 from the spike and the Phase 2 decisions.
 
-## WP2.1: MCP client — not started
+## WP2.1: MCP client — in progress
 
 ### Branch, issue and phase file
+
+The issue is [#86](https://github.com/mrYush/hint/issues/86); the phase file carries the branch line and `In progress`.
 
 1. Create `[Phase 2][WP2.1] MCP client` from the work-package template.
    The body repeats `**Branch:** dev/wp2.1-mcp-client`, the scope and the acceptance criteria.

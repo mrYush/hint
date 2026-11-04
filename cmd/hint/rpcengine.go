@@ -14,6 +14,7 @@ import (
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/debuglog"
+	"github.com/mrYush/hint/internal/mcp"
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/provider"
@@ -49,6 +50,10 @@ type assembly struct {
 	// directory: the configuration and session directories (WP1.7). The
 	// project's own .hint/config.yaml is denied regardless.
 	denied []string
+	// consent decides whether a project MCP server may start. Nil keeps
+	// every project server disabled, which is what a test without a
+	// config directory gets.
+	consent mcp.Consent
 }
 
 // rpcEngine is the core every entry point serves: one working directory,
@@ -65,6 +70,8 @@ type rpcEngine struct {
 	pc       *project.Context
 	mode     permission.Mode
 	limits   agent.Limits
+	// mcp owns the configured MCP servers; nil when none are configured.
+	mcp      *mcp.Manager
 	notices  io.Writer
 	trace    *debuglog.Log
 	debugLog func(string)
@@ -145,6 +152,10 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	}
 	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
 	warnFileKeys(cfg, notices)
+	var consent mcp.Consent
+	if dir := config.GlobalDir(home, os.LookupEnv); dir != "" {
+		consent = mcp.NewConsentStore(filepath.Join(dir, "mcp-consent.json"))
+	}
 	eng, err := newEngine(ctx, assembly{
 		chat:    chat,
 		cfg:     cfg,
@@ -156,10 +167,16 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		notices: notices,
 		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
 		denied:  deniedPaths(home, cwd, os.LookupEnv, store.Dir()),
+		consent: consent,
 	})
 	if err != nil {
 		cleanup()
 		return nil, nil, err
+	}
+	baseCleanup := cleanup
+	cleanup = func() {
+		eng.closeMCP()
+		baseCleanup()
 	}
 	return eng, cleanup, nil
 }
@@ -229,14 +246,45 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		reload:    as.reload,
 		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
 	}
+	// MCP servers start here, before the first turn: the model has to know
+	// their tools' schemas before it can call one. A server that fails is a
+	// warning; its tools are simply absent from this run.
+	manager, err := mcp.NewManager(mcpServers(as.cfg), mcp.Options{
+		Client:      mcp.ClientInfo{Name: "hint", Version: buildVersion()},
+		ProjectRoot: root.Dir(),
+		Environ:     e.environ(),
+		Consent:     as.consent,
+		Budget:      mcp.DefaultBudget(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("MCP servers: %w", err)
+	}
+	mcpTools, err := manager.Tools(ctx)
+	if err != nil {
+		_ = manager.Close()
+		return nil, fmt.Errorf("MCP tools: %w", err)
+	}
+	secrets := e.secrets()
+	for _, w := range manager.Warnings() {
+		fmt.Fprintf(as.notices, "hint: warning: %s\n", config.Redact(w, secrets))
+	}
 	// The tools read the secrets and the environment through the engine,
 	// so a configuration reloaded by a profile switch is what they see.
-	registry, err := toolRegistry(root, pc.InstructionPaths, e.secrets, e.environ)
+	registry, err := toolRegistry(root, pc.InstructionPaths, e.secrets, e.environ, mcpTools...)
 	if err != nil {
+		_ = manager.Close()
 		return nil, fmt.Errorf("registering tools: %w", err)
 	}
 	e.registry = registry
+	e.mcp = manager
 	return e, nil
+}
+
+// closeMCP releases the MCP sessions and their subprocesses, if any.
+func (e *rpcEngine) closeMCP() {
+	if e.mcp != nil {
+		_ = e.mcp.Close()
+	}
 }
 
 // secrets is every configured API key, for the redaction of tool results.
@@ -622,15 +670,17 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 
 // toolRegistry builds the tool set the engine offers the model: every
 // built-in, write_file, edit_file and bash included, plus the
-// instructions tool over the instruction files this run discovered. They
-// are only safe to register because adopt() puts the agent behind a
-// permission.Gate; main_test.go pins both halves of that.
-func toolRegistry(root tool.Root, instructionPaths []string, secrets func() []string, environ func() []string) (*tool.Registry, error) {
+// instructions tool over the instruction files this run discovered and
+// any MCP tools the caller passes. They are only safe to register because
+// adopt() puts the agent behind a permission.Gate; main_test.go pins both
+// halves of that.
+func toolRegistry(root tool.Root, instructionPaths []string, secrets func() []string, environ func() []string, extra ...agentapi.Tool) (*tool.Registry, error) {
 	var opts []builtin.Option
 	if environ != nil {
 		opts = append(opts, builtin.WithEnviron(environ))
 	}
 	tools := append(builtin.All(root, opts...), builtin.NewInstructions(instructionPaths))
+	tools = append(tools, extra...)
 	for i, t := range tools {
 		// Every result passes the redaction, so a key that leaked some
 		// other way never reaches the model, an event or the session.
