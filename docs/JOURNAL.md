@@ -562,16 +562,16 @@ mkdir -p models
 
 ## Next entries to append
 
-- [x] GGUF download / disk / checksum notes — J9 (size via curl: 1065 MB; no separate checksum yet)
-- [x] First `llama-server` listen — J10 (`model loaded`, `127.0.0.1:8080`)
-- [x] `curl /v1/models` from a second SSH session — J11 (id is GGUF path)
-- [x] `--alias` short model id — J12 (`Qwen2.5-1.5B-Instruct-Q4_K_M`)
-- [x] hint snapshot `9ffb1b0` on Pi — J13 (flat tar; `~/hint`)
-- [x] Config + both `./hint models` paths — J14 (local needs server; fallback warning OK)
-- [x] Scenarios 1–4 outcomes — cloud 1/2/4 earlier; scenario 3 + local tools/`-c` J16–J17
-- [x] Board identity — Pi 4 Model B Rev 1.1, rev `c03111`, 4 GB (J17)
+- ✅ GGUF download / disk / checksum notes — J9 (size via curl: 1065 MB; no separate checksum yet)
+- ✅ First `llama-server` listen — J10 (`model loaded`, `127.0.0.1:8080`)
+- ✅ `curl /v1/models` from a second SSH session — J11 (id is GGUF path)
+- ✅ `--alias` short model id — J12 (`Qwen2.5-1.5B-Instruct-Q4_K_M`)
+- ✅ hint snapshot `9ffb1b0` on Pi — J13 (flat tar; `~/hint`)
+- ✅ Config + both `./hint models` paths — J14 (local needs server; fallback warning OK)
+- ✅ Scenarios 1–4 outcomes — cloud 1/2/4 earlier; scenario 3 + local tools/`-c` J16–J17
+- ✅ Board identity — Pi 4 Model B Rev 1.1, rev `c03111`, 4 GB (J17)
 - [ ] Rotate API key if it leaked into a shared transcript
-- [x] Document default `-c 4096` + `-np 1` in the Pi 4 recipe — done in `raspberry-pi-4-4gb.md`; multi-failover-per-turn noted in J17
+- ✅ Document default `-c 4096` + `-np 1` in the Pi 4 recipe — done in `raspberry-pi-4-4gb.md`; multi-failover-per-turn noted in J17
 - [ ] Any further link/runtime failures after serve
 
 ## Index for the future article
