@@ -6,8 +6,7 @@ How to run `hint` with a local OpenAI-compatible model on a **4 GB Raspberry Pi 
 This is a **product guide**: devices, use cases, why this stack, launch recipe,
 and examples. The recorded `v0.2.0` hardware run is the Pi 4 `pi-bench`
 [`20261011-105151`](plan/evidence/pi-4-20261011-105151/summary.md), not this
-guide. A Raspberry Pi 5 + Ollama smoke is done (2026-11-02)
-([checklist](plan/raspberry-pi-smoke-test.md)).
+guide. A Raspberry Pi 5 + Ollama smoke is done (2026-11-02).
 
 ## Devices and use cases
 
@@ -252,5 +251,4 @@ summary table per run.
   the prompt at ~3 tokens/s and generated at ~2 tokens/s.
 - The `v0.2.0` hardware record is
   [`plan/evidence/pi-4-20261011-105151/summary.md`](plan/evidence/pi-4-20261011-105151/summary.md).
-  The Pi 5 + Ollama smoke is done (2026-11-02). The checklist is
-  [`plan/raspberry-pi-smoke-test.md`](plan/raspberry-pi-smoke-test.md).
+  The Pi 5 + Ollama smoke is done (2026-11-02).

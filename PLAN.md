@@ -107,12 +107,12 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.12 rungs 0–3 — instructions beyond the budget (the default budget scales to the profile's context window; every instruction file is guaranteed its outline before any gets more, so a nearer file is never dropped; an over-budget Markdown file shows whole sections while they fit and the rest as heading + first sentence + `[...]`; the read-only `instructions` tool returns a file, a section or the `path:line` a quoted rule comes from, over the run's discovered files only; opt-in `instructions.summarize` has a model summarize what not even outlines can fit, cached by content hash under `~/.cache/hint/instructions`).
   WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front matter and `.cursor/rules/*.mdc` as a compatible source; a rule with paths loads once a tool reads or writes a matching file, one without loads always after its directory's `HINT.md`; `agent.Preamble` rebuilds the system prompt before every request from the tool calls in the conversation, so `-c` needs nothing new; `tool.Toucher` is how the file tools name what they touch; the glob matcher is now `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
-  `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository ([runbook](docs/plan/release-v0.3.2.md)).
+  `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository.
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) shipped with `v0.3.1`.
   Audit fixes B1 and B2 and the UTF-8 truncation S20 ([`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md), [#32](https://github.com/mrYush/hint/issues/32), [#41](https://github.com/mrYush/hint/issues/41)) are fixed and ship in `v0.3.2` (step 20).
   B3, M1 and M2 stay known issues and are backlog (decided 2026-10-11); they did not block `v0.2.0` or `v0.3.0`.
-  The Raspberry Pi 5 smoke ([`docs/plan/raspberry-pi-smoke-test.md`](docs/plan/raspberry-pi-smoke-test.md)) is done (2026-11-02).
+  The Raspberry Pi 5 smoke is done (2026-11-02).
   The measured linux/arm64 log is the Pi 4 bench [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
 - Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare `hint` opens an interactive session, `hint -p` answers once, and both are JSON-RPC clients of a core served in the same process over a `net.Pipe` — the same bytes `hint serve` speaks, so `hint --connect` points the same shell at a core running in another terminal.
   The core runs the agent loop with every built-in tool registered behind the permission gate (it explores the project itself and can edit it and run commands with confirmation), reads the global and the project's `HINT.md`, and records every conversation as a session that `-c`, `-r` or `--session` continues; independent reads in one tool batch run in parallel, and instruction files that outgrow the budget arrive as outlines the `instructions` tool expands, or split into rules that load when the conversation reaches their paths.
@@ -171,7 +171,6 @@ Implemented by WP0.9 (2026-09-07); the alias prints a one-line note pointing at 
     Not in it: the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41), which is step 20 (`v0.3.2`), and anything from Phase 2.
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
 20. ~~`v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction summary survives a prefix refresh, the usage baseline is reset after a reactive compaction — and the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41).~~ Done (2026-11-02), tagged `v0.3.2`; the cask, the Scoop manifest and the apt index name `0.3.2`.
-    The checklist is the [`v0.3.2` runbook](docs/plan/release-v0.3.2.md).
     Then Phase 2 (`v0.4`).
 
 ## Open questions

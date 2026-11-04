@@ -429,7 +429,7 @@ The manager owns connections, restart and the schema budget; the adapter owns on
 
 ### Configuration
 
-Keep the shape in [`after-v0.3.1.md`](after-v0.3.1.md#configuration-shape), with four additions the probe forces:
+Use the following configuration shape:
 
 ```yaml
 mcp_servers:
