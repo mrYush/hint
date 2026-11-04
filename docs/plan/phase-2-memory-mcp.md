@@ -17,6 +17,8 @@ Added 2026-10-18 together with WP2.6 and WP2.7.
 
 **Branch:** `dev/wp2.1-mcp-client`
 
+M0–M3 and M2 are merged in PR [#87](https://github.com/mrYush/hint/pull/87); M4–M6 remain and take a follow-up branch.
+
 SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) **`v1.8.0`, pinned** (Q6).
 
 - [x] `mcp_servers:` section in config (stdio and streamable HTTP transports), layered like every other key: global file, project `.hint/config.yaml`, with the project able to add servers and never a key
@@ -65,7 +67,7 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
   `hint mcp status` names the changed field; a test changes `args` after enabling.
   A global-file server is enabled by its presence.
 
-Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the M0–M3 core and M2 landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
 MCP resources and prompts (M4–M5), the live reference-server integration test, and the final acceptance pass (M6) remain for a follow-up branch.
 
 ### WP2.2 — Repo map

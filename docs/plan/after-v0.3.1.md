@@ -22,7 +22,7 @@ Steps 1–4 are done; the body below records the plan as it was written.
 | 2 | `fix/utf8-truncation` | done | PR [#83](https://github.com/mrYush/hint/pull/83), `Closes #41` | 1–2 days |
 | 3 | `release/v0.3.2` | done | PR [#84](https://github.com/mrYush/hint/pull/84) to `main`; tag `v0.3.2` | 0.5–1 day |
 | 4 | `docs/q6-mcp-spike` | done | spike document and Q6 decision; see [mcp-client-spike.md](mcp-client-spike.md) | 2–3 days |
-| 5 | `dev/wp2.1-mcp-client` | in progress | issue [#86](https://github.com/mrYush/hint/issues/86), branch line, first MCP slice (M0–M3) | 3–4 weeks for WP2.1 |
+| 5 | `dev/wp2.1-mcp-client` | done | PR [#87](https://github.com/mrYush/hint/pull/87), `Refs #86`: M0–M3 and M2; M4–M6 remain in WP2.1 | 3–4 weeks for WP2.1 |
 
 Steps 1–4 are done.
 WP2.1 is the only remaining step; Q6 no longer blocks it.
@@ -44,7 +44,7 @@ Done since this plan was written:
 
 Still open:
 
-1. WP2.1 is in progress on `dev/wp2.1-mcp-client`: the M0–M3 core and M2 (lazy start, ping health, `hint mcp list|status|enable`) are in the tree; MCP resources and prompts (M4–M5), the live reference-server test and the final acceptance pass (M6) remain.
+1. WP2.1 continues after PR [#87](https://github.com/mrYush/hint/pull/87) merged M0–M3 and M2 into `develop`: MCP resources and prompts (M4–M5), the live reference-server test and the final acceptance pass (M6) remain on a follow-up branch.
 
 ## v0.3.2: #32 — done
 
@@ -218,8 +218,8 @@ No further research is needed; start WP2.1 from the spike and the Phase 2 decisi
 
 ## WP2.1: MCP client — in progress
 
-Progress (2026-11-04): M0–M3 and M2 are implemented on `dev/wp2.1-mcp-client` — the client, config, manager, tool adapter, schema budget, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
-M4–M6 remain.
+Progress (2026-11-04): M0–M3 and M2 are implemented on `dev/wp2.1-mcp-client` and merged in PR [#87](https://github.com/mrYush/hint/pull/87) — the client, config, manager, tool adapter, schema budget, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
+M4–M6 remain and take a follow-up branch.
 
 ### Branch, issue and phase file
 
