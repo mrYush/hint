@@ -124,11 +124,16 @@ func validateMCPServer(s MCPServer) error {
 			return fmt.Errorf("%s: tool name %q contains whitespace", where, name)
 		}
 	}
+	seenResources := map[string]bool{}
 	for _, uri := range s.Resources {
 		u, err := url.Parse(uri)
 		if err != nil || u.Scheme == "" || strings.TrimSpace(uri) != uri {
 			return fmt.Errorf("%s: resource URI %q must be absolute", where, uri)
 		}
+		if seenResources[uri] {
+			return fmt.Errorf("%s: resource URI %q is listed more than once", where, uri)
+		}
+		seenResources[uri] = true
 	}
 	for name := range s.Env {
 		if name == "" || strings.ContainsAny(name, "=\x00") {

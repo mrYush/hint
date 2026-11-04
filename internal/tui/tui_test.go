@@ -53,15 +53,18 @@ type fakeEngine struct {
 	// profile.models answers per profile. completes records the texts
 	// Complete was asked about, completeDelay how long it takes,
 	// completeErr makes it fail and completionOff makes it disabled.
-	settings       rpc.CompletionSettings
-	models         map[string][]string
-	completes      []string
-	completeDelay  time.Duration
-	completeErr    error
-	completionOff  bool
-	prompts        []rpc.PromptInfo
-	promptRequest  rpc.PromptRequest
-	promptComplete rpc.PromptCompleteRequest
+	settings         rpc.CompletionSettings
+	models           map[string][]string
+	completes        []string
+	completeDelay    time.Duration
+	completeErr      error
+	completionOff    bool
+	prompts          []rpc.PromptInfo
+	promptListCalls  int
+	promptRequest    rpc.PromptRequest
+	promptComplete   rpc.PromptCompleteRequest
+	promptHasMore    bool
+	promptServersErr error
 }
 
 // fakeSession is one session of a fakeEngine: its id and the questions
@@ -130,18 +133,37 @@ func (e *fakeEngine) Models(_ context.Context, profile string) ([]string, error)
 	return nil, fmt.Errorf("%w: unknown profile %q", rpc.ErrNotFound, profile)
 }
 
+func (e *fakeEngine) PromptServers(context.Context) ([]string, error) {
+	if e.promptServersErr != nil {
+		return nil, e.promptServersErr
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, prompt := range e.prompts {
+		if !seen[prompt.Server] {
+			seen[prompt.Server] = true
+			out = append(out, prompt.Server)
+		}
+	}
+	return out, nil
+}
+
 func (e *fakeEngine) Prompts(context.Context) ([]rpc.PromptInfo, error) {
+	e.promptListCalls++
 	return e.prompts, nil
 }
 
 func (e *fakeEngine) ExpandPrompt(_ context.Context, req rpc.PromptRequest) (string, error) {
 	e.promptRequest = req
+	if len(req.Arguments) == 0 {
+		return "Review", nil
+	}
 	return "Review " + req.Arguments[0], nil
 }
 
-func (e *fakeEngine) CompletePrompt(_ context.Context, req rpc.PromptCompleteRequest) ([]string, error) {
+func (e *fakeEngine) CompletePrompt(_ context.Context, req rpc.PromptCompleteRequest) ([]string, bool, error) {
 	e.promptComplete = req
-	return []string{"main.go", "model.go"}, nil
+	return []string{"main.go", "model.go"}, e.promptHasMore, nil
 }
 
 func (e *fakeEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {
@@ -311,6 +333,8 @@ func newHarness(t *testing.T, eng *fakeEngine, opts Options) *harness {
 	h := &harness{t: t, eng: eng, ch: ch}
 	h.m = newModel(ctx, opts, true, ch)
 	h.update(tea.WindowSizeMsg{Width: termWidth, Height: termHeight})
+	_, promptServers := h.m.loadPromptServers("")
+	h.run(promptServers)
 	return h
 }
 

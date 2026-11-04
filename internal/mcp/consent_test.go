@@ -154,3 +154,17 @@ func TestManagerProjectConsent(t *testing.T) {
 		t.Errorf("warnings = %v; want the changed field named", rejected.Warnings())
 	}
 }
+
+func TestConsentStoreResources(t *testing.T) {
+	store := NewConsentStore(filepath.Join(t.TempDir(), "mcp-consent.json"))
+	root := t.TempDir()
+	cfg := ServerConfig{Name: "proj", Transport: TransportStdio, Command: "unused", Permission: agentapi.ClassRead, Project: true, Resources: []string{"test://rules"}}
+	if err := store.Enable(root, cfg); err != nil {
+		t.Fatal(err)
+	}
+	changed := cfg
+	changed.Resources = []string{"test://other"}
+	if ok, reason := store.Check(root, changed); ok || !strings.Contains(reason, "consent changed (resources)") {
+		t.Errorf("Check after a resources change = %v, %q", ok, reason)
+	}
+}

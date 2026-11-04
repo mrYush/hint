@@ -90,8 +90,11 @@ func (e *rpcEngine) ensureMCP(ctx context.Context) error {
 		}
 		e.mcpWarned = len(warnings)
 	}
-	if len(e.mcp.Servers()) > 0 {
-		tools = append([]agentapi.Tool{mcp.NewResourceReadTool(e.mcp)}, tools...)
+	for _, server := range e.mcp.Servers() {
+		if server.Enabled {
+			tools = append([]agentapi.Tool{mcp.NewResourceReadTool(e.mcp)}, tools...)
+			break
+		}
 	}
 	for _, t := range tools {
 		if err := e.registry.Register(tool.Redacting(t, e.secrets)); err != nil {
@@ -252,13 +255,17 @@ func enableMCPServer(servers []mcp.ServerConfig, root, name string, store mcp.Co
 
 func printMCPList(out io.Writer, infos []mcp.ServerInfo) error {
 	tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tTOOLS")
+	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tTOOLS\tRESOURCES")
 	for _, info := range infos {
 		state := "configured"
 		if !info.Enabled {
 			state = "disabled"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", info.Name, info.Transport, info.Permission, state, toolsSummary(info.Tools))
+		resources := strings.Join(info.Resources, ", ")
+		if resources == "" {
+			resources = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", info.Name, info.Transport, info.Permission, state, toolsSummary(info.Tools), resources)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -273,7 +280,7 @@ func printMCPList(out io.Writer, infos []mcp.ServerInfo) error {
 
 func printMCPStatus(out io.Writer, statuses []mcp.ServerStatus) error {
 	tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tPROTOCOL\tSERVER\tTOOLS\tBYTES\tHEALTH")
+	fmt.Fprintln(tw, "NAME\tTRANSPORT\tPERMISSION\tSTATE\tPROTOCOL\tSERVER\tTOOLS\tBYTES\tRESOURCES\tHEALTH")
 	for _, st := range statuses {
 		protocol, server, health := st.Protocol, st.ServerName, st.Health
 		if protocol == "" {
@@ -285,8 +292,8 @@ func printMCPStatus(out io.Writer, statuses []mcp.ServerStatus) error {
 		if health == "" {
 			health = "-"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
-			st.Name, st.Transport, st.Permission, st.State, protocol, server, st.Tools, st.Bytes, health)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+			st.Name, st.Transport, st.Permission, st.State, protocol, server, st.Tools, st.Bytes, len(st.Resources), health)
 	}
 	if err := tw.Flush(); err != nil {
 		return err

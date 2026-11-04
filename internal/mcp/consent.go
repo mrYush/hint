@@ -42,6 +42,7 @@ type consentRecord struct {
 	Args        []string  `json:"args,omitempty"`
 	URL         string    `json:"url,omitempty"`
 	Permission  string    `json:"permission"`
+	Resources   []string  `json:"resources,omitempty"`
 	Fingerprint string    `json:"fingerprint"`
 	Approved    time.Time `json:"approved"`
 }
@@ -96,6 +97,7 @@ func (s *ConsentStore) Enable(root string, cfg ServerConfig) error {
 		Args:        append([]string(nil), cfg.Args...),
 		URL:         cfg.URL,
 		Permission:  string(cfg.Permission),
+		Resources:   append([]string(nil), cfg.Resources...),
 		Fingerprint: cfg.fingerprint(),
 		Approved:    time.Now().UTC(),
 	}
@@ -116,6 +118,8 @@ func changedField(rec consentRecord, cfg ServerConfig) string {
 		return "url"
 	case rec.Permission != string(cfg.Permission):
 		return "permission"
+	case !slices.Equal(rec.Resources, cfg.Resources):
+		return "resources"
 	}
 	return "server definition"
 }

@@ -253,6 +253,8 @@ func (c *conn) dispatch(req request) {
 		c.profileList(req)
 	case "profile.models":
 		c.profileModels(req)
+	case "prompt.servers":
+		c.promptServers(req)
 	case "prompt.list":
 		c.promptList(req)
 	case "prompt.get":

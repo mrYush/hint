@@ -38,6 +38,7 @@ type ServerInfo struct {
 	Enabled    bool
 	Reason     string
 	Tools      ToolFilter
+	Resources  []string
 	Timeout    time.Duration
 }
 
@@ -52,6 +53,7 @@ type ServerStatus struct {
 	ServerName string
 	Tools      int
 	Bytes      int
+	Resources  []string
 	Health     string
 }
 
@@ -70,15 +72,17 @@ func (m *Manager) Servers() []ServerInfo {
 				Allow: append([]string(nil), srv.cfg.Tools.Allow...),
 				Deny:  append([]string(nil), srv.cfg.Tools.Deny...),
 			},
-			Timeout: srv.cfg.Timeout,
+			Resources: append([]string(nil), srv.cfg.Resources...),
+			Timeout:   srv.cfg.Timeout,
 		})
 	}
 	return out
 }
 
 // Status connects every enabled server, applies the schema budget, and
-// reports each server's state, protocol, tool count and health. A server
-// that fails is reported as failed; the others still get a status.
+// reports each server's state, protocol, tool count, configured resource count
+// and health without reading resource bodies. A server that fails is reported
+// as failed; the others still get a status.
 func (m *Manager) Status(ctx context.Context) ([]ServerStatus, error) {
 	if _, err := m.Tools(ctx); err != nil {
 		return nil, err
@@ -96,6 +100,7 @@ func (m *Manager) Status(ctx context.Context) ([]ServerStatus, error) {
 			Name:       srv.cfg.Name,
 			Transport:  srv.cfg.Transport,
 			Permission: srv.cfg.Permission,
+			Resources:  append([]string(nil), srv.cfg.Resources...),
 		}
 		if !srv.enabled {
 			st.State = StateDisabled

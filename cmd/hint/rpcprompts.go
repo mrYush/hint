@@ -2,16 +2,27 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/mrYush/hint/internal/mcp"
 	"github.com/mrYush/hint/internal/rpc"
 )
 
+// PromptServers lists enabled MCP server names without connecting to them.
+func (e *rpcEngine) PromptServers(context.Context) ([]string, error) {
+	servers := e.mcp.Servers()
+	out := make([]string, 0, len(servers))
+	for _, server := range servers {
+		if server.Enabled {
+			out = append(out, server.Name)
+		}
+	}
+	return out, nil
+}
+
 // Prompts lists MCP prompts on demand, preserving lazy server startup.
 func (e *rpcEngine) Prompts(ctx context.Context) ([]rpc.PromptInfo, error) {
-	if e.mcp == nil {
-		return []rpc.PromptInfo{}, nil
-	}
 	prompts, err := e.mcp.Prompts(ctx)
 	if err != nil {
 		return nil, err
@@ -33,16 +44,19 @@ func rpcPrompt(prompt mcp.Prompt) rpc.PromptInfo {
 
 // ExpandPrompt expands an MCP prompt as text for a user turn.
 func (e *rpcEngine) ExpandPrompt(ctx context.Context, req rpc.PromptRequest) (string, error) {
-	if e.mcp == nil {
-		return "", nil
-	}
-	return e.mcp.ExpandPrompt(ctx, req.Server, req.Name, req.Arguments)
+	text, err := e.mcp.ExpandPrompt(ctx, req.Server, req.Name, req.Arguments)
+	return text, promptError(err)
 }
 
 // CompletePrompt asks an MCP server to complete one prompt argument.
-func (e *rpcEngine) CompletePrompt(ctx context.Context, req rpc.PromptCompleteRequest) ([]string, error) {
-	if e.mcp == nil {
-		return []string{}, nil
+func (e *rpcEngine) CompletePrompt(ctx context.Context, req rpc.PromptCompleteRequest) ([]string, bool, error) {
+	values, hasMore, err := e.mcp.CompletePrompt(ctx, req.Server, req.Prompt, req.Argument, req.Value, req.Arguments)
+	return values, hasMore, promptError(err)
+}
+
+func promptError(err error) error {
+	if errors.Is(err, mcp.ErrNotFound) {
+		return fmt.Errorf("%w: %w", rpc.ErrNotFound, err)
 	}
-	return e.mcp.CompletePrompt(ctx, req.Server, req.Prompt, req.Argument, req.Value)
+	return err
 }

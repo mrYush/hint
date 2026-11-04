@@ -20,12 +20,15 @@ type Limits struct {
 	MaxOutput int
 }
 
+// DefaultMaxOutput is the standard per-tool text budget in bytes.
+const DefaultMaxOutput = 50_000
+
 // DefaultLimits is what a tool gets unless the caller says otherwise: 30s is
 // generous for anything that only touches the local disk, and 50 kB
 // (~12k tokens) leaves room for several tool results in one turn of a
 // 128k-token window without any single one dominating it.
 func DefaultLimits() Limits {
-	return Limits{Timeout: 30 * time.Second, MaxOutput: 50_000}
+	return Limits{Timeout: 30 * time.Second, MaxOutput: DefaultMaxOutput}
 }
 
 // errLimitTimeout marks a deadline set by WithLimits itself, so that Run

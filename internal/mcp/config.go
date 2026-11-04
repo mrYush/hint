@@ -139,11 +139,16 @@ func (c ServerConfig) Validate() error {
 			return fmt.Errorf("mcp: server %q: tool filter names cannot be empty", c.Name)
 		}
 	}
+	seenResources := map[string]bool{}
 	for _, uri := range c.Resources {
 		u, err := url.Parse(uri)
 		if err != nil || u.Scheme == "" || strings.TrimSpace(uri) != uri {
 			return fmt.Errorf("mcp: server %q: resource URI %q must be absolute", c.Name, uri)
 		}
+		if seenResources[uri] {
+			return fmt.Errorf("mcp: server %q: resource URI %q is listed more than once", c.Name, uri)
+		}
+		seenResources[uri] = true
 	}
 	for name := range c.Env {
 		if name == "" || strings.ContainsAny(name, "=\x00") {
@@ -202,6 +207,7 @@ func (c ServerConfig) fingerprint() string {
 		Args       []string  `json:"args"`
 		URL        string    `json:"url"`
 		Permission string    `json:"permission"`
+		Resources  []string  `json:"resources,omitempty"`
 	}
 	b, err := json.Marshal(canonical{
 		Transport:  c.Transport,
@@ -209,6 +215,7 @@ func (c ServerConfig) fingerprint() string {
 		Args:       c.Args,
 		URL:        c.URL,
 		Permission: string(c.Permission),
+		Resources:  c.Resources,
 	})
 	if err != nil {
 		// The fields are strings and a slice of strings; Marshal cannot

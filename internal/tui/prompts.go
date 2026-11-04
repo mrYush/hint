@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -8,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mrYush/hint/internal/rpc"
+	"github.com/mrYush/hint/internal/shell"
 )
 
 type promptListMsg struct {
@@ -18,14 +21,82 @@ type promptListMsg struct {
 }
 
 type promptCompletionMsg struct {
-	input  string
-	values []string
-	err    error
+	input   string
+	values  []string
+	hasMore bool
+	err     error
 }
 
 type promptExpansionMsg struct {
+	ctx  context.Context
 	text string
 	err  error
+}
+
+type promptServersMsg struct {
+	servers []string
+	err     error
+	input   string
+}
+
+func (m model) loadPromptServers(input string) (model, tea.Cmd) {
+	m.promptServersLoading = true
+	m.status = readingPromptServers
+	cl, ctx := m.cl, m.ctx
+	return m, func() tea.Msg {
+		servers, err := cl.PromptServers(ctx)
+		return promptServersMsg{servers: servers, err: err, input: input}
+	}
+}
+
+func (m model) promptServersReady(msg promptServersMsg) (model, tea.Cmd) {
+	m.promptServersLoading = false
+	if msg.err != nil {
+		// An older core has no prompt.servers. Any error, including a
+		// transient one, is remembered until restart: retrying on every
+		// Tab would never finish the line. /prompts still lists prompts.
+		m.promptServers, m.promptServersLoaded = nil, true
+		var rpcErr *rpc.Error
+		if errors.As(msg.err, &rpcErr) && rpcErr.Code == rpc.CodeMethodNotFound {
+			if m.status == readingPromptServers {
+				m.status = ""
+			}
+		} else if m.status == "" || m.status == readingPromptServers {
+			m.status = "could not read MCP server names: " + msg.err.Error()
+		}
+		if msg.input != "" && m.ta.Value() == msg.input {
+			return m.tab()
+		}
+		return m, nil
+	}
+	m.promptServers = msg.servers
+	m.promptServersLoaded = true
+	if m.status == readingPromptServers {
+		m.status = ""
+	}
+	if msg.input == "" || m.ta.Value() != msg.input {
+		return m, nil
+	}
+	first := firstCommandWord(msg.input)
+	if strings.Contains(first, ":") || m.promptServerMatch(first) {
+		return m.loadPrompts(false, msg.input)
+	}
+	return m.tab()
+}
+
+const readingPromptServers = "reading MCP server configuration…"
+
+func (m model) promptServerMatch(first string) bool {
+	prefix := strings.TrimPrefix(first, "/")
+	if prefix == "" || strings.Contains(prefix, ":") {
+		return false
+	}
+	for _, server := range m.promptServers {
+		if strings.HasPrefix(server, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadPrompts discovers prompts only when a list or command completion asks.
@@ -46,6 +117,11 @@ func (m model) promptListLoaded(msg promptListMsg) (model, tea.Cmd) {
 		return m, nil
 	}
 	m.prompts, m.promptsLoaded = msg.prompts, true
+	if len(msg.prompts) == 1 {
+		m.status = "1 MCP prompt loaded; tab completes it"
+	} else {
+		m.status = fmt.Sprintf("%d MCP prompts loaded; tab completes them", len(msg.prompts))
+	}
 	if msg.show {
 		m.add(entry{kind: entryNotice, text: formatPromptList(msg.prompts), done: true})
 	}
@@ -114,7 +190,11 @@ func (m model) promptCompletionNeeded(input string) (rpc.PromptCompleteRequest, 
 			continue
 		}
 		arg := info.Arguments[len(prev)]
-		return rpc.PromptCompleteRequest{Server: server, Prompt: prompt, Argument: arg.Name, Value: partial}, true
+		resolved := make(map[string]string, len(prev))
+		for i, value := range prev {
+			resolved[info.Arguments[i].Name] = value
+		}
+		return rpc.PromptCompleteRequest{Server: server, Prompt: prompt, Argument: arg.Name, Value: partial, Arguments: resolved}, true
 	}
 	return rpc.PromptCompleteRequest{}, false
 }
@@ -124,8 +204,8 @@ func (m model) loadPromptCompletion(req rpc.PromptCompleteRequest, input string)
 	m.status = "completing the prompt argument…"
 	cl, ctx := m.cl, m.ctx
 	return m, func() tea.Msg {
-		values, err := cl.CompletePrompt(ctx, req)
-		return promptCompletionMsg{input: input, values: values, err: err}
+		values, hasMore, err := cl.CompletePrompt(ctx, req)
+		return promptCompletionMsg{input: input, values: values, hasMore: hasMore, err: err}
 	}
 }
 
@@ -142,17 +222,18 @@ func (m model) promptCompleted(msg promptCompletionMsg) model {
 	if !ok {
 		return m
 	}
-	head := strings.Join(append([]string{cmd.name}, prev...), " ") + " "
+	head := commandHead(cmd.name, prev)
 	var candidates []string
 	for _, value := range msg.values {
 		if strings.HasPrefix(value, partial) {
-			candidates = append(candidates, head+value)
+			candidates = append(candidates, head+shell.QuoteWord(value))
 		}
 	}
 	switch len(candidates) {
 	case 0:
 		m.status = "no prompt argument matches " + partial
 	case 1:
+		m.status = ""
 		m.ta.SetValue(candidates[0])
 		if m.wantsMore(candidates[0]) {
 			m.ta.SetValue(candidates[0] + " ")
@@ -165,21 +246,43 @@ func (m model) promptCompleted(msg promptCompletionMsg) model {
 		m.comp = &completion{cands: candidates, shown: m.ta.Value(), idx: -1}
 		m.status = strings.Join(candidates, "  ")
 	}
+	// A server that has more values but none matching this prefix is
+	// still a miss; "more values exist" would contradict that status.
+	if msg.hasMore && len(candidates) > 0 {
+		if m.status != "" {
+			m.status += " (more values exist)"
+		} else {
+			m.status = "more prompt values exist"
+		}
+	}
 	return m
 }
 
 func (m model) expandPrompt(server, prompt string, args []string) (model, tea.Cmd) {
 	m.busy = true
 	m.status = "expanding " + server + ":" + prompt + "…"
-	cl, ctx := m.cl, m.ctx
+	cl := m.cl
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.cancelTurn = cancel
 	return m, func() tea.Msg {
 		text, err := cl.ExpandPrompt(ctx, rpc.PromptRequest{Server: server, Name: prompt, Arguments: args})
-		return promptExpansionMsg{text: text, err: err}
+		return promptExpansionMsg{ctx: ctx, text: text, err: err}
 	}
 }
 
 func (m model) promptExpanded(msg promptExpansionMsg) (model, tea.Cmd) {
 	m.busy = false
+	cancelled := msg.ctx != nil && msg.ctx.Err() != nil
+	if m.cancelTurn != nil {
+		m.cancelTurn()
+		m.cancelTurn = nil
+	}
+	if m.quitting || cancelled {
+		if !m.quitting {
+			m.status = "prompt expansion stopped"
+		}
+		return m, nil
+	}
 	if msg.err != nil {
 		m.status = "prompt expansion failed: " + msg.err.Error()
 		return m, nil

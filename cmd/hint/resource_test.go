@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -111,5 +112,80 @@ func TestEngineResourceReadRemainsToolData(t *testing.T) {
 	}
 	if !found {
 		t.Error("resource payload did not reach the model as a tool result")
+	}
+}
+
+func TestEngineMCPConcurrentSessions(t *testing.T) {
+	chat := &fakeChat{reply: func(int) string { return "ok" }}
+	as, _, _, _ := testAssembly(t, chat, "")
+	server := newMCPTestServer(t)
+	server.AddResource(&sdk.Resource{Name: "rules", URI: "test://rules", MIMEType: "text/plain"},
+		func(context.Context, *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+			return &sdk.ReadResourceResult{Contents: []*sdk.ResourceContents{{
+				URI: "test://rules", MIMEType: "text/plain", Text: "Remote rules.",
+			}}}, nil
+		})
+	as.mcpDial = func(ctx context.Context, _ mcp.ServerConfig) (*sdk.ClientSession, error) {
+		return connectMCPTestClient(ctx, server)
+	}
+	as.cfg.MCPServers = []config.MCPServer{{
+		Name: "fake", Transport: config.MCPTransportStdio, Command: "unused", Resources: []string{"test://rules"},
+	}}
+	eng, err := newEngine(context.Background(), as)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { eng.closeMCP() })
+	sessions := []*rpcSession{eng.newSession(nil, "one"), eng.newSession(nil, "two")}
+	start := make(chan struct{})
+	errs := make(chan error, len(sessions))
+	var wg sync.WaitGroup
+	for _, live := range sessions {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ch, err := live.RunTurn(context.Background(), "hello", nil)
+			if err == nil {
+				for range ch {
+				}
+			}
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	reqs := chat.seen()
+	if len(reqs) != 2 {
+		t.Fatalf("provider requests = %d, want one per session", len(reqs))
+	}
+	for i, req := range reqs {
+		if len(req.Messages) == 0 || req.Messages[0].Role != agentapi.RoleSystem || !strings.Contains(req.Messages[0].Text(), "Remote rules.") {
+			t.Errorf("session %d system prompt lacks the shared resource", i)
+		}
+	}
+}
+
+func TestEngineSkipsResourceReadWhenAllServersDisabled(t *testing.T) {
+	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "ok" }}, "")
+	as.cfg.MCPServers = []config.MCPServer{{
+		Name: "proj", Transport: config.MCPTransportStdio, Command: "unused", Project: true,
+	}}
+	eng, err := newEngine(context.Background(), as)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { eng.closeMCP() })
+	if err := eng.ensureMCP(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := eng.registry.Lookup("resource_read"); ok {
+		t.Error("resource_read is registered without an enabled server")
 	}
 }

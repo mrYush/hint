@@ -24,8 +24,8 @@ type Prompt struct {
 	Arguments   []PromptArgument
 }
 
-// Command returns the TUI and REPL spelling of the prompt.
-func (p Prompt) Command() string { return "/" + p.Server + ":" + p.Name }
+// ErrNotFound marks an unknown MCP server or prompt.
+var ErrNotFound = errors.New("mcp: not found")
 
 // Prompts lists the prompts of every enabled server. A server without the
 // prompts capability contributes none; an unavailable server is a warning.
@@ -49,7 +49,8 @@ func (m *Manager) Prompts(ctx context.Context) ([]Prompt, error) {
 }
 
 // ExpandPrompt validates positional arguments against the prompt's advertised
-// list and expands the result as text for one user turn.
+// list and expands the result as text for one user turn. User and assistant
+// messages are both flattened into that text; their MCP roles are not retained.
 func (m *Manager) ExpandPrompt(ctx context.Context, serverName, name string, args []string) (string, error) {
 	srv, err := m.promptServer(serverName)
 	if err != nil {
@@ -67,7 +68,7 @@ func (m *Manager) ExpandPrompt(ctx context.Context, serverName, name string, arg
 		}
 	}
 	if descriptor == nil {
-		return "", fmt.Errorf("mcp: server %q has no prompt %q", serverName, name)
+		return "", fmt.Errorf("%w: server %q has no prompt %q", ErrNotFound, serverName, name)
 	}
 	if len(args) > len(descriptor.Arguments) {
 		return "", fmt.Errorf("mcp: prompt %q takes at most %d arguments; too many were given", name, len(descriptor.Arguments))
@@ -109,23 +110,37 @@ func (m *Manager) ExpandPrompt(ctx context.Context, serverName, name string, arg
 			return "", fmt.Errorf("mcp: prompt %q returned unsupported content %T", name, message.Content)
 		}
 	}
-	return strings.Join(parts, "\n\n"), nil
+	text := strings.Join(parts, "\n\n")
+	if len(text) > MaxPromptText {
+		return "", fmt.Errorf("mcp: prompt %q returned %d bytes, above the %d-byte limit", name, len(text), MaxPromptText)
+	}
+	return text, nil
 }
 
-// CompletePrompt asks a server for values of one prompt argument.
-func (m *Manager) CompletePrompt(ctx context.Context, serverName, prompt, argument, value string) ([]string, error) {
+// MaxPromptText is the most text one expanded prompt may become. A longer
+// result is an error rather than a user turn. The SDK has already buffered
+// the frame, at most its default of 16 MiB, before this check runs.
+const MaxPromptText = 1 << 20
+
+// CompletePrompt asks a server for values of one prompt argument. Arguments
+// contains the already resolved values of the prompt's other arguments.
+// hasMore reports that the server had further values it did not return.
+func (m *Manager) CompletePrompt(ctx context.Context, serverName, prompt, argument, value string, arguments map[string]string) ([]string, bool, error) {
 	srv, err := m.promptServer(serverName)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	res, err := srv.completePrompt(ctx, prompt, argument, value)
+	res, err := srv.completePrompt(ctx, prompt, argument, value, arguments)
 	if err != nil {
-		return nil, fmt.Errorf("mcp: server %q: completing prompt %q argument %q: %w", serverName, prompt, argument, err)
+		if isMethodNotFound(err) {
+			return []string{}, false, nil
+		}
+		return nil, false, fmt.Errorf("mcp: server %q: completing prompt %q argument %q: %w", serverName, prompt, argument, err)
 	}
 	if res == nil {
-		return nil, nil
+		return nil, false, nil
 	}
-	return append([]string(nil), res.Completion.Values...), nil
+	return append([]string(nil), res.Completion.Values...), res.Completion.HasMore, nil
 }
 
 func (m *Manager) promptServer(name string) (*server, error) {
@@ -137,7 +152,7 @@ func (m *Manager) promptServer(name string) (*server, error) {
 			return srv, nil
 		}
 	}
-	return nil, fmt.Errorf("mcp: unknown server %q", name)
+	return nil, fmt.Errorf("%w: unknown server %q", ErrNotFound, name)
 }
 
 func (s *server) listPrompts(ctx context.Context) ([]Prompt, error) {
@@ -162,6 +177,10 @@ func (s *server) listPrompts(ctx context.Context) ([]Prompt, error) {
 			return nil, fmt.Errorf("listing prompts: %w", err)
 		}
 		if remote == nil {
+			continue
+		}
+		if remote.Name == "" || strings.ContainsAny(remote.Name, ": \t\r\n") {
+			s.mgr.warnf("MCP server %q prompt %q cannot be used as /%s:<prompt>; names must be non-empty and contain no colon or whitespace", s.cfg.Name, remote.Name, s.cfg.Name)
 			continue
 		}
 		p := Prompt{Server: s.cfg.Name, Name: remote.Name, Description: remote.Description}
@@ -202,7 +221,7 @@ func (s *server) getPromptOnce(ctx context.Context, name string, args map[string
 	return res, sess, err
 }
 
-func (s *server) completePrompt(ctx context.Context, prompt, argument, value string) (*sdk.CompleteResult, error) {
+func (s *server) completePrompt(ctx context.Context, prompt, argument, value string, arguments map[string]string) (*sdk.CompleteResult, error) {
 	s.mu.Lock()
 	if err := s.connectLocked(ctx); err != nil {
 		s.mu.Unlock()
@@ -212,8 +231,12 @@ func (s *server) completePrompt(ctx context.Context, prompt, argument, value str
 	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
-	return sess.Complete(ctx, &sdk.CompleteParams{
+	params := &sdk.CompleteParams{
 		Ref:      &sdk.CompleteReference{Type: "ref/prompt", Name: prompt},
 		Argument: sdk.CompleteParamsArgument{Name: argument, Value: value},
-	})
+	}
+	if len(arguments) > 0 {
+		params.Context = &sdk.CompleteContext{Arguments: arguments}
+	}
+	return sess.Complete(ctx, params)
 }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ type DialFunc func(ctx context.Context, cfg ServerConfig) (*mcp.ClientSession, e
 type connector struct {
 	info    ClientInfo
 	environ []string
+	stderr  io.Writer
 }
 
 func (c *connector) dial(ctx context.Context, cfg ServerConfig) (*mcp.ClientSession, error) {
@@ -61,6 +63,7 @@ func (c *connector) dial(ctx context.Context, cfg ServerConfig) (*mcp.ClientSess
 			base = projectEnviron(base)
 		}
 		cmd.Env = mergeEnv(base, cfg.Env)
+		cmd.Stderr = c.stderr
 		transport = &mcp.CommandTransport{
 			Command: cmd,
 			// Shutdown closes stdin and waits for the child; after this

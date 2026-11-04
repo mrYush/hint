@@ -12,10 +12,12 @@ import (
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
-// TestReferenceEverything exercises the reference server without allowing npx
-// to download it. The probe distinguishes an unavailable local runtime from a
-// failure after a real connection, which must fail the test.
+// TestReferenceEverything is an opt-in local check of the cached reference
+// server. Once enabled, client and dial failures fail rather than skip.
 func TestReferenceEverything(t *testing.T) {
+	if os.Getenv("HINT_TEST_MCP_REFERENCE") != "1" {
+		t.Skip("set HINT_TEST_MCP_REFERENCE=1 to run the cached reference server")
+	}
 	npx, err := exec.LookPath("npx")
 	if err != nil {
 		t.Skip("the everything reference server needs npx")
@@ -31,10 +33,11 @@ func TestReferenceEverything(t *testing.T) {
 	}
 	environ := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")}
 	probeCtx, cancelProbe := context.WithTimeout(context.Background(), 15*time.Second)
-	probe, err := (&connector{info: ClientInfo{Name: "hint-test", Version: "v0"}, environ: environ}).dial(probeCtx, cfg)
+	var stderr strings.Builder
+	probe, err := (&connector{info: ClientInfo{Name: "hint-test", Version: "v0"}, environ: environ, stderr: &stderr}).dial(probeCtx, cfg)
 	cancelProbe()
 	if err != nil {
-		t.Skipf("the everything reference server is not available locally without network access: %v", err)
+		t.Fatalf("dialing the cached reference server: %v\n%s", err, stderr.String())
 	}
 	_ = probe.Close()
 

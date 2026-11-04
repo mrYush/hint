@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/mrYush/hint/internal/text"
 )
@@ -18,8 +19,20 @@ type InstructionSource struct {
 	Content string
 }
 
+// ContextSnapshot is a consistent copy of the instruction state that can
+// change when configured MCP resources are loaded.
+type ContextSnapshot struct {
+	InstructionPaths []string
+	Instructions     []Instruction
+	Rules            []Rule
+	Warnings         []string
+	Sources          []InstructionSource
+	Revision         uint64
+}
+
 // Context is what the CLI knows about the working directory before the
-// first request.
+// first request. Its instruction state remains safe to read while another
+// session adds configured MCP resources.
 type Context struct {
 	// Dir is the working directory, absolute.
 	Dir string
@@ -45,28 +58,66 @@ type Context struct {
 	// refusing to answer) for the CLI to print once.
 	Warnings []string
 
+	mu sync.RWMutex
 	// What Layout needs to lay the documents out again.
 	files      []string // the HINT.md-style files, outer first
 	sources    []InstructionSource
 	budget     int
 	summarizer Summarizer
+	revision   uint64
+}
+
+// Snapshot returns a consistent copy of the mutable instruction state.
+func (pc *Context) Snapshot() ContextSnapshot {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return ContextSnapshot{
+		InstructionPaths: append([]string(nil), pc.InstructionPaths...),
+		Instructions:     append([]Instruction(nil), pc.Instructions...),
+		Rules:            append([]Rule(nil), pc.Rules...),
+		Warnings:         append([]string(nil), pc.Warnings...),
+		Sources:          append([]InstructionSource(nil), pc.sources...),
+		Revision:         pc.revision,
+	}
 }
 
 // InstructionSources returns the run's in-memory instruction documents.
 func (pc *Context) InstructionSources() []InstructionSource {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
 	return append([]InstructionSource(nil), pc.sources...)
 }
 
 // AddInstructionSources adds configured in-memory documents after the file
-// instructions and recomputes the initial layout under the same budget.
-func (pc *Context) AddInstructionSources(ctx context.Context, sources []InstructionSource) {
-	pc.sources = append(pc.sources, sources...)
-	for _, source := range sources {
-		pc.InstructionPaths = append(pc.InstructionPaths, source.Path)
+// instructions, recomputes the initial layout and returns its new warnings.
+func (pc *Context) AddInstructionSources(ctx context.Context, sources []InstructionSource) []string {
+	if len(sources) == 0 {
+		return nil
 	}
-	instructions, warnings := pc.Layout(ctx, nil)
-	pc.Instructions = instructions
-	pc.Warnings = append(pc.Warnings, warnings...)
+	for {
+		pc.mu.RLock()
+		files := append([]string(nil), pc.files...)
+		rules := append([]Rule(nil), pc.Rules...)
+		combined := append(append([]InstructionSource(nil), pc.sources...), sources...)
+		budget, summarizer, revision := pc.budget, pc.summarizer, pc.revision
+		pc.mu.RUnlock()
+
+		instructions, warnings := layoutInstructions(ctx, files, rules, combined, budget, summarizer, nil)
+		pc.mu.Lock()
+		if pc.revision != revision {
+			pc.mu.Unlock()
+			continue
+		}
+		pc.sources = combined
+		for _, source := range sources {
+			pc.InstructionPaths = append(pc.InstructionPaths, source.Path)
+		}
+		pc.Instructions = instructions
+		pc.Warnings = append(pc.Warnings, warnings...)
+		pc.revision++
+		pc.mu.Unlock()
+		return warnings
+	}
 }
 
 // Layout lays the run's instruction documents out under the budget together
@@ -76,28 +127,38 @@ func (pc *Context) AddInstructionSources(ctx context.Context, sources []Instruct
 // request once a rule has been touched; Load calls it with no rules for
 // Context.Instructions.
 func (pc *Context) Layout(ctx context.Context, active []Rule) ([]Instruction, []string) {
+	pc.mu.RLock()
+	files := append([]string(nil), pc.files...)
+	rules := append([]Rule(nil), pc.Rules...)
+	sources := append([]InstructionSource(nil), pc.sources...)
+	budget, summarizer := pc.budget, pc.summarizer
+	pc.mu.RUnlock()
+	return layoutInstructions(ctx, files, rules, sources, budget, summarizer, active)
+}
+
+func layoutInstructions(ctx context.Context, files []string, rules []Rule, sources []InstructionSource, budget int, summarizer Summarizer, active []Rule) ([]Instruction, []string) {
 	byPath := map[string]Rule{}
 	for _, r := range active {
 		byPath[r.Path] = r
 	}
 	// Discovery order, not activation order: an active rule sits with
 	// the always-loaded rules of its own directory.
-	paths := orderRules(pc.files, pc.Rules, func(r Rule) bool {
+	paths := orderRules(files, rules, func(r Rule) bool {
 		_, ok := byPath[r.Path]
 		return !r.Conditional() || ok
 	})
-	files, warnings := readInstructionFiles(ctx, paths)
-	for _, source := range pc.sources {
+	raw, warnings := readInstructionFiles(ctx, paths)
+	for _, source := range sources {
 		content := source.Content
 		if len(content) > MaxInstructionFileSize {
 			content = text.Cut(content, MaxInstructionFileSize)
 			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", source.Path, MaxInstructionFileSize))
 		}
 		if strings.TrimSpace(content) != "" {
-			files = append(files, newRawFile(source.Path, content))
+			raw = append(raw, newRawFile(source.Path, content))
 		}
 	}
-	instructions, fitWarnings := fitInstructions(ctx, files, pc.budget, pc.summarizer)
+	instructions, fitWarnings := fitInstructions(ctx, raw, budget, summarizer)
 	warnings = append(warnings, fitWarnings...)
 	for i := range instructions {
 		if r, ok := byPath[instructions[i].Path]; ok {

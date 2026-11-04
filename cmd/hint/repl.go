@@ -21,7 +21,7 @@ const replHelp = `Commands:
   /profile                 list the provider profiles; the one in use is marked
   /profile <name> [model]  answer with that profile (and model) from now on
   /prompts                 list MCP prompts
-  /<server>:<prompt> [args] expand an MCP prompt into a question
+  /<server>:<prompt> [args] expand an MCP prompt; quote arguments containing spaces
   /exit, /quit             leave (Ctrl-D does too)
 Anything else is a question for the assistant; each line is one question.
 Ctrl-C stops an answer that is being written and returns to the prompt.`
@@ -65,7 +65,11 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			continue
 		}
 		if strings.HasPrefix(line, "/") {
-			fields := strings.Fields(line)
+			fields, splitErr := shell.SplitWords(line)
+			if splitErr != nil {
+				fmt.Fprintln(a.io.err, "hint: invalid command:", splitErr)
+				continue
+			}
 			switch cmd := fields[0]; cmd {
 			case "/exit", "/quit":
 				return nil
@@ -83,8 +87,12 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 					fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
 					continue
 				}
-				expanded, err := a.expandPrompt(ctx, cmd, fields[1:])
+				expanded, err := a.expandPromptCancellable(ctx, sigs, cmd, fields[1:])
 				if err != nil {
+					if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+						fmt.Fprintln(a.io.err, "\nhint: prompt expansion stopped")
+						continue
+					}
 					fmt.Fprintln(a.io.err, "hint:", err)
 					continue
 				}
@@ -169,6 +177,27 @@ func (a *app) useProfile(ctx context.Context, ref rpc.ProfileRef) {
 	}
 	a.profile = got
 	fmt.Fprintf(a.io.err, "hint: answering with %s/%s from now on\n", got.Profile, got.Model)
+}
+
+// expandPromptCancellable expands a prompt until it returns or Ctrl-C
+// arrives. The signal cancels that call and is drained, so it does not
+// cancel the turn the expansion was going to start.
+func (a *app) expandPromptCancellable(ctx context.Context, sigs <-chan os.Signal, command string, args []string) (string, error) {
+	expandCtx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-sigs:
+			cancel()
+		case <-expandCtx.Done():
+		}
+	}()
+	text, err := a.expandPrompt(expandCtx, command, args)
+	cancel()
+	<-stopped
+	drain(sigs)
+	return text, err
 }
 
 // errPromptInterrupted reports Ctrl-C while the prompt was waiting.

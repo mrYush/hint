@@ -107,6 +107,13 @@ func TestEngineMCPStartsOnFirstTurn(t *testing.T) {
 	if dials != 0 {
 		t.Fatalf("newEngine connected %d MCP servers; want lazy start", dials)
 	}
+	servers, err := eng.PromptServers(context.Background())
+	if err != nil || len(servers) != 1 || servers[0] != "fake" {
+		t.Fatalf("PromptServers = %v, %v", servers, err)
+	}
+	if dials != 0 {
+		t.Fatalf("PromptServers connected %d MCP servers; want configuration only", dials)
+	}
 	live := eng.newSession(nil, "test")
 	if dials != 0 {
 		t.Fatalf("opening a session connected %d MCP servers; want lazy start", dials)

@@ -151,6 +151,10 @@ type modelsResult struct {
 	Models []string `json:"models"`
 }
 
+type promptServersResult struct {
+	Servers []string `json:"servers"`
+}
+
 type promptsResult struct {
 	Prompts []PromptInfo `json:"prompts"`
 }
@@ -160,7 +164,8 @@ type promptTextResult struct {
 }
 
 type promptCompletionResult struct {
-	Values []string `json:"values"`
+	Values  []string `json:"values"`
+	HasMore bool     `json:"has_more,omitempty"`
 }
 
 type listResult struct {

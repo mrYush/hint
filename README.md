@@ -625,7 +625,7 @@ mcp_servers:
     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
     permission: read
     timeout: 30s
-    resources: ["docs://project/rules"] # optional instruction resource URIs
+    resources: ["file:///absolute/path/to/README.md"] # example; use a path this server may read
     tools:
       allow: ["read_text_file", "list_directory"]
   github:
@@ -639,14 +639,24 @@ mcp_servers:
 A stdio server runs with the variables its entry declares plus a base stripped of hint's API keys; a project-added server gets only a minimal base (`PATH`, `HOME`, the locale).
 HTTP headers support `${VAR}`, are sent only to the configured origin, and a redirect to another host is refused before a credential can follow it.
 The MCP schema budget is 48 KiB with a 20 KiB per-server cap; a server that does not fit is hidden as a whole and a warning names it, and `tools.allow` or `tools.deny` narrows a large server.
-A project `.hint/config.yaml` may add a server but may not set `env` or `headers`; it stays disabled until `hint mcp enable <name>` is run in that repository, and any change to `command`, `args`, `url` or `permission` resets that approval.
+A project `.hint/config.yaml` may add a server but may not set `env` or `headers`; it stays disabled until `hint mcp enable <name>` is run in that repository, and any change to `command`, `args`, `url`, `permission` or `resources` resets that approval.
 Resources named by `resources` load like instruction files, sharing their budget, outline and `instructions` tool.
-The model can read another resource with `resource_read` using `server` and `uri`; that result is untrusted tool data and never becomes an instruction.
+Global resource URIs expand `${VAR}` and redact the referenced values; project resource URIs stay literal.
+Duplicate URIs are rejected, and a configured resource may contain at most 1 MiB of decoded text or blob content.
+The model can read any URI on an enabled server with `resource_read` using `server` and `uri`; that result is untrusted tool data and never becomes an instruction.
+Neither `tools.allow`/`tools.deny` nor the instruction-only `resources` list restricts `resource_read`; a resource over 50,000 decoded bytes is rejected rather than truncated.
+Those size checks run after the SDK has buffered the inbound frame, which defaults to 16 MiB.
+Empty resources and non-text configured blobs produce warnings instead of silent instruction entries.
 `/prompts` lists server prompts in the TUI and plain REPL, and `/<server>:<prompt> [args]` expands one as a user turn with positional arguments.
-In the TUI, Tab completes prompt commands and asks the server for argument values through `completion/complete`.
+Quote or backslash-escape an argument containing spaces.
+Prompt user and assistant messages are flattened into that one user turn.
+Prompt names containing a colon or whitespace cannot be slash commands and are skipped with a warning.
+In the TUI, Tab completes prompt commands and asks the server for argument values through `completion/complete`, including already entered arguments as context.
 
 MCP servers start on the first turn or an explicit prompt operation, not when hint launches, so a run that never uses MCP starts no process.
-`hint mcp list` shows the configured servers without connecting, `hint mcp status` connects, lists their tools under the budget, and checks each server with an MCP `ping` (the handshake is the check on servers that removed `ping`), and `hint mcp enable <name>` records the project-server approval.
+`hint mcp list` shows the configured servers and resource URIs without connecting.
+`hint mcp status` connects, lists tools under the budget, reports configured resource counts without reading their contents, and checks each server with an MCP `ping` (the handshake is the check on servers that removed `ping`).
+`hint mcp enable <name>` records the project-server approval.
 
 ### Environment variables
 

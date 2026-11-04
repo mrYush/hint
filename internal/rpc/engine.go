@@ -9,8 +9,8 @@ import (
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
-// ErrNotFound is what an Engine returns for a session or a profile that
-// does not exist; the server answers it with CodeNotFound. ErrInvalid is
+// ErrNotFound is what an Engine returns for a session, profile, MCP server or
+// prompt that does not exist; the server answers it with CodeNotFound. ErrInvalid is
 // for a request that names things that exist but cannot be used that way
 // — a profile without a key, a turn the conversation does not have — and
 // is answered with CodeInvalidParams. Any other error is CodeInternal.
@@ -177,10 +177,13 @@ type Engine interface {
 	// Models lists the models the profile's endpoint serves, by name. An
 	// unknown profile is ErrNotFound.
 	Models(ctx context.Context, profile string) ([]string, error)
+	// PromptServers lists enabled MCP server names without connecting to them.
+	PromptServers(ctx context.Context) ([]string, error)
 	// Prompts lists the MCP prompts available as slash commands.
 	Prompts(ctx context.Context) ([]PromptInfo, error)
 	// ExpandPrompt expands one prompt with positional arguments.
 	ExpandPrompt(ctx context.Context, req PromptRequest) (string, error)
-	// CompletePrompt completes one named prompt argument.
-	CompletePrompt(ctx context.Context, req PromptCompleteRequest) ([]string, error)
+	// CompletePrompt completes one named prompt argument. hasMore is true
+	// when the server had further values it did not return.
+	CompletePrompt(ctx context.Context, req PromptCompleteRequest) (values []string, hasMore bool, err error)
 }

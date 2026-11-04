@@ -57,9 +57,6 @@ func NewProjectInstructions(pc *project.Context) agentapi.Tool {
 }
 
 func (t *instructions) allPaths() []string {
-	if t.pc != nil {
-		return t.pc.InstructionPaths
-	}
 	return t.paths
 }
 
@@ -70,6 +67,14 @@ func (*instructions) Class() agentapi.ActionClass  { return agentapi.ClassRead }
 
 // Run implements agentapi.Tool.
 func (t *instructions) Run(_ context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
+	if t.pc != nil {
+		snapshot := t.pc.Snapshot()
+		sources := make(map[string]string, len(snapshot.Sources))
+		for _, source := range snapshot.Sources {
+			sources[source.Path] = source.Content
+		}
+		t = &instructions{paths: snapshot.InstructionPaths, sources: sources}
+	}
 	var in instructionsArgs
 	if err := tool.DecodeArgs(args, &in); err != nil {
 		return tool.InvalidArgs(callID, instructionsName, err), nil
@@ -115,13 +120,6 @@ func (t *instructions) index(callID string) (agentapi.ToolResult, error) {
 
 // readContent reads a discovered disk file or returns a configured source.
 func (t *instructions) readContent(path string) ([]byte, error) {
-	if t.pc != nil {
-		for _, source := range t.pc.InstructionSources() {
-			if source.Path == path {
-				return []byte(source.Content), nil
-			}
-		}
-	}
 	if content, ok := t.sources[path]; ok {
 		return []byte(content), nil
 	}

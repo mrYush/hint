@@ -9,6 +9,7 @@ import (
 	"github.com/atotto/clipboard"
 
 	"github.com/mrYush/hint/internal/config"
+	"github.com/mrYush/hint/internal/shell"
 )
 
 // command is one slash command of the input line. The same table drives
@@ -58,7 +59,7 @@ func commands() []command {
 		{name: "/config", help: "show | keys | set [--project] <key> <value> | unset [--project] <key>: any config key, checked before it is written",
 			next: configArgs, enabled: func(m model) bool { return m.setup != nil && m.setup.Set != nil }},
 		{name: "/sessions", help: "list this directory's sessions as a tree and resume one; f forks the row", enabled: func(m model) bool { return !m.busy }},
-		{name: "/prompts", help: "list MCP prompts; /<server>:<prompt> expands one with positional arguments", enabled: func(m model) bool { return !m.busy }},
+		{name: "/prompts", help: "list MCP prompts; /<server>:<prompt> expands one with positional arguments; quote values containing spaces", enabled: func(m model) bool { return !m.busy }},
 		{name: "/profile", help: "<name> [model]: answer with another provider profile from now on; alone, pick from the list",
 			next: profileArgs, enabled: func(m model) bool { return m.sessionID != "" && !m.busy }},
 		{name: "/completion", help: "[off|tab|idle|both]: when a model continues what you type, for this session; alone, the state and the cost so far",
@@ -181,26 +182,34 @@ func (m model) complete(input string) []string {
 	if cmd.next == nil {
 		return nil
 	}
-	head := strings.Join(append([]string{cmd.name}, prev...), " ") + " "
+	head := commandHead(cmd.name, prev)
 	var out []string
 	for _, c := range cmd.next(m, prev).cands {
 		if strings.HasPrefix(c, partial) {
-			out = append(out, head+c)
+			out = append(out, head+shell.QuoteWord(c))
 		}
 	}
 	return out
 }
 
+func commandHead(name string, prev []string) string {
+	words := []string{name}
+	for _, arg := range prev {
+		words = append(words, shell.QuoteWord(arg))
+	}
+	return strings.Join(words, " ") + " "
+}
+
 // parseLine splits a command line into the command, the finished
 // arguments and the word under the cursor. ok is false while the command
-// name itself is being typed (partial is then that name) or names no
-// available command.
+// name itself is being typed (partial is then that name), the quoting is
+// incomplete, or the line names no available command.
 func (m model) parseLine(input string) (cmd command, prev []string, partial string, ok bool) {
-	fields := strings.Fields(input)
-	if len(fields) == 0 {
+	fields, err := shell.SplitWords(input)
+	if err != nil || len(fields) == 0 {
 		return command{}, nil, "", false
 	}
-	if !strings.HasSuffix(input, " ") {
+	if !shell.EndsInSpace(input) {
 		partial, fields = fields[len(fields)-1], fields[:len(fields)-1]
 	}
 	if len(fields) == 0 {
@@ -239,6 +248,14 @@ type completion struct {
 	idx   int
 }
 
+func firstCommandWord(input string) string {
+	fields, err := shell.SplitWords(input)
+	if err != nil || len(fields) == 0 {
+		return input
+	}
+	return fields[0]
+}
+
 // tab completes the input line. On a command, the first Tab extends the
 // line to the longest common prefix of the candidates, or takes the only
 // one, and lists the rest; further Tabs cycle through them. A model
@@ -257,11 +274,25 @@ func (m model) tab() (model, tea.Cmd) {
 		return m, nil
 	}
 	m.comp = nil
-	if !m.promptsLoaded && strings.Contains(strings.Fields(cur)[0], ":") {
-		if !m.promptsLoading {
-			return m.loadPrompts(false, cur)
+	first := firstCommandWord(cur)
+	if !m.promptsLoaded {
+		switch {
+		case strings.Contains(first, ":"):
+			if !m.promptsLoading {
+				return m.loadPrompts(false, cur)
+			}
+			return m, nil
+		case !m.promptServersLoaded:
+			if !m.promptServersLoading {
+				return m.loadPromptServers(cur)
+			}
+			return m, nil
+		case m.promptServerMatch(first):
+			if !m.promptsLoading {
+				return m.loadPrompts(false, cur)
+			}
+			return m, nil
 		}
-		return m, nil
 	}
 	if req, ok := m.promptCompletionNeeded(cur); ok {
 		if !m.promptValuesLoading {

@@ -219,8 +219,8 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, w := range pc.Warnings {
-		fmt.Fprintf(as.notices, "hint: warning: %s\n", w)
+	for _, w := range pc.Snapshot().Warnings {
+		fmt.Fprintf(as.notices, "hint: warning: %s\n", config.Redact(w, as.cfg.Secrets()))
 	}
 	// A profile that states its context window sizes proactive
 	// compaction; the fallback profile keeps the same limits, and a
@@ -435,7 +435,9 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	}
 	slot := &promptSlot{}
 	gate := permission.New(e.mode, slot)
-	pre := newPreamble(e.pc, e.registry, e.notices, trace)
+	pre := newPreamble(e.pc, e.registry, e.notices, trace, func(warning string) string {
+		return config.Redact(warning, e.secrets())
+	})
 	initial := pre.initial()
 	live := &rpcSession{
 		id:      id,
@@ -695,9 +697,8 @@ func (e *rpcEngine) addMCPResources(ctx context.Context, resources []mcp.Resourc
 	for _, resource := range resources {
 		sources = append(sources, project.InstructionSource{Path: resource.InstructionPath(), Content: resource.Text})
 	}
-	warningStart := len(e.pc.Warnings)
-	e.pc.AddInstructionSources(ctx, sources)
-	for _, w := range e.pc.Warnings[warningStart:] {
+	warnings := e.pc.AddInstructionSources(ctx, sources)
+	for _, w := range warnings {
 		fmt.Fprintf(e.notices, "hint: warning: %s\n", config.Redact(w, e.secrets()))
 	}
 }
