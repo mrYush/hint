@@ -142,7 +142,8 @@ Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
 
 Tab completes `/commands` and their arguments; `/help` lists them:
 `/sessions` shows this directory's sessions as a tree and resumes one,
-`/profile` switches the provider profile, `/prompts` lists MCP prompts,
+`/new` starts a fresh session, `/profile` switches the provider profile,
+`/prompts` lists MCP prompts,
 `/completion` shows or sets when a model continues what you type (see
 [Completion of what you type](#completion-of-what-you-type)), `/setup` and `/config` edit the
 configuration, `/copy` and `ctrl+y` copy the last answer (or `question`,
@@ -166,7 +167,7 @@ hint: answering with local/qwen2.5:7b from now on
 > /exit
 ```
 
-Each line is one question; `/help`, `/profile` and `/exit` are its
+Each line is one question; `/help`, `/new`, `/profile` and `/exit` are its
 commands. Both shells are clients of the same protocol as `hint serve`.
 
 ### One question
@@ -247,6 +248,9 @@ hint --no-session -p "..."       # record nothing
 ```
 
 The session flags work for both the interactive session and `-p`.
+`/new`, in the TUI and in `hint --plain`, starts another session without leaving the shell; a fresh `hint` does the same from outside it.
+The session just left stays on disk and can be resumed, and the new one answers with the default profile rather than one `/profile` switched to.
+A run started with `--no-session` keeps the new session off disk too.
 
 A session can branch. In the TUI, `f` on a picked message forks the
 conversation after that message's turn, and `f` on a row of `/sessions`

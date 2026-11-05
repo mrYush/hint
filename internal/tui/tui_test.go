@@ -65,25 +65,37 @@ type fakeEngine struct {
 	promptComplete   rpc.PromptCompleteRequest
 	promptHasMore    bool
 	promptServersErr error
+	// lastOpen is the most recent session.open, so a test can see whether
+	// /new asked for an ephemeral session.
+	lastOpen rpc.OpenOptions
 }
 
 // fakeSession is one session of a fakeEngine: its id and the questions
 // its turns were given, in order.
 type fakeSession struct {
-	id      string
-	eng     *fakeEngine
-	msgs    []agentapi.Message
-	profile rpc.ProfileRef
-	parent  *rpc.Parent
+	id        string
+	eng       *fakeEngine
+	msgs      []agentapi.Message
+	profile   rpc.ProfileRef
+	parent    *rpc.Parent
+	ephemeral bool
 }
 
-func (e *fakeEngine) List(context.Context) ([]rpc.Info, error) { return e.infos, nil }
-
-func (e *fakeEngine) Open(context.Context, rpc.OpenOptions) (rpc.Session, error) {
+func (e *fakeEngine) List(context.Context) ([]rpc.Info, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	s := &fakeSession{id: fmt.Sprintf("s%d", len(e.sessions)+1), eng: e}
+	return e.infos, nil
+}
+
+func (e *fakeEngine) Open(_ context.Context, opts rpc.OpenOptions) (rpc.Session, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.lastOpen = opts
+	s := &fakeSession{id: fmt.Sprintf("s%d", len(e.sessions)+1), eng: e, ephemeral: opts.Ephemeral}
 	e.sessions[s.id] = s
+	if !opts.Ephemeral {
+		e.infos = append(e.infos, rpc.Info{ID: s.id})
+	}
 	return s, nil
 }
 

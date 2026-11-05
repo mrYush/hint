@@ -129,6 +129,17 @@ func (m model) fork(id string, turn int) (model, tea.Cmd) {
 	}
 }
 
+// openFresh is /new: session.open, then the shell moves onto it. A run
+// started with --no-session repeats ephemeral, so the new session stays
+// off disk. The one just left stays open on the server.
+func (m model) openFresh() (model, tea.Cmd) {
+	cl, ctx, left, ephemeral := m.cl, m.ctx, m.sessionID, m.ephemeral
+	return m, func() tea.Msg {
+		view, err := cl.OpenSession(ctx, rpc.OpenOptions{Ephemeral: ephemeral})
+		return attachedMsg{view: view, err: err, fresh: true, left: left, ephemeral: ephemeral}
+	}
+}
+
 // openNew starts a fresh recorded session, the fallback of a picker with
 // nothing to pick.
 func (m model) openNew() (model, tea.Cmd) {
@@ -171,10 +182,14 @@ func (m model) attached(msg attachedMsg) model {
 	}
 	m.picker = nil
 	m.sessionID = msg.view.ID
-	m.recorded = true
+	m.recorded = !msg.ephemeral
 	m.profile = rpc.ProfileRef{Profile: msg.view.Profile, Model: msg.view.Model}
 	m.entries = fromHistory(msg.view.Messages)
 	m.turns, m.sel = turnsOf(m.entries), noSelection
+	if msg.fresh && msg.left != "" {
+		m.entries = append(m.entries, entry{kind: entryNotice, turn: m.turns,
+			text: fmt.Sprintf("left session %s; this is session %s", short(msg.left), short(msg.view.ID)), done: true})
+	}
 	if msg.forked && msg.view.Parent != nil {
 		m.entries = append(m.entries, entry{kind: entryNotice, turn: m.turns,
 			text: fmt.Sprintf("forked from session %s after turn %d; this is session %s", short(msg.view.Parent.ID), msg.view.Parent.Turn, short(msg.view.ID)), done: true})

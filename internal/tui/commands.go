@@ -59,6 +59,7 @@ func commands() []command {
 		{name: "/config", help: "show | keys | set [--project] <key> <value> | unset [--project] <key>: any config key, checked before it is written",
 			next: configArgs, enabled: func(m model) bool { return m.setup != nil && m.setup.Set != nil }},
 		{name: "/sessions", help: "list this directory's sessions as a tree and resume one; f forks the row", enabled: func(m model) bool { return !m.busy }},
+		{name: "/new", help: "start a fresh session on the default profile; the current one stays", enabled: func(m model) bool { return !m.busy }},
 		{name: "/prompts", help: "list MCP prompts; /<server>:<prompt> expands one with positional arguments; quote values containing spaces", enabled: func(m model) bool { return !m.busy }},
 		{name: "/profile", help: "<name> [model]: answer with another provider profile from now on; alone, pick from the list",
 			next: profileArgs, enabled: func(m model) bool { return m.sessionID != "" && !m.busy }},

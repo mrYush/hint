@@ -34,10 +34,15 @@ type (
 	}
 	// attachedMsg is the session the picker chose, a fresh one when
 	// there was nothing to choose from, or a fork just taken (forked).
+	// fresh is /new: left is the session the shell was on, and
+	// ephemeral asks the header to say the new one is not recorded.
 	attachedMsg struct {
-		view   rpc.SessionView
-		err    error
-		forked bool
+		view      rpc.SessionView
+		err       error
+		forked    bool
+		fresh     bool
+		left      string
+		ephemeral bool
 	}
 	// profilesMsg is the answer to profile.list.
 	profilesMsg struct {

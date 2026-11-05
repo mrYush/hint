@@ -18,6 +18,7 @@ import (
 // replHelp is what /help prints.
 const replHelp = `Commands:
   /help                    show this help
+  /new                     start a fresh session; the current one stays
   /profile                 list the provider profiles; the one in use is marked
   /profile <name> [model]  answer with that profile (and model) from now on
   /prompts                 list MCP prompts
@@ -76,6 +77,13 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			case "/help":
 				fmt.Fprintln(a.io.err, replHelp)
 				continue
+			case "/new":
+				if len(fields) > 1 {
+					fmt.Fprintln(a.io.err, "hint: /new takes no argument")
+					continue
+				}
+				a.newSession(ctx)
+				continue
 			case "/profile":
 				a.profileCommand(ctx, fields[1:])
 				continue
@@ -127,6 +135,21 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			}
 		}
 	}
+}
+
+// newSession is /new: session.open on the default profile, ephemeral
+// when this run records nothing. The session just left stays as it was.
+func (a *app) newSession(ctx context.Context) {
+	left := a.sessionID
+	view, err := a.client.OpenSession(ctx, rpc.OpenOptions{Ephemeral: !a.recorded})
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	a.sessionID = view.ID
+	a.history = nil
+	a.profile = rpc.ProfileRef{Profile: view.Profile, Model: view.Model}
+	fmt.Fprintf(a.io.err, "hint: left session %s; this is session %s\n", left, view.ID)
 }
 
 // profileCommand is /profile: alone it lists the profiles the core has,
