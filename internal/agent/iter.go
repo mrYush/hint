@@ -20,18 +20,16 @@ type streamResult struct {
 	overflow bool
 }
 
-// streamOnce sends messages to the provider and folds the resulting
-// [agentapi.ChatEvent] stream into a streamResult, forwarding text and
-// thinking deltas to out as they arrive so a client can render the answer
-// live instead of waiting for the whole turn.
+// streamOnce sends the estimated request snapshot to the provider and
+// folds the resulting [agentapi.ChatEvent] stream into a streamResult,
+// forwarding text and thinking deltas to out as they arrive so a client can
+// render the answer live instead of waiting for the whole turn.
 //
 // Every ChatError other than context overflow becomes a Go error; the
 // caller turns that into a terminal EventError. A context-overflow error
 // becomes streamResult.overflow instead, because the loop's reaction to it
 // (compact, then retry the same request) is not a failure path.
-func (a *Agent) streamOnce(ctx context.Context, messages []agentapi.Message, out chan<- agentapi.Event) (streamResult, error) {
-	req := agentapi.ChatRequest{Messages: messages, Tools: a.schemas()}
-
+func (a *Agent) streamOnce(ctx context.Context, req agentapi.ChatRequest, out chan<- agentapi.Event) (streamResult, error) {
 	events, err := a.provider.Stream(ctx, req)
 	if err != nil {
 		return streamResult{}, err

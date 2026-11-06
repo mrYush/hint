@@ -197,6 +197,15 @@ func (r Root) WalkDir(abs string, fn fs.WalkDirFunc) error {
 // Dir returns the resolved root directory.
 func (r Root) Dir() string { return r.dir }
 
+// Close releases the shared directory handle. The owner must ensure that no
+// copies of this Root are in use; closing a copy closes every copy's handle.
+func (r Root) Close() error {
+	if r.handle == nil {
+		return nil
+	}
+	return r.handle.Close()
+}
+
 // Deny returns a copy of the root that refuses paths — files or
 // directories, each with everything below it. A path outside the root
 // is kept too: it costs nothing and the root may be a parent of it the
@@ -257,10 +266,15 @@ func (r Root) DeniedUnder(dir string) []string {
 // its own path looks fine. The target itself need not exist: write_file
 // creates files, so only the existing prefix can be checked.
 func (r Root) Resolve(p string) (string, error) {
+	return r.ResolveExact(strings.TrimSpace(p))
+}
+
+// ResolveExact applies Resolve's rooted checks without trimming path bytes.
+// This is for persisted filesystem entry names, not convenience user input.
+func (r Root) ResolveExact(p string) (string, error) {
 	if r.dir == "" {
 		return "", fmt.Errorf("tool: root is not initialised")
 	}
-	p = strings.TrimSpace(p)
 	var abs string
 	switch {
 	case p == "":

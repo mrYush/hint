@@ -80,7 +80,7 @@ func TestCompact_ThinkingOnlyShortcut(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, out)
+	result, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -146,7 +146,7 @@ func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, out)
+	result, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -201,7 +201,7 @@ func TestCompact_EmptyBodyIsFatal(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, out)
+	_, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 
 	if err == nil {
@@ -234,7 +234,7 @@ func TestCompact_PropagatesCompactorError(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, out)
+	_, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 
 	if !errors.Is(err, want) {
@@ -269,7 +269,7 @@ func TestCompact_ReplacesPreviousSummary(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, out)
+	result, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -313,7 +313,7 @@ func TestCompact_OnlySummariesIsFatal(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, out)
+	_, err := a.compact(context.Background(), messages, 0, out)
 	close(out)
 
 	if err == nil {
@@ -334,10 +334,10 @@ func TestOccupancy_StaleBaselineFallsBackToEstimate(t *testing.T) {
 	a := &Agent{estimator: charEstimator{}}
 	messages := []agentapi.Message{agentapi.UserMessage("12345678")} // 2 tokens
 
-	if got := a.occupancy(messages, agentapi.Usage{InputTokens: 100}, 5); got != 2 {
+	if got := a.occupancy(messages, 0, usageBaseline{inputTokens: 100, messages: 5}); got != 2 {
 		t.Errorf("occupancy with a baseline past the end = %d, want the whole-history estimate 2", got)
 	}
-	if got := a.occupancy(messages, agentapi.Usage{InputTokens: 100}, 1); got != 100 {
+	if got := a.occupancy(messages, 0, usageBaseline{inputTokens: 100, messages: 1}); got != 100 {
 		t.Errorf("occupancy with a baseline at the end = %d, want the reported usage 100", got)
 	}
 }
