@@ -35,7 +35,7 @@ func (o options) env() []string {
 
 // rules returns the ignore rules the pure-Go walks of list_dir, glob and
 // grep apply.
-func (o options) rules() project.Rules { return project.NewRules(o.git) }
+func (o options) rules() project.Rules { return project.NewRules(o.git).WithEnviron(o.env) }
 
 // Option configures a tool constructor.
 type Option func(*options)

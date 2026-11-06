@@ -18,7 +18,7 @@ import (
 	"github.com/mrYush/hint/internal/rpc"
 )
 
-func newServeCommand(flags *config.Flags) *cobra.Command {
+func newServeCommand(flags *config.Flags, indexMaxBytes *int64) *cobra.Command {
 	var listen string
 	var ask, autoEdit, yolo, debug bool
 	cmd := &cobra.Command{
@@ -35,10 +35,14 @@ this process's stdin. Another terminal joins with hint --connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
+			if *indexMaxBytes < 512<<10 {
+				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
+			}
 			opts := options{
-				flags: *flags,
-				mode:  runMode(ask, autoEdit, yolo),
-				debug: debug,
+				indexMaxBytes: *indexMaxBytes,
+				flags:         *flags,
+				mode:          runMode(ask, autoEdit, yolo),
+				debug:         debug,
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

@@ -1,8 +1,9 @@
 # WP2.2 code-map contract
 
-Design for review, 2026-11-06; subordinate to [WP2.2](phase-2-memory-mcp.md#wp22--repo-map) and tracked in [#93](https://github.com/mrYush/hint/issues/93).
-This specifies the interfaces WP2.2 consumes and exposes, not an implemented API or a separate work package.
-The workspace and shared-index foundations remain proposed prerequisites; their implementation and phase-level acceptance are separate from the map component.
+Implementation contract, 2026-11-06; subordinate to [WP2.2](phase-2-memory-mcp.md#wp22--repo-map) and tracked in [#93](https://github.com/mrYush/hint/issues/93).
+This specifies the interfaces WP2.2 consumes and exposes; the phase checklist records their implementation and acceptance status.
+The owner authorized the necessary workspace, catalog and scheduler foundations in the existing WP2.2 branch on 2026-11-06.
+The broader document-search and durable-notes platform remains separate work for v0.4.
 
 ## Request and result
 
@@ -30,11 +31,11 @@ An illustrative response, shown expanded for readability:
 {
   "root_id": "r1",
   "membership_revision": 7,
-  "generation": "g42",
+  "generation": 42,
   "scope": {"entry_id": "d9", "path_display": "src"},
-  "order": "path,start_byte,kind,symbol_id",
+  "order": "path",
   "status": {"state": "building", "reason": null},
-  "coverage": {"discovery_complete": false, "known_files": 120, "indexed_files": 80, "omitted_files": 3},
+  "coverage": {"discovery_complete": false, "known_files": 120, "indexed_files": 80, "pending_files": 37, "omitted_files": 3, "omissions": {"unsupported": 2, "oversized": 1}},
   "files": [{"id": "f3", "path_display": "src/a.go", "source_version": "sha256:...", "freshness": "observed", "observed_at": "2026-11-06T07:00:00Z"}],
   "entries": [{"id": "s7", "file_id": "f3", "kind": "function", "name": "Open", "signature": "func Open() error", "enclosing": "store", "start_byte": 24, "end_byte": 81, "start_line": 3, "end_line": 5}],
   "verification": {"files_checked": 0, "bytes_read": 0, "budget_exhausted": false},
@@ -43,6 +44,8 @@ An illustrative response, shown expanded for readability:
 ```
 
 File records deduplicate paths, hashes and freshness metadata shared by several declarations.
+Example handles are shortened for readability; implementation handles encode the complete SHA-256 digest with base64url and a root/file/symbol prefix.
+Source-version displays preserve the same complete digest, and the local schema-v2 catalog rejects the earlier experimental schema rather than mixing identity formats.
 Declaration IDs are stable within a source/extractor version, not a promise of identity across arbitrary edits.
 Declaration ranges are zero-based UTF-8 byte intervals `[start_byte,end_byte)` in the observed source version, with one-based line coordinates.
 The range may cover the declaration body for locating a later read, but the returned signature never contains that body.
@@ -50,11 +53,13 @@ The range may cover the declaration body for locating a later read, but the retu
 
 `status.state` is `ready`, `building`, `paused` or `unavailable`, describing index capability/work, not request validity or source freshness.
 Coverage describes the selected scope at the observed generation, including omitted files by reason and whether discovery completed.
+When all counts are present, `known_files = indexed_files + pending_files + omitted_files`; directories and ownership boundary markers are navigation entries rather than code-file counts.
 Use maintained aggregates or omit unavailable counts; calculating exact subtree counts must not trigger a complete scan on each query.
 Omission reasons include `unsupported`, `oversized`, `parse_failed`, `paused`, `deadline_exceeded` and `work_budget_exceeded`.
 Unknown total counts are absent; never derive a percentage from an undiscovered denominator.
 `ready` does not imply zero omissions, and no next cursor means the known generation is exhausted, not that the live filesystem has no other matches.
 Bound omission details using `coverage.omissions` as reason/count buckets; unavailable aggregate counts are absent, and more detail is available through scoped `repo_list` status queries.
+Small responses may omit optional aggregate counts and successful-verification counters to preserve an addressable result, but retain `verification.budget_exhausted` when it is true.
 `page.query_complete` means that this query exhausted its retained generation, independently of discovery coverage.
 `page.stop_reason` is `limit`, `byte_budget`, `work_budget`, `time_budget` or null; a normal work slice may return no entries and a progressing cursor.
 
@@ -88,7 +93,9 @@ If a required reservation cannot be admitted, return `index_unavailable` with `r
 A complete traversal of an arbitrarily large scope within a finite TTL is not guaranteed; return expiry metadata and support narrower scopes instead of promising indefinite retention.
 Advance the consumed key for returned records, definitive filter exclusions, known invalidations and explicit permanent omissions; this permits progress even on pages without returned declarations.
 Do not consume the next eligible candidate merely because this page cannot finish its mandatory checks or fit its complete record; resume before that candidate on the next page.
-Changing membership, changing policy or evicting the retained generation invalidates the cursor; return `stale_cursor` and require a fresh request without it.
+Changing membership, observing a changed policy or evicting the retained generation invalidates the cursor; return `stale_cursor` and require a fresh request without it.
+External ignore-policy changes become known through bounded reconciliation and current candidate checks, not an instantaneous recursive scan of every policy file.
+Every candidate still passes the current policy check before publication; an unchanged epoch does not replace that check.
 Never silently restart pagination or fall back to another root.
 Every continuation rechecks current access before exposing saved scope or text; a cursor or entry handle is not an access grant.
 For an unchanged retained generation, eligible records are reachable without page-induced duplication or omission; source invalidations are reported separately.
@@ -118,6 +125,9 @@ Return one of two per-file freshness states:
 
 Stat changes trigger invalidation, but matching stats never establish `content_checked`.
 Known changed, deleted or inaccessible sources are suppressed from normal map entries; report bounded counts/reasons and prioritize refresh.
+Optional `invalidations` buckets count distinct files rejected on this page, using `source_changed`, `extractor_changed`, `missing`, `access_denied` or `excluded`; they are separate from pinned scope coverage aggregates.
+Admit bucket growth within the same serialized byte budget before consuming the rejected candidate.
+An empty progressing page may therefore report invalidations before a valid declaration is returned on a later page.
 Do not retain a known stale signature under the weaker `observed` label.
 Every returned candidate, including `observed`, must pass a current rooted existence/access and metadata check before publication.
 These mandatory checks use the query budget; if there is insufficient budget, end the page before consuming the candidate instead of exposing unchecked text or losing the candidate from continuation.
@@ -141,9 +151,10 @@ Notes and edits that require fresh evidence cannot treat `observed` map entries 
 
 The first version indexes declarations, signatures, enclosing context and source ranges only.
 It does not extract references, resolve names, construct a dependency graph or run PageRank.
-Without a symbol filter, order by `(relative_path_bytes, declaration_start_byte, kind, stable_symbol_id)`.
-For a prefix filter, use `(exact_bucket, name_bytes, relative_path_bytes, declaration_start_byte, kind, stable_symbol_id)` so name-index iteration does not require sorting every match into path order; exact matches form the first bucket and are excluded from the prefix remainder.
-Exact mode excludes nonmatching names and keeps path order; `order` in the result identifies the applied tuple.
+`order` is a stable label, with these canonical key mappings: `path` means `(relative_path_bytes, start_byte, kind, symbol_id)` and `name` means `(name_bytes, relative_path_bytes, start_byte, kind, symbol_id)`.
+Without a symbol filter, and in exact mode, use `path` order.
+Prefix mode uses `name` order, so every exact spelling precedes its longer extensions naturally in byte ordering without a separate sort or duplicate exact bucket.
+Names and paths are ordered as raw UTF-8/filesystem bytes; `start_byte`, `kind` and `symbol_id` refer to declaration fields, with `symbol_id` exposed as the declaration's `id`.
 Subtree/exclusion filtering still consumes the bounded examined-record budget and may require several empty progress pages for sparse matches.
 Use canonical relative path bytes for ordering and escaped display text for presentation.
 Agent notes and read frequency do not alter this ordering.
@@ -166,6 +177,18 @@ The following are foundation obligations, verified by WP2.2 with fake services a
 - Root instructions must reach the agent before its first edit/execute there; reads, cached metadata and notes do not confer write/execute grants.
 - Scoped entry handles work for navigation and reads, including long/non-UTF-8 path names, and are reauthorized on every use.
 - The existing shell does not become a filesystem sandbox through this design.
+
+### Consumed shared-index contract
+
+Discovery persists its catalog and unfinished frontier on disk.
+Enumerate with positive-count `File.ReadDir(n)` batches and a bounded pool of open directory streams; retain an unfinished batch until every admitted entry has a durable outcome or retry task.
+Rotate unfinished directories fairly so processing one wide directory cannot prevent already discovered files from being indexed.
+Restart unfinished enumeration idempotently after interruption and serve navigation/query pages with indexed keyset seeks.
+Never materialize an all-files allowlist, sort a complete directory in memory, or hide an unbounded scan behind an output `LIMIT`.
+Incomplete, canceled or failed enumeration does not establish that unseen children were deleted.
+Use bounded current-source reconciliation and explicit missing-source evidence for invalidation, with observed coverage and finite storage/retention quotas.
+Pins preserve the ordering keys needed for continuation until expiry or explicit invalidation; storage pressure refuses additional work rather than silently breaking an admitted reservation.
+These obligations are checked by the index/manager tests and the phase-level integration gates.
 
 The shared scheduler grants bounded work leases for query, discovery, extraction and maintenance; WP2.2 does not create a separate pool.
 Each lease specifies input/output bytes, item or capture/work-unit limits where supported, deadline, source/scope revision and resource reservation.

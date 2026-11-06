@@ -107,8 +107,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.12 rungs 0–3 — instructions beyond the budget (the default budget scales to the profile's context window; every instruction file is guaranteed its outline before any gets more, so a nearer file is never dropped; an over-budget Markdown file shows whole sections while they fit and the rest as heading + first sentence + `[...]`; the read-only `instructions` tool returns a file, a section or the `path:line` a quoted rule comes from, over the run's discovered files only; opt-in `instructions.summarize` has a model summarize what not even outlines can fit, cached by content hash under `~/.cache/hint/instructions`).
   WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front matter and `.cursor/rules/*.mdc` as a compatible source; a rule with paths loads once a tool reads or writes a matching file, one without loads always after its directory's `HINT.md`; `agent.Preamble` rebuilds the system prompt before every request from the tool calls in the conversation, so `-c` needs nothing new; `tool.Toucher` is how the file tools name what they touch; the glob matcher is now `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
-  First formalize and review the workspace and shared-index foundations, tentatively WP2.11/WP2.12; they are proposals, not yet work packages or implementation authorization.
-  Their delivery precedes integration of [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map), whose design and component checks are tracked in [#93](https://github.com/mrYush/hint/issues/93) on the existing planning branch `dev/wp2.2-repo-map`.
+  Implement and review [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map), including its necessary workspace/catalog/scheduler foundations, as authorized by the owner on 2026-11-06 in the existing `dev/wp2.2-repo-map` branch under [#93](https://github.com/mrYush/hint/issues/93).
+  The phase file records the scope exception and package boundaries; tentative WP2.11/WP2.12 proposals do not represent separately delivered foundations.
+  Local implementation is ready for owner review with [recorded verification and measurements](docs/plan/evidence/wp2.2-mac-20261106/readiness.md); the owner's Pi/local-model evaluation remains pending under the [saved methodology](docs/plan/repo-map-evaluation.md).
   Multiple roots, document/notes indexing and the on-demand code map all target v0.4 (confirmed 2026-11-06); the old 8–10-week estimate excludes this scope and is withdrawn pending decomposition and measurements.
   [WP2.10](docs/plan/phase-2-memory-mcp.md#wp210--new-start-a-fresh-session) records the completed `/new` checklist for the TUI and line REPL; it is independent of these foundations.
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository.
@@ -128,21 +129,24 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 ## Deferred WP2.2 review follow-ups
 
 Recorded on 2026-11-06 for [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map) and [issue #93](https://github.com/mrYush/hint/issues/93).
-These are deferred documentation/review findings, not new architecture blockers or completed work.
+These are documentation/review findings with explicit dispositions; remaining publication work stays open.
 R1–R5 below identify this review's findings, not the cross-cutting risk register.
 At each checkpoint, either apply the correction or explicitly dismiss the item with a dated rationale; retain the disposition here and reflect any contract/scope decision in the phase file.
 Revisit every remaining item at v0.4 release readiness rather than silently carrying it forward.
 
-- [ ] **R1 — Discovery contract; before implementing the shared-index interface.**
-  Add consumed catalog/frontier, bounded `File.ReadDir(n)`, keyset pagination, idempotent enumeration and no resident all-files allowlist/full-directory sort obligations to [the contract](docs/plan/repo-map-contract.md), or explicitly make the phase-level foundation requirements the canonical reference.
-- [ ] **R2 — Coverage example; before implementing `repo_map` responses and fixtures.**
-  Account for pending files in the example and show the promised omission reason/count buckets, with unambiguous count semantics.
-- [ ] **R3 — Ordering names; before implementing `repo_map` pagination and fixtures.**
-  Align the response's `order`, the contract's tuple names and the phase plan, or define `order` as a label with one canonical mapping to the actual keys.
-- [ ] **R4 — Goal and deferred-ranking wording; at the next documentation synchronization, no later than v0.4 readiness.**
-  Align the Phase 2 Goal with workspace/index scope and replace residual global-ranking wording with the explicitly deferred background graph work.
-- [ ] **R5 — Review evidence and publication; before publishing the review claims and when the documents are published.**
-  Support independent-review claims with a durable artifact or remove them; after authorized publication, make the repository contract canonical and replace the full copy in issue #93 with a link and concise summary.
+- ✅ **R1 — Discovery contract; corrected 2026-11-06.**
+  The [consumed shared-index contract](docs/plan/repo-map-contract.md#consumed-shared-index-contract) now specifies catalog/frontier persistence, bounded `File.ReadDir(n)`, keyset pages, idempotent restart and the prohibitions on resident all-files allowlists/full-directory sorting.
+- ✅ **R2 — Coverage example; corrected 2026-11-06.**
+  The example accounts for 120 files as 80 indexed, 37 pending and 3 omitted, with omission buckets; directory/boundary metadata is excluded from code-file counts.
+- ✅ **R3 — Ordering names; corrected 2026-11-06.**
+  The contract defines `path` and `name` labels with canonical key tuples, and the phase plan uses those same names.
+- ✅ **R4 — Goal and deferred-ranking wording; corrected 2026-11-06.**
+  The Phase 2 Goal now includes multi-root workspace/index scope and the residual ranking reference explicitly names deferred graph work.
+- ✅ **R5a — Review evidence; recorded 2026-11-06.**
+  The [integration review](docs/plan/evidence/wp2.2-mac-20261106/integration-review.md) and [workspace review](docs/plan/evidence/wp2.2-mac-20261106/workspace-review.md) identify reviewer scope, findings, dispositions, regression evidence and limitations.
+  These are cross-component agent reviews, not independent human approval or completed Pi/model acceptance.
+- [ ] **R5b — Publication; after the owner publishes the documents.**
+  Make the repository contract canonical and replace the full copy in issue #93 with a link and concise summary.
   Commits, pushes and a PR still require separate explicit user authorization; recording this follow-up grants none.
 
 ## Compatibility decision

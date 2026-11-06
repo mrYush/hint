@@ -100,3 +100,42 @@ func (l Lease) Stat() (os.FileInfo, error) {
 	info, err := f.Stat()
 	return info, errors.Join(err, f.Close())
 }
+
+// Publish binds a prepared result to the session that issued this lease.
+// The bounded callback must not reenter session methods.
+func (l Lease) Publish(publish func() error) error {
+	if l.session == nil {
+		return ErrChanged
+	}
+	return l.session.Publish(l, publish)
+}
+
+// ToolRoot returns a borrowed root whose file operations recheck this session's
+// current authority. Callers must not close it or use it as a shell sandbox.
+func (s *Session) ToolRoot(repo string) (tool.Root, RootInfo, error) {
+	lease, err := s.Resolve(repo, ".")
+	if err != nil {
+		return tool.Root{}, RootInfo{}, err
+	}
+	roots, _ := s.Snapshot()
+	var info RootInfo
+	for _, candidate := range roots {
+		if candidate.ID == lease.RootID {
+			info = candidate
+			break
+		}
+	}
+	if info.ID == "" {
+		return tool.Root{}, RootInfo{}, ErrChanged
+	}
+	base := lease.root()
+	checked := base.WithAccessCheck(func(abs string) error {
+		rel, err := filepath.Rel(base.Dir(), abs)
+		if err != nil {
+			return err
+		}
+		_, err = s.Resolve(lease.RootID, rel)
+		return err
+	})
+	return checked, info, nil
+}

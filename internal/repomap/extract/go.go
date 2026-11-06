@@ -14,12 +14,12 @@ func extractGo(source Source, b *builder) error {
 	file, err := parser.ParseFile(fset, source.Path, source.Content, parser.SkipObjectResolution|parser.AllErrors)
 	if err != nil {
 		b.omission = "parse_failed"
-		return nil
+		return nil //nolint:nilerr // Syntax errors become explicit all-or-nothing omissions, not machinery failures.
 	}
 	// Count every parsed node, including bodies, before accepting any declarations.
 	ast.Inspect(file, func(n ast.Node) bool { return n != nil && b.step() })
 	if b.omission != "" || b.ctx.Err() != nil {
-		return nil
+		return b.ctx.Err()
 	}
 	for _, declaration := range file.Decls {
 		if !b.step() {
@@ -71,6 +71,20 @@ func goDecl(fset *token.FileSet, n ast.Node, kind, name, enclosing string) Decl 
 }
 
 func goPrinted(fset *token.FileSet, node ast.Node, b *builder) string {
+	// A syntactically valid type expression can contain a function literal even
+	// when a later type-check would reject it; never print that literal's body.
+	ast.Inspect(node, func(n ast.Node) bool {
+		if n == nil || !b.step() {
+			return false
+		}
+		if fn, ok := n.(*ast.FuncLit); ok && fn.Body != nil {
+			fn.Body = &ast.BlockStmt{Lbrace: fn.Body.Lbrace, Rbrace: fn.Body.Rbrace}
+		}
+		return true
+	})
+	if b.omission != "" || b.ctx.Err() != nil {
+		return ""
+	}
 	w := &limitedBuffer{limit: b.limits.MaxOutputBytes}
 	if err := printer.Fprint(w, fset, node); err != nil {
 		b.omission = "output_budget_exceeded"

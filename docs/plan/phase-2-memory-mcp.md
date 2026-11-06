@@ -6,7 +6,7 @@
 
 ## Goal
 
-Open the agent to the outside in every direction it can be extended — tools (MCP servers, HTTP APIs described by OpenAPI), other agents (A2A, both as caller and as callee), instructions (MCP prompts and resources next to the rule files) and knowledge (local databases, document indexes) — make it effective on large codebases (repo map), give it long-term memory (vector store), plus deeper git integration and smarter compaction.
+Open the agent to the outside in every direction it can be extended — tools (MCP servers, HTTP APIs described by OpenAPI), other agents (A2A, both as caller and as callee), instructions (MCP prompts and resources next to the rule files) and knowledge (local databases, document indexes) — make it effective across explicitly attached repositories and ordinary folders through bounded workspace navigation, incremental indexing and on-demand code maps, give it long-term memory (vector store), plus deeper git integration and smarter compaction.
 
 Every surface goes through the same two gates the architecture already fixes: the permission layer (a class per tool, confirmation for writes and commands) and the untrusted-input rule (what comes back from a tool, a server, an agent or a document is data, never instructions).
 Added 2026-10-18 together with WP2.6 and WP2.7.
@@ -79,16 +79,17 @@ MCP resources and prompts, the live reference-server integration test, and the f
 
 **Branch:** `dev/wp2.2-repo-map`
 
-Planning issue: [#93](https://github.com/mrYush/hint/issues/93).
+Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
 Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
-This records the design for review; implementation and dependency selection are not approved by this documentation change.
-Planning is in progress on the named branch; implementation is blocked until the prerequisite contracts are approved and recorded in their own work packages.
-All checkboxes remain open.
+The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
+Local implementation and integration checks are complete and ready for owner review; the branch is not merged and the work package remains in progress.
+The [review record](evidence/wp2.2-mac-20261106/readiness.md) links exact verification, cross-component findings and reproducible Mac measurements.
+The owner will run Pi 4/local-model 8k/32k measurements separately using the [evaluation methodology](repo-map-evaluation.md); local Mac checks do not satisfy those gates.
 
 Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
 The read-class `repo_map` tool returns signatures, enclosing type/module context and source locations without function bodies.
 Maps are tool results, never automatically inserted into the system prompt; no model-window threshold or `map_control` is required.
-Ordinary file access and scoped symbol lookup must not wait for full discovery, parsing or global ranking.
+Ordinary file access and scoped symbol lookup must not wait for full discovery, parsing or deferred background graph work.
 
 #### Package boundaries and workspace contract
 
@@ -98,29 +99,31 @@ Nested repositories and submodules are attached explicitly as separate roots; th
 Users add or remove roots between turns, with membership revisions recorded in session history.
 The user interface is `/repos` and a paginated text tree in both shells; the agent requests the code map separately.
 
-Keep workspace administration and the shared index outside this implementation package:
+Keep workspace administration and the shared index in separate internal packages, while integrating their necessary baseline in this branch:
 
 | Area | Interface consumed by WP2.2 | Status of the boundary |
 |---|---|---|
-| Workspace foundation, tentative WP2.11 | Authorized scoped root/entry handles, membership revisions, prepared instructions and paginated navigation/status | Proposal, not yet a work package; branch name `dev/wp2.11-workspace-roots` is tentative |
-| Shared-index foundation, tentative WP2.12 | Versioned source observations, declaration storage/query generations, invalidation, bounded scheduling leases and coverage/status | Proposal, not yet a work package; branch name `dev/wp2.12-local-index` is tentative |
+| Workspace foundation | Authorized scoped root/entry handles, membership revisions, prepared instructions and paginated navigation/status | Included in WP2.2 under the owner-authorized scope exception; `internal/workspace` owns authority and the RPC engine owns administration |
+| Shared-index baseline | Versioned source observations, declaration storage/query generations, invalidation, bounded scheduling leases and coverage/status | Included in WP2.2 under the same exception; `internal/index` owns the disk catalog and frontier, with one shared manager for bounded work |
 | WP2.2 | Code extraction, scoped symbol lookup and bounded deterministic map rendering | Consumes those contracts without introducing another catalog or worker pool |
 
-The proposed delivery order is workspace navigation, the shared indexing baseline, then code-map integration.
-The table is an interface proposal, not a substitute for foundation scope/branch/issue records; no foundation implementation starts from this table alone.
+Scope exception under the planning conventions: #93 requires these foundations to provide a usable end-to-end map, and the owner explicitly requested completion in the existing branch rather than splitting the implementation after review.
+The delivery order remains workspace navigation, the shared indexing baseline, then code-map integration and acceptance.
+The tentative WP2.11/WP2.12 branch names were proposals, not separate implemented packages; later document/notes work still requires its own finalized scope, issue and branch.
 The shared index's first document-search profile is Russian/English, with basic lexical support for other languages; semantic retrieval is later work under WP2.3.
 PDF text extraction may require a user-connected local module, and OCR remains a separate optional heavy capability.
 Persistent agent notes live outside roots, may be saved automatically within a narrow permission grant, and depend on verified source observations.
 They are untrusted, separately labeled suggestions and do not change source-hit ranking by default; rebuilding derived caches never deletes durable notes.
 Document extraction, note storage, URL browsing, embeddings, reference-graph extraction/PageRank, an interactive file panel and a mandatory background daemon are not WP2.2 deliverables.
 
-The detailed [code-map contract](repo-map-contract.md) defines request/result fields, byte limits, cursor/error semantics, freshness and the consumed workspace/scheduler interfaces.
-It is part of this work package's design, not another work package or a claim that those interfaces are already implemented.
+The detailed [code-map contract](repo-map-contract.md) defines request/result fields, byte limits, cursor/error semantics, freshness and the consumed workspace/catalog/scheduler interfaces.
+It belongs to this work package; completed component checks do not by themselves establish full phase acceptance.
 
 #### Extraction, retrieval and ranking
 
 Use `go/ast` for Go.
-Compare pinned `gotreesitter` with upstream Tree-sitter through WASM/wazero for Python, JavaScript, TypeScript/TSX and Rust before choosing the non-Go adapter.
+The pinned comparison selected wasitter v0.1.0 through wazero v1.10.1 for Python, JavaScript, TypeScript/TSX and Rust; [adapter evidence](../../internal/repomap/extract/README.md) records grammar provenance, binary/cold/warm costs and the gotreesitter tradeoff.
+The shared catalog uses modernc.org/sqlite v1.61.1 to retain CGO-free builds; this does not select a semantic-search or document-extraction backend.
 Bound source bytes, extraction output, worker concurrency, per-job deadline and capture/work-unit counts where supported, with tested interruption and explicit incomplete-parse detection.
 The deadline is the minimum of caller and job limits; synchronous `context.WithTimeout` alone does not stop an uncooperative parser, including `go/ast`.
 Require native interrupt/fuel or process supervision before admitting such an adapter to automatic background work; do not release a lease while canceled work still runs.
@@ -139,7 +142,8 @@ Expiry, changed membership/policy or generation eviction returns `stale_cursor`,
 `paused`, incomplete coverage and unsupported files are response states, not request errors; `/repos` and `repo_list` expose detailed capability/status on demand.
 An empty page with `query_complete: false` is not a negative lookup; only a completed traversal without matches establishes absence in that indexed generation, never absence on disk.
 
-The first version uses deterministic `(relative_path_bytes, start_byte, kind, symbol_id)` ordering for unfiltered/exact lookup, and `(exact_bucket, name_bytes, relative_path_bytes, start_byte, kind, symbol_id)` for prefix lookup to avoid sorting every matching name into path order.
+The first version labels deterministic `(relative_path_bytes, start_byte, kind, symbol_id)` ordering as `path` for unfiltered/exact lookup, and `(name_bytes, relative_path_bytes, start_byte, kind, symbol_id)` as `name` for prefix lookup.
+Exact spellings naturally precede their longer extensions in name-byte order, avoiding a global sort or duplicate exact-match bucket.
 No references or dependency graph are extracted, and equal names across files or roots do not imply semantic bindings.
 PageRank is deferred to a separately reviewed experiment defining reference roles, node model, repeated-name policy, unresolved names and an exact oracle, followed by task-level benefit measurements.
 Its absence is not incomplete declaration coverage and does not block v0.4.
@@ -184,19 +188,19 @@ Arbitrarily large trees require bounded active work, not infinite storage or con
 The timeout report concerns C++ and does not prove a defect in every proposed language or that its tested native deadline fails.
 [Aider's ranking implementation](https://github.com/Aider-AI/aider/blob/main/aider/repomap.py), [a firsthand output report](https://github.com/Aider-AI/aider/issues/3932) and [an original retrieval comparison](https://agent-retrieval-bench.github.io/blog.html) motivate signature and task-level evaluation; the comparison's Aider-style baseline is not Aider itself.
 The historical local spike allocated weighted rank to source declarations rather than destination declarations, so its ranking results are not Aider-parity evidence.
-Backend comparison belongs to the shared-index foundation, not WP2.2: compare pure-Go SQLite/FTS5, Bleve and a Tantivy helper under equal retrieval semantics and select one backend without tying stable identities to its postings format.
+Document full-text backend comparison remains part of the later lexical foundation: compare pure-Go SQLite/FTS5, Bleve and a Tantivy helper under equal retrieval semantics without tying stable source identities to a postings format.
 Public research has not established a universal backend winner or verified this design's Pi resource targets.
 
-- [ ] Complete owner review and record the prerequisite package boundaries before implementing the new scope.
-- [ ] Test the request/result/error contract through actual limits/permission wrappers, including JSON escaping, small output caps, long entry handles, empty-but-advancing pages and deterministic pagination.
-- [ ] Bound examined records and index-read bytes for rare prefixes and large excluded ranges; test no lost candidates after page-budget exhaustion, 50 declarations in 50 files with a four-file hash budget, growing sources and concurrent generation/cursor admission.
-- [ ] Validate declarations, signatures, enclosing context and source ranges for Go and the selected non-Go adapter on pinned real, malformed, incomplete, generated and minified sources, including a representative polyglot corpus of at least 100k lines.
-- [ ] Record grammar versions, binary growth, cold/warm extraction cost, memory, finite job limits and interruption behavior, including a deliberately noncooperative parser fixture.
-- [ ] With fake workspace/index services, test authority and generation changes between query/publication, nested ownership, cursor expiry, paused/unavailable states, partial reads, same-stat rewrites and verification-budget exhaustion.
-- [ ] With fake scheduler leases, test parser pause/cancellation, no premature slot reuse and no background-pool bypass; use the foundation's own tests for discovery, document extraction, durable notes and resource-governor internals.
+- ✅ Record the owner-authorized scope exception and prerequisite package boundaries in this branch (2026-11-06); final code review remains pending.
+- ✅ Test the request/result/error contract through actual limits/permission wrappers, including JSON escaping, small output caps, long entry handles, empty-but-advancing pages and deterministic pagination; `query_test.go`, `model_test.go` and structured-redaction fixtures pass.
+- ✅ Bound examined records and index-read bytes for rare prefixes and large excluded ranges; race regressions cover lossless continuation past 1,025 filtered candidates, 50 declarations in 50 files with a four-file hash budget, growth during bounded reading and concurrent generation/cursor admission.
+- ✅ Validate declarations, signatures, enclosing context and source ranges on adapter fixtures, malformed/incomplete/generated/minified sources and a pinned 248,811-line real polyglot corpus; the [local report](evidence/wp2.2-mac-20261106/README.md) retains three explicit TypeScript omissions rather than claiming full grammar coverage.
+- ✅ Record grammar versions, binary growth, cold/warm extraction cost, memory, finite job limits and interruption behavior, including a deliberately noncooperative helper fixture; see the [adapter evidence](../../internal/repomap/extract/README.md), worker tests and local report.
+- ✅ With controlled workspace/index fixtures, test authority and generation changes between query/publication, nested ownership, cursor expiry, paused/unavailable states, partial-read limits, same-stat rewrites and verification-budget exhaustion; component race checks passed.
+- ✅ With controlled scheduler/runner fixtures, test parser pause/cancellation, no premature slot reuse, no background-pool bypass and known-emergency cancellation; manager/governor/worker tests cover the delivered foundation, while document extraction and durable notes remain later work.
 - [ ] Measure schema cost and unnecessary/invalid/repeated calls on paired positive/negative tasks at 8k/32k windows as specified in the contract; include output reserve, real token counts or labeled estimates, prompt processing, compaction and task correctness.
-- [ ] Fix the cold-request/catalog-change schema-accounting integration before enabling `repo_map` by default, without double-counting schema cost already included in provider usage or changing the instruction-preamble budget.
-- [ ] Pass formatting, tests, race checks, vet, the pinned linter and all six `CGO_ENABLED=0` release builds, including linux/arm64.
+- ✅ Fix cold-request/catalog-change schema accounting without double-counting provider usage or changing the instruction-preamble budget; targeted agent tests, race checks and vet passed.
+- ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-mac-20261106/verification.json).
 
 ### WP2.3 — Vector memory
 
@@ -339,21 +343,25 @@ Decisions (2026-11-04):
 
 ## Workspace/index integration gates for v0.4
 
-These gates belong to the phase until the foundation work packages are formalized; they do not expand WP2.2 into implementing those foundations.
+These gates cover the phase's complete workspace/index scope.
+The authorized WP2.2 scope exception implements the workspace and code-catalog baseline; document adapters and durable notes still need their own formalized work package.
 The full workspace, lexical document/notes index and on-demand code-map scope is required for v0.4, with optional heavy modules allowed to be unavailable or paused.
-Approving these checks does not approve a backend, dependency or implementation before the corresponding package review.
+Approval of WP2.2 does not imply that the later document/notes implementation or its backend has passed review.
 
 | Owner | Verification boundary |
 |---|---|
 | WP2.2 component | Extraction correctness/cancellation, deterministic scoped retrieval, bounded JSON/cursors, schema cost and fake workspace/index/scheduler contract tests. |
-| Workspace foundation, proposed | Root/entry identity, clone lifecycle, routing, nested ownership, membership history, instruction readiness and authorization. |
-| Shared-index foundation, proposed | Catalog/frontier, resource governor, document adapters, durable notes, invalidation, reconciliation and storage recovery. |
+| Workspace baseline in WP2.2 | Root/entry identity, clone lifecycle, routing, nested ownership, membership history, instruction readiness and authorization. |
+| Code-index baseline in WP2.2 | Catalog/frontier, resource governor, invalidation, reconciliation and storage recovery. |
+| Later lexical document/notes foundation | Document adapters, lexical retrieval, durable notes and their source-validation/retention contracts. |
 | Phase integration | Real services working together across multiple roots, low-resource operation and measured task benefit. |
 
-- [ ] Formalize foundation scope, branch lines, issues and acceptance criteria, then re-estimate remaining v0.4 work using dependency order and measured parser/backend costs.
+- [ ] Formalize the remaining document/notes scope, branch, issue and acceptance criteria, then re-estimate v0.4 work using dependency order and measured parser/backend costs.
 - [ ] With real services, cover Git and ordinary folders, dirty/untracked files, separate worktrees, failed/interrupted clones, nested repositories/submodules, symlink aliases, duplicate names, detach/reattach and source changes; only explicitly authorized roots become available.
 - [ ] Exercise `/repos`, the paginated text tree and agent navigation in both shells through RPC; root changes occur between turns, instructions precede edits, and revocation suppresses queued/in-flight cached publications to the affected session.
 - [ ] In the index foundation, test 10k/100k/1m metadata entries, wide/deep trees, many roots and a tiny root competing with a huge one; assert bounded batches, queues, active streams/FDs, caches and staging disk, plus tail progress whenever capacity is available.
+  The [Mac catalog measurements](evidence/wp2.2-mac-20261106/metadata.md) complete the synthetic 10k/100k/1m cases, and manager tests cover tiny/wide-root progress, eight-stream capacity, blocked-child priority and retained-tail completion without repeated frontier scans.
+  This does not establish million-file filesystem traversal latency, peak staging disk under all workloads or hardware/model acceptance; the full phase gate remains open.
 - [ ] Cover watcher loss/overflow, external same-stat changes, offline/unreadable directories, interrupted enumeration, generation/cursor eviction, crash/restart and disk exhaustion; unfinished scans never imply deletion, and partial status never implies full coverage.
 - [ ] Index English/Russian text and DOCX with source locators, plus text-layer PDF through a connected local module; test absent modules, malformed/oversized inputs and optional OCR admission/cancellation without blocking live file access.
 - [ ] Persist and inspect/delete source-linked agent notes across sessions; changed/deleted or unauthorized sources invalidate their evidence, stale jobs cannot resurrect deleted notes, and rebuilding derived caches preserves durable notes.

@@ -2,8 +2,10 @@ package project_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/mrYush/hint/internal/project"
@@ -147,5 +149,65 @@ func TestRules_Submodule(t *testing.T) {
 	}
 	if !ig.Ignored("lib/.hidden", false) {
 		t.Error("Basic still applies beneath a listed path")
+	}
+}
+
+func TestRulesTrackedFileUnderIgnoredDirectory(t *testing.T) {
+	git := gitPath(t)
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{"build/kept.go": "package kept", "build/ignored.go": "package ignored", "odd\nname.go": "package odd"})
+	initRepo(t, git, dir, "build/kept.go", "odd\nname.go")
+	writeTree(t, dir, map[string]string{".gitignore": "build/\n*.go\n"})
+	ig, err := project.NewRules(git).Ignorer(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ig.Ignored("build", true) || ig.Ignored("build/kept.go", false) || ig.Ignored("odd\nname.go", false) {
+		t.Fatal("tracked entries were excluded")
+	}
+	if !ig.Ignored("build/ignored.go", false) {
+		t.Fatal("untracked ignored source admitted")
+	}
+	if err := project.IgnoreError(ig); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRulesNeverRunRepositoryFSMonitorHook(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture hook uses a POSIX shell")
+	}
+	git := gitPath(t)
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{"build/kept.go": "package kept"})
+	initRepo(t, git, dir)
+	gitRun(t, git, dir, "add", "build/kept.go")
+	writeTree(t, dir, map[string]string{".gitignore": "build/\n"})
+	hook := filepath.Join(t.TempDir(), "monitor")
+	marker := filepath.Join(t.TempDir(), "ran")
+	t.Setenv("HINT_TEST_FSMONITOR_MARKER", marker)
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nprintf 'ran\\n' > \"$HINT_TEST_FSMONITOR_MARKER\"\nprintf 'token\\0'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, git, dir, "config", "core.fsmonitor", hook)
+	gitRun(t, git, dir, "ls-files", "--cached")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("fixture did not activate fsmonitor hook: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	ig, err := project.NewRules(git).Ignorer(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ig.Ignored("build", true) || ig.Ignored("build/kept.go", false) {
+		t.Fatal("tracked file disappeared")
+	}
+	if err := project.IgnoreError(ig); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("read-only policy ran a repository hook: %v", err)
 	}
 }

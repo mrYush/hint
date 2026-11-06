@@ -12,12 +12,14 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
 | `mcp-client-spike.md` | Design spike: MCP specification and SDK choice, transport/auth surface and context budget (Q6, WP2.1) |
 | `repo-map-contract.md` | Supporting contract for WP2.2: requests, bounded output, freshness, consumed workspace/scheduler interfaces and context-cost evaluation; phase-2 owns scope and status |
+| `repo-map-evaluation.md` | WP2.2 manual device/model evaluation: reproducible Pi 4 and 8k/32k runs, paired baselines, process-family resource accounting and explicit unmeasured gates |
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
 | `completion-quality-eval.md` | How to measure what WP1.6's completion is worth on small models: acceptance rate, latency, cost, residency, and the pass criteria for a README recommendation or a default. Backlog as of 2026-10-19; does not gate `v0.3` |
 | Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `completion-quality-eval.md`, `delegation.md` and `mcp-client-spike.md` |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
+| [`evidence/wp2.2-mac-20261106/readiness.md`](evidence/wp2.2-mac-20261106/readiness.md) | WP2.2 working-tree review, reproducible local corpus/catalog measurements and explicit remaining hardware/model gates |
 | [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
 Product documentation under `docs/` is limited to launch instructions, examples, rationale for chosen solutions, device coverage, and use cases.

@@ -3,7 +3,7 @@ package index
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"strconv"
 	"time"
@@ -163,11 +163,11 @@ type Status struct {
 // EntryID identifies a root-relative path without requiring UTF-8 or storing it in a cursor.
 func EntryID(rootID, path string) string {
 	sum := sha256.Sum256([]byte(rootID + "\x00" + path))
-	return "e_" + hex.EncodeToString(sum[:])
+	return "e_" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 // SymbolID identifies a declaration's location and name within a stable file handle.
 func SymbolID(fileID string, startByte int64, kind, name string) string {
 	sum := sha256.Sum256([]byte(fileID + "\x00" + strconv.FormatInt(startByte, 10) + "\x00" + kind + "\x00" + name))
-	return "s_" + hex.EncodeToString(sum[:])
+	return "s_" + base64.RawURLEncoding.EncodeToString(sum[:])
 }

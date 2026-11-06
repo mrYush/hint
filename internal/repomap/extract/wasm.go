@@ -15,7 +15,7 @@ import (
 // These release artifacts include the upstream runtime and its matching bridge.
 // They are pinned, checksummed and licensed in grammars/; no runtime downloads occur.
 //
-//go:embed grammars/wasitter-*.wasm
+//go:embed grammars/wasitter-*.wasm grammars/THIRD_PARTY_NOTICES.txt grammars/grammar-registry.json
 var grammarModules embed.FS
 
 func nonGoPolicy(language string) string {
@@ -31,37 +31,85 @@ func nonGoPolicy(language string) string {
 	}
 }
 
-func extractNonGo(source Source, language string, b *builder) (resultErr error) {
+type wasmSession struct {
+	name     string
+	runtime  *wasitter.Runtime
+	language *wasitter.Language
+	parser   *wasitter.Parser
+	cancel   context.CancelFunc
+}
+
+func (e *Engine) initializeWASM(ctx context.Context, language string) (resultErr error) {
+	if e.wasm != nil && e.wasm.name == language {
+		return nil
+	}
+	if err := e.Close(); err != nil {
+		return fmt.Errorf("close previous grammar: %w", err)
+	}
 	module, err := grammarModules.ReadFile("grammars/wasitter-" + language + ".wasm")
 	if err != nil {
 		return fmt.Errorf("load pinned grammar: %w", err)
 	}
-	// A fresh runtime releases its guest-memory high-water mark after every job.
-	// This caps guest linear memory, not the Go heap or process-family RSS.
-	ctx, cancel := context.WithTimeout(b.ctx, 2*time.Second)
-	defer cancel()
-	r, err := wasitter.NewRuntimeWithOptions(ctx, module, wasitter.RuntimeOptions{
+	// Retain one runtime only; initialization cancellation must not tie its later
+	// lifetime to the first request's context.
+	lifetime, cancel := context.WithCancel(context.Background())
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+	r, err := wasitter.NewRuntimeWithOptions(lifetime, module, wasitter.RuntimeOptions{
 		RuntimeConfig: wazero.NewRuntimeConfig().WithMemoryLimitPages(1024).WithCloseOnContextDone(true),
 	})
 	if err != nil {
-		b.omission = wasmOmission(ctx)
-		return nil
+		cancel()
+		return fmt.Errorf("initialize grammar runtime: %w", err)
 	}
-	defer func() { resultErr = errors.Join(resultErr, r.Close()) }()
+	defer func() {
+		if resultErr != nil {
+			resultErr = errors.Join(resultErr, r.Close())
+			cancel()
+		}
+	}()
 	l, err := r.LoadLanguage(language)
 	if err != nil {
 		return fmt.Errorf("load grammar language: %w", err)
 	}
-	defer func() { resultErr = errors.Join(resultErr, l.Close()) }()
+	defer func() {
+		if resultErr != nil {
+			resultErr = errors.Join(resultErr, l.Close())
+		}
+	}()
 	p, err := wasitter.NewParserWithRuntime(r)
 	if err != nil {
 		return fmt.Errorf("create grammar parser: %w", err)
 	}
-	defer func() { resultErr = errors.Join(resultErr, p.Close()) }()
+	defer func() {
+		if resultErr != nil {
+			resultErr = errors.Join(resultErr, p.Close())
+		}
+	}()
 	if err := p.SetLanguage(l); err != nil {
 		return fmt.Errorf("set grammar language: %w", err)
 	}
-	tree, err := p.ParseContext(ctx, source.Content, nil)
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("initialize grammar: %w", err)
+	}
+	e.wasm = &wasmSession{name: language, runtime: r, language: l, parser: p, cancel: cancel}
+	return nil
+}
+
+func (e *Engine) extractNonGo(source Source, language string, b *builder) (resultErr error) {
+	ctx, cancel := context.WithTimeout(b.ctx, 2*time.Second)
+	defer cancel()
+	if err := e.initializeWASM(ctx, language); err != nil {
+		b.omission = wasmOmission(ctx)
+		return nil
+	}
+	defer func() {
+		// Failed or canceled guest executions cannot safely reenter the cache.
+		if ctx.Err() != nil || resultErr != nil || b.omission == "parse_failed" {
+			resultErr = errors.Join(resultErr, e.Close())
+		}
+	}()
+	tree, err := e.wasm.parser.ParseContext(ctx, source.Content, nil)
 	if err != nil {
 		b.omission = wasmOmission(ctx)
 		return nil
@@ -72,7 +120,7 @@ func extractNonGo(source Source, language string, b *builder) (resultErr error) 
 		b.omission = "parse_failed"
 		return nil
 	}
-	if err := walkWASM(root, source.Content, language, "", b, 0); err != nil {
+	if err := walkWASM(root, source.Content, "", false, b, 0); err != nil {
 		b.omission = wasmOmission(ctx)
 		return nil
 	}
@@ -91,7 +139,7 @@ func wasmOmission(ctx context.Context) string {
 
 // walkWASM visits declarations and containers, deliberately excluding executable
 // bodies and initializers; this also avoids one host call per expression node.
-func walkWASM(n wasitter.Node, source []byte, language, enclosing string, b *builder, depth int) error {
+func walkWASM(n wasitter.Node, source []byte, enclosing string, members bool, b *builder, depth int) error {
 	if !b.step() {
 		return nil
 	}
@@ -146,7 +194,7 @@ func walkWASM(n wasitter.Node, source []byte, language, enclosing string, b *bui
 		}
 		d := Decl{Kind: kind, Name: name.Content(source), Signature: strings.TrimSpace(strings.TrimRight(sig, " \t\r\n=;")), Enclosing: enclosing,
 			StartByte: start, EndByte: end, StartLine: int(n.StartPoint().Row) + 1, EndLine: int(n.EndPoint().Row) + 1}
-		if kind == "function" && enclosing != "" {
+		if kind == "function" && members {
 			d.Kind = "method"
 		}
 		b.add(d)
@@ -154,8 +202,10 @@ func walkWASM(n wasitter.Node, source []byte, language, enclosing string, b *bui
 			return nil
 		}
 		enclosing = name.Content(source)
+		members = kind == "class" || kind == "interface"
 	} else if typ == "impl_item" && !name.IsNull() {
 		enclosing = name.Content(source)
+		members = true
 	}
 	// Only syntactic containers can contain declarations in this policy.
 	if !container && !declarationContainer(typ) {
@@ -167,13 +217,13 @@ func walkWASM(n wasitter.Node, source []byte, language, enclosing string, b *bui
 	}
 	for i := 0; i < count; i++ {
 		if b.omission != "" || b.ctx.Err() != nil {
-			return nil
+			return b.ctx.Err()
 		}
 		child := n.NamedChild(i)
 		if child.IsNull() {
 			return errors.New("missing enumerated syntax child")
 		}
-		if err := walkWASM(child, source, language, enclosing, b, depth+1); err != nil {
+		if err := walkWASM(child, source, enclosing, members, b, depth+1); err != nil {
 			return err
 		}
 	}
@@ -205,7 +255,7 @@ func declarationKind(typ string) (kind string, container bool) {
 
 func declarationContainer(typ string) bool {
 	switch typ {
-	case "program", "module", "source_file", "block", "class_body", "interface_body", "declaration_list", "impl_item", "export_statement", "ambient_declaration", "lexical_declaration", "variable_declaration", "decorated_definition":
+	case "program", "module", "source_file", "block", "statement_block", "class_body", "interface_body", "declaration_list", "impl_item", "export_statement", "ambient_declaration", "lexical_declaration", "variable_declaration", "decorated_definition":
 		return true
 	default:
 		return false

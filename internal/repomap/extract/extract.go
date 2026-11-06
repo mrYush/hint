@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -76,7 +77,7 @@ func Language(path string) string {
 // PolicyVersion includes the adapter and extraction policy used for cache identity.
 func PolicyVersion(language string) string {
 	if language == "go" {
-		return "go-ast-declarations-v1"
+		return "go-ast-" + runtime.Version() + "-declarations-v1"
 	}
 	if language != "" {
 		return nonGoPolicy(language)
@@ -87,6 +88,32 @@ func PolicyVersion(language string) string {
 // Extract returns declarations or an explicit all-or-nothing omission.
 // MaxOutputBytes counts the actual JSON serialization of Result, not signatures alone.
 func Extract(ctx context.Context, source Source, limits Limits) (Result, error) {
+	e := &Engine{}
+	result, err := e.Extract(ctx, source, limits)
+	return result, errors.Join(err, e.Close())
+}
+
+// Engine reuses at most one non-Go parser/runtime between sequential jobs.
+// It is not safe for concurrent calls; the supervised worker serializes access.
+// Close releases cached guest memory and is safe to call repeatedly.
+type Engine struct {
+	wasm *wasmSession
+}
+
+// Close releases the cached runtime and permits subsequent reuse of the Engine.
+func (e *Engine) Close() error {
+	if e.wasm == nil {
+		return nil
+	}
+	s := e.wasm
+	e.wasm = nil
+	err := errors.Join(s.parser.Close(), s.language.Close(), s.runtime.Close())
+	s.cancel()
+	return err
+}
+
+// Extract uses the same bounded, all-or-nothing contract as the package function.
+func (e *Engine) Extract(ctx context.Context, source Source, limits Limits) (Result, error) {
 	if limits.MaxInputBytes <= 0 || limits.MaxInputBytes > 8<<20 ||
 		limits.MaxOutputBytes < 256 || limits.MaxOutputBytes > 4<<20 ||
 		limits.MaxDeclarations <= 0 || limits.MaxDeclarations > 65536 ||
@@ -108,7 +135,7 @@ func Extract(ctx context.Context, source Source, limits Limits) (Result, error) 
 	if language == "go" {
 		err = extractGo(source, b)
 	} else {
-		err = extractNonGo(source, language, b)
+		err = e.extractNonGo(source, language, b)
 	}
 	if ctx.Err() != nil {
 		return Result{}, fmt.Errorf("extract declarations: %w", ctx.Err())

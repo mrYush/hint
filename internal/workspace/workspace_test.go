@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -393,5 +394,158 @@ func TestSymlinkSwapRechecksOwnership(t *testing.T) {
 	}
 	if _, err := l.Open(); !errors.Is(err, ErrBoundary) {
 		t.Fatalf("swapped alias crossed nested boundary: %v", err)
+	}
+}
+
+func TestUpdatePersistsBeforePublishing(t *testing.T) {
+	_, s, _ := newWorkspace(t)
+	failed := errors.New("disk full")
+	roots, rev := s.Snapshot()
+	err := s.Update(func(draft *Session) error { _, err := draft.AttachLocal(t.TempDir(), "new"); return err }, func(next []RootInfo, revision uint64) error {
+		current, currentRevision := s.Snapshot()
+		if len(current) != len(roots) || currentRevision != rev || len(next) != 2 || revision <= rev {
+			t.Fatal("draft published before persistence")
+		}
+		if _, err := s.BeginTurn(); !errors.Is(err, ErrBusy) {
+			t.Fatalf("turn entered mutation: %v", err)
+		}
+		return failed
+	})
+	if !errors.Is(err, failed) {
+		t.Fatalf("update error: %v", err)
+	}
+	after, afterRev := s.Snapshot()
+	if len(after) != len(roots) || afterRev != rev {
+		t.Fatal("failed persistence changed membership")
+	}
+	release, err := s.BeginTurn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if err := s.Update(func(draft *Session) error { _, err := draft.AttachLocal(t.TempDir(), "ok"); return err }, nil); err != nil {
+		t.Fatal(err)
+	}
+	after, _ = s.Snapshot()
+	if len(after) != 2 {
+		t.Fatal("successful draft not activated")
+	}
+}
+
+func TestHistoricalReservationsRemainBoundariesAfterRestart(t *testing.T) {
+	_, s, primary := newWorkspace(t)
+	childPath := filepath.Join(primary.Dir(), "child")
+	write(t, filepath.Join(childPath, "file"), "private")
+	child, err := s.AttachLocal(childPath, "child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Detach(child.ID); err != nil {
+		t.Fatal(err)
+	}
+	old := s.Reservations()
+	next, err := New(primary, WithMaxRoots(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := next.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	resumed := next.NewSession()
+	for _, ref := range old {
+		if err := resumed.Reserve(ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := resumed.Resolve("", "child/file"); !errors.Is(err, ErrBoundary) {
+		t.Fatalf("parent authority widened: %v", err)
+	}
+	if _, err := resumed.AttachLocal(t.TempDir(), "child"); !errors.Is(err, ErrAlias) {
+		t.Fatalf("historical alias rebound: %v", err)
+	}
+	if _, err := resumed.AttachLocal(childPath, "child"); err != nil {
+		t.Fatalf("reserved root cannot reattach at capacity: %v", err)
+	}
+	if _, err := resumed.Resolve("child", "file"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestToolRootChecksCreationWalkAndRevocation(t *testing.T) {
+	_, s, primary := newWorkspace(t)
+	write(t, filepath.Join(primary.Dir(), "visible"), "visible")
+	write(t, filepath.Join(primary.Dir(), "nested", ".git"), "gitdir: elsewhere")
+	write(t, filepath.Join(primary.Dir(), "nested", "secret"), "secret")
+	checked, _, err := s.ToolRoot("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := checked.Resolve("new/sub/file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checked.MkdirAll(filepath.Dir(created), 0700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := checked.OpenFile(created, os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checked.Resolve("nested/new"); !errors.Is(err, ErrBoundary) {
+		t.Fatalf("nested create allowed: %v", err)
+	}
+	var paths []string
+	if err := checked.WalkDir(primary.Dir(), func(path string, d os.DirEntry, err error) error { paths = append(paths, path); return err }); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		if strings.Contains(path, "nested") {
+			t.Fatalf("boundary leaked: %s", path)
+		}
+	}
+	lease, err := s.Resolve("", "visible")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.FailClosed()
+	if _, err := checked.Open(filepath.Join(primary.Dir(), "visible")); !errors.Is(err, ErrChanged) {
+		t.Fatalf("revoked open: %v", err)
+	}
+	called := false
+	if err := lease.Publish(func() error { called = true; return nil }); !errors.Is(err, ErrChanged) || called {
+		t.Fatalf("revoked publication: %v %t", err, called)
+	}
+}
+
+func TestToolRootAliasPreservesRawFilename(t *testing.T) {
+	_, s, primary := newWorkspace(t)
+	name := "strange-\xff "
+	target := filepath.Join(primary.Dir(), name)
+	if err := os.WriteFile(target, []byte("exact bytes"), 0600); err != nil {
+		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+			t.Skipf("filesystem rejects non-UTF-8 filename: %v", err)
+		}
+		t.Fatal(err)
+	}
+	root, _, err := s.ToolRoot("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = root.WithExactPaths().WithPathAlias("selected", target)
+	abs, err := root.Resolve("selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := root.ReadFile(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "exact bytes" || abs != target {
+		t.Fatalf("wrong target %q: %q", abs, data)
 	}
 }

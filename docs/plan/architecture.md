@@ -54,16 +54,17 @@ outside this module. `ActionClass` lives in `pkg/agentapi` for the same
 reason — a third-party tool has to be able to declare its own class, which it
 could not do if the type stayed in `internal/permission`.
 
-### Proposed workspace and indexing boundaries
+### Workspace and indexing boundaries
 
-The [Phase 2 plan](phase-2-memory-mcp.md#wp22--repo-map) proposes the following private packages for v0.4.
-They are not present implementations, and the workspace/index split still requires formal work packages and review.
+The [Phase 2 plan](phase-2-memory-mcp.md#wp22--repo-map) defines the following private package boundaries for v0.4.
+WP2.2 implements the workspace and code-catalog baseline in its owner-authorized scope exception; document/notes and semantic-search capabilities remain later work.
+The phase checklist distinguishes implemented baseline components from final acceptance and the remaining document/notes work.
 
-| Proposed package | Responsibility |
+| Package boundary | Responsibility |
 |---|---|
 | `internal/workspace` | User-attached roots, stable root/entry identities, immutable primary root, session membership, nested ownership, instruction readiness and authorized navigation. |
-| `internal/index` | Shared catalog/frontier, observed generations, document/search adapters, source invalidation, durable source-linked notes and the resource scheduler. |
-| `internal/repomap` | Code extraction and bounded deterministic declaration queries over the shared index, exposed as the read-class `repo_map` tool. |
+| `internal/index` | Shared disk catalog/frontier, observed generations, bounded scans, retention and source invalidation; later document/notes capabilities consume these identities without duplicating the catalog. |
+| `internal/repomap` | Code extraction and bounded deterministic declaration queries, plus the baseline shared manager admitting discovery, navigation, validation and maintenance; the read-class `repo_map` tool consumes that same admission path. |
 
 Workspace authorization precedes both live and cached access; derived data never grants access or enables a module.
 Keep durable user/agent notes and root configuration separate from rebuildable catalogs, postings and symbol caches, even if one local storage engine hosts both.

@@ -4,6 +4,7 @@ package workspace
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/mrYush/hint/internal/tool"
 )
@@ -41,6 +43,7 @@ type RootInfo struct {
 }
 
 type registered struct {
+	path  string
 	root  tool.Root
 	owned bool
 }
@@ -54,6 +57,7 @@ type Registry struct {
 	closed   bool
 	revision uint64
 	limit    int
+	policy   func(tool.Root) tool.Root
 }
 
 // Option configures a registry before use.
@@ -61,6 +65,11 @@ type Option func(*Registry)
 
 // WithMaxRoots sets the finite root capacity, including retained boundaries.
 func WithMaxRoots(n int) Option { return func(r *Registry) { r.limit = n } }
+
+// WithRootPolicy applies engine-owned exclusions to every newly attached root.
+func WithRootPolicy(policy func(tool.Root) tool.Root) Option {
+	return func(r *Registry) { r.policy = policy }
+}
 
 // New creates a registry borrowing the immutable startup primary root.
 func New(primary tool.Root, options ...Option) (*Registry, error) {
@@ -71,7 +80,7 @@ func New(primary tool.Root, options ...Option) (*Registry, error) {
 		return nil, fmt.Errorf("workspace: primary root: %w", err)
 	}
 	id := rootID(primary.Dir())
-	r := &Registry{roots: map[string]registered{id: {root: primary}}, primary: id, revision: 1, limit: MaxRoots}
+	r := &Registry{roots: map[string]registered{id: {root: primary, path: primary.Dir()}}, primary: id, revision: 1, limit: MaxRoots}
 	for _, option := range options {
 		option(r)
 	}
@@ -108,6 +117,7 @@ type Session struct {
 	revision uint64
 	busy     bool
 	identity string
+	blocked  bool
 }
 
 // NewSession attaches only the immutable primary root.
@@ -156,6 +166,9 @@ func (s *Session) AttachLocal(path, alias string) (RootInfo, error) {
 }
 
 func (s *Session) attach(root tool.Root, alias string, owned bool) (RootInfo, error) {
+	if s.registry.policy != nil {
+		root = s.registry.policy(root)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.busy {
@@ -167,7 +180,7 @@ func (s *Session) attach(root tool.Root, alias string, owned bool) (RootInfo, er
 	if alias == "" {
 		alias = filepath.Base(root.Dir())
 	}
-	if strings.TrimSpace(alias) != alias || alias == "" || strings.HasPrefix(alias, "r_") || strings.ContainsAny(alias, "/\\\x00") {
+	if !validAlias(alias) {
 		return RootInfo{}, ErrAlias
 	}
 	r := s.registry
@@ -186,7 +199,7 @@ func (s *Session) attach(root tool.Root, alias string, owned bool) (RootInfo, er
 	if _, exists := s.aliases[alias]; !exists && len(s.aliases) >= r.limit {
 		return RootInfo{}, ErrCapacity
 	}
-	if existing, ok := r.roots[id]; ok {
+	if existing, ok := r.roots[id]; ok && existing.root.Dir() != "" {
 		if owned {
 			if err := root.Close(); err != nil {
 				return RootInfo{}, fmt.Errorf("workspace: close duplicate root: %w", err)
@@ -194,10 +207,11 @@ func (s *Session) attach(root tool.Root, alias string, owned bool) (RootInfo, er
 		}
 		root = existing.root
 	} else {
-		if len(r.roots) >= r.limit || len(s.aliases) >= r.limit {
+		_, reserved := r.roots[id]
+		if !reserved && len(r.roots) >= r.limit {
 			return RootInfo{}, ErrCapacity
 		}
-		r.roots[id] = registered{root: root, owned: owned}
+		r.roots[id] = registered{root: root, owned: owned, path: root.Dir()}
 		r.revision++
 	}
 	if current, ok := s.members[id]; ok {
@@ -206,6 +220,10 @@ func (s *Session) attach(root tool.Root, alias string, owned bool) (RootInfo, er
 	s.members[id], s.aliases[alias] = alias, id
 	s.revision++
 	return RootInfo{ID: id, Alias: alias, Path: root.Dir()}, nil
+}
+
+func validAlias(alias string) bool {
+	return alias != "" && len(alias) <= 128 && utf8.ValidString(alias) && strings.TrimSpace(alias) == alias && !strings.HasPrefix(alias, "r_") && !strings.ContainsAny(alias, "/\\\x00")
 }
 
 // Detach revokes membership but reserves aliases and nested ownership boundaries.
@@ -242,6 +260,9 @@ func (s *Session) Snapshot() ([]RootInfo, uint64) {
 }
 
 func (s *Session) id(repo string) (string, error) {
+	if s.blocked {
+		return "", ErrChanged
+	}
 	if repo == "" {
 		repo = s.registry.primary
 	}
@@ -306,8 +327,8 @@ func (s *Session) Resolve(repo, path string) (Lease, error) {
 // EntryID gives a bounded opaque identifier over exact path bytes.
 // Its disk-backed mapping belongs to the shared index, not this registry.
 func EntryID(rootID, path string) string {
-	sum := sha256.Sum256([]byte(rootID + "\x00" + path))
-	return "e_" + hex.EncodeToString(sum[:])
+	sum := sha256.Sum256([]byte(rootID + "\x00" + filepath.ToSlash(path)))
+	return "e_" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 // EntryLookup loads a root-scoped raw relative path from the shared index.
@@ -343,7 +364,7 @@ func (s *Session) Valid(l Lease) bool {
 	s.registry.mu.RLock()
 	defer s.registry.mu.RUnlock()
 	_, ok := s.members[l.RootID]
-	return l.session == s && ok && l.MembershipRevision == s.revision && !s.registry.closed && l.topologyRevision == s.registry.revision
+	return !s.blocked && l.session == s && ok && l.MembershipRevision == s.revision && !s.registry.closed && l.topologyRevision == s.registry.revision
 }
 
 // Publish serializes publication against membership changes. The callback must
@@ -354,7 +375,7 @@ func (s *Session) Publish(l Lease, publish func() error) error {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if l.session != s || l.MembershipRevision != s.revision {
+	if s.blocked || l.session != s || l.MembershipRevision != s.revision {
 		return ErrChanged
 	}
 	if _, ok := s.members[l.RootID]; !ok {
@@ -373,7 +394,24 @@ func (s *Session) Publish(l Lease, publish func() error) error {
 
 func rootID(path string) string {
 	sum := sha256.Sum256([]byte(path))
-	return "r_" + hex.EncodeToString(sum[:16])
+	return "r_" + base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// RestoreInfo verifies a recorded identity against its exact canonical path.
+// The pre-release hexadecimal identity is accepted only with that same path.
+func RestoreInfo(info RootInfo) (RootInfo, error) {
+	if !filepath.IsAbs(info.Path) || filepath.Clean(info.Path) != info.Path {
+		return RootInfo{}, ErrChanged
+	}
+	current := rootID(info.Path)
+	if info.ID != current {
+		sum := sha256.Sum256([]byte(info.Path))
+		if info.ID != "r_"+hex.EncodeToString(sum[:16]) {
+			return RootInfo{}, ErrChanged
+		}
+	}
+	info.ID = current
+	return info, nil
 }
 
 func within(parent, path string) bool {
@@ -390,20 +428,40 @@ func (r *Registry) boundary(id, path string) error {
 	paths := make([]string, 0, len(r.roots))
 	for other, entry := range r.roots {
 		if other != id {
-			paths = append(paths, entry.root.Dir())
+			paths = append(paths, entry.path)
 		}
 	}
 	r.mu.RUnlock()
-	real, err := filepath.EvalSymlinks(path)
+	existing := path
+	for {
+		_, err := os.Lstat(existing)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing || !within(root.Dir(), parent) {
+			return tool.ErrOutsideRoot
+		}
+		existing = parent
+	}
+	realExisting, err := filepath.EvalSymlinks(existing)
 	if err != nil {
 		return fmt.Errorf("workspace: resolve source: %w", err)
 	}
+	suffix, err := filepath.Rel(existing, path)
+	if err != nil {
+		return err
+	}
+	real := filepath.Join(realExisting, suffix)
 	for _, other := range paths {
 		if within(root.Dir(), other) && (within(other, path) || within(other, real)) {
 			return ErrBoundary
 		}
 	}
-	for _, p := range []string{path, real} {
+	for _, p := range []string{existing, realExisting} {
 		info, err := root.Stat(p)
 		if err != nil {
 			return fmt.Errorf("workspace: stat source: %w", err)
@@ -423,4 +481,13 @@ func (r *Registry) boundary(id, path string) error {
 		}
 	}
 	return nil
+}
+
+// FailClosed revokes file authority when historical boundaries cannot be
+// restored. A fresh session is required; partial restoration never grants more.
+func (s *Session) FailClosed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blocked = true
+	s.revision++
 }

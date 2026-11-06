@@ -25,6 +25,7 @@ import (
 type preamble struct {
 	pc         *project.Context
 	registry   *tool.Registry
+	lookup     func(string) (agentapi.Tool, bool)
 	activation *project.Activation
 	// notices is where a loaded rule and a layout warning are announced.
 	notices io.Writer
@@ -96,7 +97,11 @@ func (p *preamble) Prefix(ctx context.Context, messages []agentapi.Message) ([]a
 			continue
 		}
 		for _, c := range m.ToolCalls {
-			t, ok := p.registry.Lookup(c.Name)
+			lookup := p.lookup
+			if lookup == nil {
+				lookup = p.registry.Lookup
+			}
+			t, ok := lookup(c.Name)
 			if !ok {
 				continue
 			}

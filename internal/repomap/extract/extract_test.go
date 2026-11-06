@@ -75,6 +75,7 @@ func TestSignatureAndEnclosing(t *testing.T) {
 
 func TestNestedCallableBodiesAreRedacted(t *testing.T) {
 	for _, tt := range []struct{ path, source string }{
+		{"x.go", "package p; type Vec [len(func() string { return \"BODY_SENTINEL\" }())]int"},
 		{"x.js", "function open(callback = () => { return 'BODY_SENTINEL'; }) { return 'BODY_SENTINEL'; }"},
 		{"x.ts", "const open = (callback = () => { return 'BODY_SENTINEL'; }) => { return 'BODY_SENTINEL'; };"},
 		{"x.py", "def open(callback=lambda: 'BODY_SENTINEL'):\n    return 'BODY_SENTINEL'\n"},
@@ -177,6 +178,65 @@ func BenchmarkExtract(b *testing.B) {
 			b.SetBytes(int64(len(input.Content)))
 			for b.Loop() {
 				r, err := Extract(context.Background(), input, DefaultLimits())
+				if err != nil || !r.Complete || len(r.Declarations) != 100 {
+					b.Fatalf("Extract = %+v, %v", r, err)
+				}
+			}
+		})
+	}
+}
+
+func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
+	engine := &Engine{}
+	t.Cleanup(func() {
+		if err := engine.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	source := Source{"x.js", []byte("function Open() {}")}
+	first, err := engine.Extract(ctx, source, DefaultLimits())
+	if err != nil || !first.Complete {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	session := engine.wasm
+	cancel()
+	second, err := engine.Extract(context.Background(), source, DefaultLimits())
+	if err != nil || !second.Complete || session != engine.wasm {
+		t.Fatalf("second = %+v, %v; session reused=%v", second, err, session == engine.wasm)
+	}
+	third, err := engine.Extract(context.Background(), Source{"x.py", []byte("def Open():\n    pass\n")}, DefaultLimits())
+	if err != nil || !third.Complete || engine.wasm == session {
+		t.Fatalf("language switch = %+v, %v", third, err)
+	}
+}
+
+func BenchmarkWarmEngine(b *testing.B) {
+	for _, tt := range []struct{ path, unit string }{
+		{"x.py", "def f%d(x: int) -> int:\n    return x + 1\n"},
+		{"x.js", "function f%d(x) { return x + 1; }\n"},
+		{"x.ts", "function f%d(x: number): number { return x + 1; }\n"},
+		{"x.tsx", "function F%d() { return <div>Hello</div>; }\n"},
+		{"x.rs", "fn f%d(x: i32) -> i32 { x + 1 }\n"},
+	} {
+		b.Run(tt.path, func(b *testing.B) {
+			var source strings.Builder
+			for i := range 100 {
+				fmt.Fprintf(&source, tt.unit, i)
+			}
+			input := Source{tt.path, []byte(source.String())}
+			engine := &Engine{}
+			b.Cleanup(func() {
+				if err := engine.Close(); err != nil {
+					b.Error(err)
+				}
+			})
+			if r, err := engine.Extract(context.Background(), input, DefaultLimits()); err != nil || !r.Complete {
+				b.Fatalf("warmup: %+v, %v", r, err)
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				r, err := engine.Extract(context.Background(), input, DefaultLimits())
 				if err != nil || !r.Complete || len(r.Declarations) != 100 {
 					b.Fatalf("Extract = %+v, %v", r, err)
 				}

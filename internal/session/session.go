@@ -31,8 +31,11 @@ type Session struct {
 	created time.Time
 	// parent is set for a fork; profile is the last profile record, or
 	// the zero value for "the configured default".
-	parent  *Parent
-	profile ProfileRef
+	parent           *Parent
+	profile          ProfileRef
+	workspace        WorkspaceRef
+	workspaceHistory []WorkspaceRef
+	totalUserTurns   int
 
 	messages []agentapi.Message
 	// warnings collects what load skipped or repaired, for the CLI to show.
@@ -114,6 +117,9 @@ func (s *Session) AppendMessage(m agentapi.Message) error {
 		return err
 	}
 	s.messages = append(s.messages, m)
+	if m.Role == agentapi.RoleUser {
+		s.totalUserTurns++
+	}
 	return nil
 }
 
@@ -261,10 +267,16 @@ func (s *Session) apply(rec Record) {
 	switch rec.Kind {
 	case KindMessage:
 		s.messages = append(s.messages, *rec.Message)
+		if rec.Message.Role == agentapi.RoleUser {
+			s.totalUserTurns++
+		}
 	case KindCompaction:
 		if rec.Compaction.History != nil {
 			s.messages = append([]agentapi.Message(nil), rec.Compaction.History...)
 		}
+	case KindWorkspace:
+		s.workspace = *rec.Workspace
+		s.workspaceHistory = append(s.workspaceHistory, *rec.Workspace)
 	case KindProfile:
 		s.profile = *rec.Profile
 	case KindSession:

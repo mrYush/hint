@@ -18,6 +18,7 @@ import (
 // replHelp is what /help prints.
 const replHelp = `Commands:
   /help                    show this help
+  /repos                   list roots; add/remove/tree/clone/next; index controls process-wide indexing
   /new                     start a fresh session; the current one stays
   /profile                 list the provider profiles; the one in use is marked
   /profile <name> [model]  answer with that profile (and model) from now on
@@ -83,6 +84,9 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 					continue
 				}
 				a.newSession(ctx)
+				continue
+			case "/repos":
+				a.reposCommand(ctx, sigs, fields[1:])
 				continue
 			case "/profile":
 				a.profileCommand(ctx, fields[1:])
@@ -262,4 +266,29 @@ func drain(sigs <-chan os.Signal) {
 			return
 		}
 	}
+}
+
+func (a *app) reposCommand(ctx context.Context, sigs <-chan os.Signal, args []string) {
+	ctx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-sigs:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	defer func() { cancel(); <-stopped; drain(sigs) }()
+	req, err := shell.ParseRepos(a.sessionID, args)
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	result, err := a.client.Repos(ctx, req)
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	fmt.Fprintln(a.io.err, result.Text)
 }

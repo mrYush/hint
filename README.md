@@ -143,6 +143,7 @@ Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
 Tab completes `/commands` and their arguments; `/help` lists them:
 `/sessions` shows this directory's sessions as a tree and resumes one,
 `/new` starts a fresh session, `/profile` switches the provider profile,
+`/repos` manages explicitly attached repositories and folders (see [Working with multiple roots](docs/workspaces.md)),
 `/prompts` lists MCP prompts,
 `/completion` shows or sets when a model continues what you type (see
 [Completion of what you type](#completion-of-what-you-type)), `/setup` and `/config` edit the
