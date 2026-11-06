@@ -1,0 +1,1034 @@
+{
+  "sources": [
+    {
+      "name": "requests",
+      "repository": "psf/requests",
+      "tag": "v2.32.3",
+      "archive_url": "https://codeload.github.com/psf/requests/tar.gz/refs/tags/v2.32.3",
+      "archive_sha256": "f665576fc02d02e7b7f21630b915d70c14288f48decf76fad89b16a9f3975c42",
+      "prefix": "src/requests/",
+      "files": [
+        {
+          "path": "requests/src/requests/__init__.py",
+          "sha256": "e3168011198f0c804fb1ad8fb23a54f6bd3aca8a0afb69992874d90215915adb",
+          "bytes": 5072,
+          "lines": 184
+        },
+        {
+          "path": "requests/src/requests/__version__.py",
+          "sha256": "1557e09606663509e660f5e93a8843539f05e4451bffe5674936807ac4b5f3b8",
+          "bytes": 435,
+          "lines": 14
+        },
+        {
+          "path": "requests/src/requests/_internal_utils.py",
+          "sha256": "9cc4329abe21b37d93a95a3901b0ab99c24486f3d487bc57965bb2ab0b252e24",
+          "bytes": 1495,
+          "lines": 50
+        },
+        {
+          "path": "requests/src/requests/adapters.py",
+          "sha256": "28871e72c72a6a6eab78e097465e03c0fe235fc25c97cb1de7b7edd7b291d9c4",
+          "bytes": 27451,
+          "lines": 719
+        },
+        {
+          "path": "requests/src/requests/api.py",
+          "sha256": "fd96fd39aeedcd5222cd32b016b3e30c463d7a3b66fce9d2444467003c46b10b",
+          "bytes": 6449,
+          "lines": 157
+        },
+        {
+          "path": "requests/src/requests/auth.py",
+          "sha256": "905ef9b6a9cb72d67d31ffe19bd4d9223e1c4169cde6ec51cfca16b31e70991d",
+          "bytes": 10186,
+          "lines": 314
+        },
+        {
+          "path": "requests/src/requests/certs.py",
+          "sha256": "67d49be35d009efea35054f2b2cd23145854eb1b2df1cb442ea7f2f04bf6de0c",
+          "bytes": 429,
+          "lines": 17
+        },
+        {
+          "path": "requests/src/requests/compat.py",
+          "sha256": "0b9c3f0cf2d2bab5cf81c75653bf1fa2b6b400f99b6245f61bcf50bc7e71ccf0",
+          "bytes": 1817,
+          "lines": 94
+        },
+        {
+          "path": "requests/src/requests/cookies.py",
+          "sha256": "6cd8be8aa123e0d3d9d34fa86feac7bf392f39bccdde5129830de0ea9692dd7c",
+          "bytes": 18590,
+          "lines": 561
+        },
+        {
+          "path": "requests/src/requests/exceptions.py",
+          "sha256": "8c93d2d545804ecf3a4a155468ba2b4e225bd52686ba83445a020225ea7e5646",
+          "bytes": 4260,
+          "lines": 151
+        },
+        {
+          "path": "requests/src/requests/help.py",
+          "sha256": "80f5f977f1fb5ddf3c6830017a386a1a097d075545453b79066898bcbdcfcc84",
+          "bytes": 3875,
+          "lines": 134
+        },
+        {
+          "path": "requests/src/requests/hooks.py",
+          "sha256": "0a2bb2b221c0dfd57951f702057148c7cdc8ac3a6ec1f37d45c4d482fdbc7ed4",
+          "bytes": 733,
+          "lines": 33
+        },
+        {
+          "path": "requests/src/requests/models.py",
+          "sha256": "938daba17cc2f2efce6a000f422f54e0c91f3bb8b8af615d6aabccaacb4f7a17",
+          "bytes": 35418,
+          "lines": 1037
+        },
+        {
+          "path": "requests/src/requests/packages.py",
+          "sha256": "fe0d2067af355320252874631fa91a9db6a8c71d9e01beaacdc5e2383c932287",
+          "bytes": 904,
+          "lines": 23
+        },
+        {
+          "path": "requests/src/requests/sessions.py",
+          "sha256": "ca44c8f145864a5b4e7c7d3b1caa25947ee44c11b0e168620556901a67244f0e",
+          "bytes": 30495,
+          "lines": 831
+        },
+        {
+          "path": "requests/src/requests/status_codes.py",
+          "sha256": "889500780db96da4ddc3ee8f7c3d1e178aa1a48343251248fb268cab1b382c42",
+          "bytes": 4322,
+          "lines": 128
+        },
+        {
+          "path": "requests/src/requests/structures.py",
+          "sha256": "f886e6855cf4e92fb968f499b94b6167afba0fd5ce8d1b935c739a6d8d38d573",
+          "bytes": 2912,
+          "lines": 99
+        },
+        {
+          "path": "requests/src/requests/utils.py",
+          "sha256": "1e2402e8dabf0dade4b5a32217342487e7429378901c7284b184b990373ef02c",
+          "bytes": 33619,
+          "lines": 1096
+        }
+      ]
+    },
+    {
+      "name": "serde",
+      "repository": "serde-rs/serde",
+      "tag": "v1.0.219",
+      "archive_url": "https://codeload.github.com/serde-rs/serde/tar.gz/refs/tags/v1.0.219",
+      "archive_sha256": "f8143bbb63887f6c53d90609964fecb12e22b15fa2b3ceefe6b3f64c3e46f8db",
+      "prefix": "serde/src/",
+      "files": [
+        {
+          "path": "serde/serde/src/de/ignored_any.rs",
+          "sha256": "6480f2b2a83dc4764d01b2eec7309729eef2492eede2e5ee98d23a60b05198eb",
+          "bytes": 6154,
+          "lines": 238
+        },
+        {
+          "path": "serde/serde/src/de/impls.rs",
+          "sha256": "18ed2d8221b04c7fe8f7a757445a04cd1d28c887f46f7a8717afff10eada146f",
+          "bytes": 97685,
+          "lines": 3183
+        },
+        {
+          "path": "serde/serde/src/de/mod.rs",
+          "sha256": "15d008ddf31fdfc5a39d2a301b6df79798969468daee0bcc3ebbcd3b78585e7a",
+          "bytes": 81911,
+          "lines": 2335
+        },
+        {
+          "path": "serde/serde/src/de/seed.rs",
+          "sha256": "045d890712a04eb33ffc5a021e5d948a63c89402b8ffeea749df2171b7484f8f",
+          "bytes": 563,
+          "lines": 19
+        },
+        {
+          "path": "serde/serde/src/de/size_hint.rs",
+          "sha256": "fff83dc39d30e75e8e611991f9c5399188a1aad23a6462dbca2c8b62655cfedb",
+          "bytes": 644,
+          "lines": 29
+        },
+        {
+          "path": "serde/serde/src/de/value.rs",
+          "sha256": "8b6055d90e1ee4637fadaa11c87cc3599fe74b83db9d5791e604016cb349ae37",
+          "bytes": 48828,
+          "lines": 1894
+        },
+        {
+          "path": "serde/serde/src/format.rs",
+          "sha256": "c85071b016df643b161859682d21ce34fa0ebf2a3bdbeeea69859da48f5d934f",
+          "bytes": 726,
+          "lines": 30
+        },
+        {
+          "path": "serde/serde/src/integer128.rs",
+          "sha256": "29ef30b7d94507b34807090e68173767cdc7aff62edccd38affe69e75338dddc",
+          "bytes": 243,
+          "lines": 9
+        },
+        {
+          "path": "serde/serde/src/lib.rs",
+          "sha256": "50dd6bf086cb41aa82cf2de869d9a257397ee391686d0652a8ada1f68bf09b89",
+          "bytes": 13946,
+          "lines": 349
+        },
+        {
+          "path": "serde/serde/src/macros.rs",
+          "sha256": "8cf477d0406006f8fbf76833c40a0fd2ed0ba6e01e5afd346c07119f72588ded",
+          "bytes": 8279,
+          "lines": 231
+        },
+        {
+          "path": "serde/serde/src/private/de.rs",
+          "sha256": "07e3346f224342a8599c8c84630fa218408aa4a547e667290c440bbeef61d40d",
+          "bytes": 85891,
+          "lines": 2804
+        },
+        {
+          "path": "serde/serde/src/private/doc.rs",
+          "sha256": "b222decb40321190155209e1b8a5a52e3adfaa470047e379e664b71e0320655a",
+          "bytes": 4930,
+          "lines": 162
+        },
+        {
+          "path": "serde/serde/src/private/mod.rs",
+          "sha256": "b8f0c348621d91dd9da3db83d8877e70bc61ad0a2dc2d6fb57c6fc2c2cbafa26",
+          "bytes": 1567,
+          "lines": 48
+        },
+        {
+          "path": "serde/serde/src/private/ser.rs",
+          "sha256": "19c075b8f26f0170283a64a81bdd53622e83251ebd92510b820dd4bc7534baba",
+          "bytes": 40012,
+          "lines": 1362
+        },
+        {
+          "path": "serde/serde/src/ser/fmt.rs",
+          "sha256": "bd129d9f085933b76dafef6eb43ffac893c1f6484a3064dcd82faeeebc3b203c",
+          "bytes": 4166,
+          "lines": 170
+        },
+        {
+          "path": "serde/serde/src/ser/impls.rs",
+          "sha256": "00b58a84f7c07b2f575219d6d0745fd1258dae9b9c8ec5b9b299a712c482b1a3",
+          "bytes": 30970,
+          "lines": 1096
+        },
+        {
+          "path": "serde/serde/src/ser/impossible.rs",
+          "sha256": "8e4473db23faeed1accb35e6d2d4e058b6bfaa0746f49f0f3b95a76efbf97878",
+          "bytes": 5298,
+          "lines": 216
+        },
+        {
+          "path": "serde/serde/src/ser/mod.rs",
+          "sha256": "debdf82e14a219f61e43facb04aad5fba1c2166d8cfdd80c603b2560fe782714",
+          "bytes": 63248,
+          "lines": 1953
+        },
+        {
+          "path": "serde/serde/src/std_error.rs",
+          "sha256": "25a07149e2e468747ffa5a58051c7f93d7b3c0fa0372f012a96c97ec8ab03b97",
+          "bytes": 1347,
+          "lines": 48
+        }
+      ]
+    },
+    {
+      "name": "typescript",
+      "repository": "microsoft/TypeScript",
+      "tag": "v5.9.3",
+      "archive_url": "https://codeload.github.com/microsoft/TypeScript/tar.gz/refs/tags/v5.9.3",
+      "archive_sha256": "d371a2430d6305290d1bddaf195fdd629d1a8708cda08f4a72fc923b65d36c4a",
+      "prefix": "src/compiler/",
+      "files": [
+        {
+          "path": "typescript/src/compiler/_namespaces/ts.moduleSpecifiers.ts",
+          "sha256": "d858679e4d64f2879cb625cecf199bb93f44e414e3c34fd55540fcccfef9c07e",
+          "bytes": 111,
+          "lines": 3
+        },
+        {
+          "path": "typescript/src/compiler/_namespaces/ts.performance.ts",
+          "sha256": "e3d39c7ea64f27347b698a1951a76a014cd0c1c51565d6ed9182d7d4f064ddda",
+          "bytes": 101,
+          "lines": 3
+        },
+        {
+          "path": "typescript/src/compiler/_namespaces/ts.ts",
+          "sha256": "74b899b9d4a9c709b9daa248cb9107227a705f0189eee82271ee84d3bbfc482b",
+          "bytes": 3288,
+          "lines": 79
+        },
+        {
+          "path": "typescript/src/compiler/binder.ts",
+          "sha256": "3fb1a46b3d13a6dac51a450b1ec5f124538c82c672382a2bf1ea65fc9d636243",
+          "bytes": 199121,
+          "lines": 4008
+        },
+        {
+          "path": "typescript/src/compiler/builder.ts",
+          "sha256": "342ab5d1095a1e2595d3e3f476d21f6f50bf09dc99f823da2ac2af16cef7d9d4",
+          "bytes": 116961,
+          "lines": 2480
+        },
+        {
+          "path": "typescript/src/compiler/builderPublic.ts",
+          "sha256": "a6a304c41be6a7b33febcae8dd98955f90313c7e2d56af02f476e6b9722b82d6",
+          "bytes": 11523,
+          "lines": 273
+        },
+        {
+          "path": "typescript/src/compiler/builderState.ts",
+          "sha256": "51ef79dcaebb2e9b09c5270d07ca8f4abf3eb04e4849eb9014bf2d55f2c570a5",
+          "bytes": 26090,
+          "lines": 626
+        },
+        {
+          "path": "typescript/src/compiler/builderStatePublic.ts",
+          "sha256": "93138f0f93fd9dff071c3def9feebc5f88fbe65bcb028d4ca8871d3155b9b522",
+          "bytes": 382,
+          "lines": 17
+        },
+        {
+          "path": "typescript/src/compiler/checker.ts",
+          "sha256": "aba154f42352498790b55fa6995bdbb5dee607460eef5eebc1908b0cf0087d3c",
+          "bytes": 3121747,
+          "lines": 53776
+        },
+        {
+          "path": "typescript/src/compiler/commandLineParser.ts",
+          "sha256": "97a4fad96c437ebaa397be4e04bc40c0173b3966a6b5637d2d8fa604dc2afb53",
+          "bytes": 181717,
+          "lines": 4266
+        },
+        {
+          "path": "typescript/src/compiler/core.ts",
+          "sha256": "1512daf31972388d2c43d07b96ee202f659ba8e74e356b8f01d1f6e92192e92c",
+          "bytes": 92353,
+          "lines": 2593
+        },
+        {
+          "path": "typescript/src/compiler/corePublic.ts",
+          "sha256": "a7b165ec7979470a90bd157c4a8e49da2ac6fa753f1f56ce1b2429d2667c4e04",
+          "bytes": 1318,
+          "lines": 47
+        },
+        {
+          "path": "typescript/src/compiler/debug.ts",
+          "sha256": "38dfd2cdfd58fb8a03a6c815444aa8d6876c69f7e37d96702ece4e3da836bc8b",
+          "bytes": 56593,
+          "lines": 1254
+        },
+        {
+          "path": "typescript/src/compiler/emitter.ts",
+          "sha256": "99bc7de7b1d6527371c551deced1f088154bb18973eaba9a75fedafe0a143b99",
+          "bytes": 272827,
+          "lines": 6365
+        },
+        {
+          "path": "typescript/src/compiler/executeCommandLine.ts",
+          "sha256": "cb776e1a9af5435a645a413a66ee1a9858322314c209def3ab7f529631da41a9",
+          "bytes": 53205,
+          "lines": 1295
+        },
+        {
+          "path": "typescript/src/compiler/expressionToTypeNode.ts",
+          "sha256": "43c6b56dfabaf84c3591fc363763aecbd5b4adfa420879b283aeebca2d405462",
+          "bytes": 70053,
+          "lines": 1330
+        },
+        {
+          "path": "typescript/src/compiler/factory/baseNodeFactory.ts",
+          "sha256": "86826be85abc6406cec8915574950ab349ba829167a4d3f28332c38dd8b90e0a",
+          "bytes": 2677,
+          "lines": 60
+        },
+        {
+          "path": "typescript/src/compiler/factory/emitHelpers.ts",
+          "sha256": "aad8b194e1221e2cf2495cdc824d0a99aef86343da11023f39a1666d5c62bdf8",
+          "bytes": 69094,
+          "lines": 1491
+        },
+        {
+          "path": "typescript/src/compiler/factory/emitNode.ts",
+          "sha256": "d4e8f25e7c30e6c6f5fbb72d56812d140f8d15384be4a7bd4da226a47559583a",
+          "bytes": 12719,
+          "lines": 381
+        },
+        {
+          "path": "typescript/src/compiler/factory/nodeChildren.ts",
+          "sha256": "bded8155f089e40a86d99d53e135b8f3a4cbc49f70ff2bdd0b80f0683a2e9606",
+          "bytes": 2237,
+          "lines": 61
+        },
+        {
+          "path": "typescript/src/compiler/factory/nodeConverters.ts",
+          "sha256": "3d5979059f70d4c381bbd5998181441dd6aaa7e15f6564a8f97d446ad85b041d",
+          "bytes": 7205,
+          "lines": 193
+        },
+        {
+          "path": "typescript/src/compiler/factory/nodeFactory.ts",
+          "sha256": "2e8637f0f5da1d35ee10c98c102749142bc74e552b67ec427f0732bbca6dfad6",
+          "bytes": 335027,
+          "lines": 7544
+        },
+        {
+          "path": "typescript/src/compiler/factory/nodeTests.ts",
+          "sha256": "47cc22cce04a5fa143e8182bd0f6e5aea2b1b34d58539701a0785fb0b60cf14f",
+          "bytes": 36796,
+          "lines": 1201
+        },
+        {
+          "path": "typescript/src/compiler/factory/parenthesizerRules.ts",
+          "sha256": "94aa00739f9d2b7f41ca6c5d0aaa5495a1d4d4b7c8af1919361a64a7abf90764",
+          "bytes": 34012,
+          "lines": 706
+        },
+        {
+          "path": "typescript/src/compiler/factory/utilities.ts",
+          "sha256": "7b2e75c131e73ee2b98d097fa80786b6a03965d199bd2fddff4e7c953f093a31",
+          "bytes": 76114,
+          "lines": 1757
+        },
+        {
+          "path": "typescript/src/compiler/factory/utilitiesPublic.ts",
+          "sha256": "a91c2dcc86ec6711aeae4fb0ad512209abe7a220ef2a0e7d2f04c3adcb7a0ff1",
+          "bytes": 2101,
+          "lines": 52
+        },
+        {
+          "path": "typescript/src/compiler/moduleNameResolver.ts",
+          "sha256": "f0788f6b4a227e27e883385aa689338d8729cd4f5e013af50eb994620e02f451",
+          "bytes": 180972,
+          "lines": 3418
+        },
+        {
+          "path": "typescript/src/compiler/moduleSpecifiers.ts",
+          "sha256": "9a7623ef273cfe670f11132590583b7628dec59c2d85e36e897ca5deed8f168a",
+          "bytes": 79619,
+          "lines": 1470
+        },
+        {
+          "path": "typescript/src/compiler/parser.ts",
+          "sha256": "dcddb577aa14f455193ca98c7c069217a0c523466fc777b985a7aefbd8dafc8e",
+          "bytes": 539588,
+          "lines": 10819
+        },
+        {
+          "path": "typescript/src/compiler/path.ts",
+          "sha256": "4b777f1a03b9f39b4864106e60a43828b5b749a5fae00f68d6faf8f02e0c91bc",
+          "bytes": 44162,
+          "lines": 1115
+        },
+        {
+          "path": "typescript/src/compiler/performance.ts",
+          "sha256": "b12e3cdedb651fe1d94fceae1bb236c2745530ba7fe0c9dc996d61ba22b6c473",
+          "bytes": 6146,
+          "lines": 210
+        },
+        {
+          "path": "typescript/src/compiler/performanceCore.ts",
+          "sha256": "7f6e15fcf84111901e95303399ba69c9baacc3466a3ad5b5b21633c3d382f7b4",
+          "bytes": 3255,
+          "lines": 102
+        },
+        {
+          "path": "typescript/src/compiler/program.ts",
+          "sha256": "1395b8356eba611ebb0d5f435bd53625b40a81904247030fef07e4a5f040aa16",
+          "bytes": 268261,
+          "lines": 5167
+        },
+        {
+          "path": "typescript/src/compiler/programDiagnostics.ts",
+          "sha256": "137ba4bc6f682822fd71e17596d46f17ec2e9a36ab20e7752cdc0d4a5dd41991",
+          "bytes": 21292,
+          "lines": 426
+        },
+        {
+          "path": "typescript/src/compiler/resolutionCache.ts",
+          "sha256": "1a04c08b8e73582bc7fc8490608218498adab95becbc8a4975b789f1a8c054dc",
+          "bytes": 81324,
+          "lines": 1702
+        },
+        {
+          "path": "typescript/src/compiler/scanner.ts",
+          "sha256": "02f9e8f02e234b0e917e753a7b74f975c9b9b95f7f01ee4bc151081ed43dea49",
+          "bytes": 219162,
+          "lines": 4101
+        },
+        {
+          "path": "typescript/src/compiler/semver.ts",
+          "sha256": "1b5cbc707e9a7e1dd413b3dd69e2e5cb2c816a6675ce6ae6f3a3cc2d6fc0eabe",
+          "bytes": 17933,
+          "lines": 451
+        },
+        {
+          "path": "typescript/src/compiler/sourcemap.ts",
+          "sha256": "036ab3c39165eb06a3fb145e1467f4f0dfebdb1f76b5faccc34a79db756473e4",
+          "bytes": 32104,
+          "lines": 823
+        },
+        {
+          "path": "typescript/src/compiler/symbolWalker.ts",
+          "sha256": "6aec8fecf7d57abd557bdbd4a9744ba2a1f3d8fcc9e9b84721158bd4f284300a",
+          "bytes": 8177,
+          "lines": 216
+        },
+        {
+          "path": "typescript/src/compiler/sys.ts",
+          "sha256": "9fe83b83c72ee53545fd63384f67c0beb31e864d1cc315ba126014d801e2212a",
+          "bytes": 86142,
+          "lines": 1981
+        },
+        {
+          "path": "typescript/src/compiler/tracing.ts",
+          "sha256": "c47b9a7aa59c84205a27249628c671cba4f4f7e60efda89ddaf48d4aedee6f7a",
+          "bytes": 15028,
+          "lines": 375
+        },
+        {
+          "path": "typescript/src/compiler/transformer.ts",
+          "sha256": "d13096beeb8d41a78cc48add41d5028b456e23f73c9973fe175c35941257a066",
+          "bytes": 29755,
+          "lines": 696
+        },
+        {
+          "path": "typescript/src/compiler/transformers/classFields.ts",
+          "sha256": "d3a0359fad8430943ca68282cc32b12bc61a6631fa93901f6c480f411c4542f4",
+          "bytes": 156326,
+          "lines": 3360
+        },
+        {
+          "path": "typescript/src/compiler/transformers/classThis.ts",
+          "sha256": "41c65d5bb7518697a301cce563f6f800ed3ba8856372e86998d259a3eb439a6e",
+          "bytes": 5504,
+          "lines": 148
+        },
+        {
+          "path": "typescript/src/compiler/transformers/declarations.ts",
+          "sha256": "c6156157c9acccbe5dbd86d2e5407179d0682a254764089e7a7d82871e79d653",
+          "bytes": 99159,
+          "lines": 1974
+        },
+        {
+          "path": "typescript/src/compiler/transformers/declarations/diagnostics.ts",
+          "sha256": "dbc7849a0535ef63307656557c1037ef15006f7d6246197c095350854b71e721",
+          "bytes": 46162,
+          "lines": 812
+        },
+        {
+          "path": "typescript/src/compiler/transformers/destructuring.ts",
+          "sha256": "d38490b41ddbc56be090ddebcec8de5cd11ec88104cc4b859a19cdf132e7c640",
+          "bytes": 30755,
+          "lines": 626
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2015.ts",
+          "sha256": "79d70178e4923796212e8900090695875e51c9df60a6c604fbe9e43cd0ffbdf4",
+          "bytes": 231365,
+          "lines": 5065
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2016.ts",
+          "sha256": "3e3ba9728ee63a9c68e8aee6356e84b611ec19c4acbfc7b4b806b49903c2967e",
+          "bytes": 4484,
+          "lines": 122
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2017.ts",
+          "sha256": "b18e65782e3ff096fb09a4609db90dddcb0cbdd8a2f1e72caeea19426dbd92b5",
+          "bytes": 49966,
+          "lines": 1154
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2018.ts",
+          "sha256": "846876b89a5be66536d351c7c89769acc7b8ed45577411f361107963caa09c2d",
+          "bytes": 69751,
+          "lines": 1486
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2019.ts",
+          "sha256": "99d755a8cd5bdd07d23590330990828ae7c8a33dae9d55926f5b0ab07db84878",
+          "bytes": 1533,
+          "lines": 51
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2020.ts",
+          "sha256": "763fb25fb5c40acf6d2482631c79709c9eddd299303292750a57216e392ae1dd",
+          "bytes": 13066,
+          "lines": 267
+        },
+        {
+          "path": "typescript/src/compiler/transformers/es2021.ts",
+          "sha256": "29798cddd385947caa004effdf997df6bc97b9a9b1d9919413dcee3a6a8b5205",
+          "bytes": 4104,
+          "lines": 106
+        },
+        {
+          "path": "typescript/src/compiler/transformers/esDecorators.ts",
+          "sha256": "bcef2e876468210c48941dad975a492f49eab7abeb4f75ca603e76ffd5e06c7c",
+          "bytes": 126995,
+          "lines": 2533
+        },
+        {
+          "path": "typescript/src/compiler/transformers/esnext.ts",
+          "sha256": "ff1704dda844ba17385db1bd970c28150c2457d89db0691773b17974959295ba",
+          "bytes": 35556,
+          "lines": 882
+        },
+        {
+          "path": "typescript/src/compiler/transformers/generators.ts",
+          "sha256": "93e6814b36032fd49fbc2f9ff7fa60695430431f3c11a3f03207827fe44c07f5",
+          "bytes": 123796,
+          "lines": 3284
+        },
+        {
+          "path": "typescript/src/compiler/transformers/jsx.ts",
+          "sha256": "e3a622ec58121aca3a32509ec7e751c20024df4941db49591a033756eb7f8a48",
+          "bytes": 35841,
+          "lines": 935
+        },
+        {
+          "path": "typescript/src/compiler/transformers/legacyDecorators.ts",
+          "sha256": "8321e776d83fe3892df9331baa9c1b837736ba5e4130d379a75ef9bfe34d86e8",
+          "bytes": 36625,
+          "lines": 846
+        },
+        {
+          "path": "typescript/src/compiler/transformers/module/esnextAnd2015.ts",
+          "sha256": "6c163c8dc720431f02b335d8d5c25efe849039d5805bfa722899f8a2cc2e6945",
+          "bytes": 18606,
+          "lines": 439
+        },
+        {
+          "path": "typescript/src/compiler/transformers/module/impliedNodeFormatDependent.ts",
+          "sha256": "9170b66a9feaa1b340e0723e0a0b10c085385c42ff25d39e9a24dd44e2d84a45",
+          "bytes": 3725,
+          "lines": 99
+        },
+        {
+          "path": "typescript/src/compiler/transformers/module/module.ts",
+          "sha256": "4b58fc5d71c0294198f6a578de1c65fc0086f5f1c19454d097ffaf2efd7ba42f",
+          "bytes": 111486,
+          "lines": 2504
+        },
+        {
+          "path": "typescript/src/compiler/transformers/module/system.ts",
+          "sha256": "f7ad72e9d252e4e47b090ca3f6076ad15221f5d681bb1eb15c79ce653d9a626f",
+          "bytes": 85185,
+          "lines": 2050
+        },
+        {
+          "path": "typescript/src/compiler/transformers/namedEvaluation.ts",
+          "sha256": "7529078853a659502ab39832a4eec7e0ee6b94df675f63960254c56cc31060e7",
+          "bytes": 22186,
+          "lines": 489
+        },
+        {
+          "path": "typescript/src/compiler/transformers/taggedTemplate.ts",
+          "sha256": "800dc3bebb7e7879e68b5f3ed684397e41dd76b73a1130764fefe6007f627ea9",
+          "bytes": 5424,
+          "lines": 132
+        },
+        {
+          "path": "typescript/src/compiler/transformers/ts.ts",
+          "sha256": "13ea0f591a1208723281404efab1f2b4e7b1665146a9c9e751e4ab116a1bcbc8",
+          "bytes": 116203,
+          "lines": 2746
+        },
+        {
+          "path": "typescript/src/compiler/transformers/typeSerializer.ts",
+          "sha256": "8219081416c67c9ea7f1f8da6125775652eb7d065e8897fd430f50d83dbac5d6",
+          "bytes": 28796,
+          "lines": 633
+        },
+        {
+          "path": "typescript/src/compiler/transformers/utilities.ts",
+          "sha256": "cbddbf83ed9af717b94398ab8b2617f0098406d26712ae816130f40d3ce9c2e5",
+          "bytes": 35618,
+          "lines": 886
+        },
+        {
+          "path": "typescript/src/compiler/tsbuild.ts",
+          "sha256": "fb3789e399c0c7e1548d3949eab83a47da545cc88fe0ba2eee356926be607b78",
+          "bytes": 5322,
+          "lines": 183
+        },
+        {
+          "path": "typescript/src/compiler/tsbuildPublic.ts",
+          "sha256": "3337fb2a5fcb5757f2800b03849452f809227ebd74fcffd2b597e17e13dcb2a5",
+          "bytes": 114409,
+          "lines": 2493
+        },
+        {
+          "path": "typescript/src/compiler/types.ts",
+          "sha256": "d5b7a803867e9c7878607bf2baddd46bb62df6b3aa2ca72fe473bf8683f0903b",
+          "bytes": 486748,
+          "lines": 10652
+        },
+        {
+          "path": "typescript/src/compiler/utilities.ts",
+          "sha256": "6ac5fa1e9ce5083a6a7279bbcdbaa13ac7b2279e016b8b82d58410dc27af72a2",
+          "bytes": 510858,
+          "lines": 12366
+        },
+        {
+          "path": "typescript/src/compiler/utilitiesPublic.ts",
+          "sha256": "0879ecba349acd436c0a30abda82ecede9c2f500b866bdee658da7e1d32ead93",
+          "bytes": 103648,
+          "lines": 2668
+        },
+        {
+          "path": "typescript/src/compiler/visitorPublic.ts",
+          "sha256": "51ed57171507f1e3cb0a268fca6eb42eaa3882ccb184b8e8cb384a08aa38045e",
+          "bytes": 88048,
+          "lines": 1808
+        },
+        {
+          "path": "typescript/src/compiler/watch.ts",
+          "sha256": "cefcc6ca8815d2997670343b20005d5f48804dcb62fcc34815d91098ecf354d5",
+          "bytes": 45616,
+          "lines": 998
+        },
+        {
+          "path": "typescript/src/compiler/watchPublic.ts",
+          "sha256": "74fdacba504a4962aa0b591c385b6f7061742d37122842e55886a77ffa8d2bef",
+          "bytes": 60845,
+          "lines": 1263
+        },
+        {
+          "path": "typescript/src/compiler/watchUtilities.ts",
+          "sha256": "0a4919e1976ea0683ea06137ec02c97fe5ad44ca8d0bc709f69eb0230b7a5487",
+          "bytes": 34758,
+          "lines": 847
+        }
+      ]
+    },
+    {
+      "name": "express",
+      "repository": "expressjs/express",
+      "tag": "4.21.2",
+      "archive_url": "https://codeload.github.com/expressjs/express/tar.gz/refs/tags/4.21.2",
+      "archive_sha256": "9bf156fa3eb66aecf6bed85391dff8b626a3ffca222b624584a59ef396827914",
+      "prefix": "lib/",
+      "files": [
+        {
+          "path": "express/lib/application.js",
+          "sha256": "5901b32f609ba349351bf7406dbdc0c4c57b77ce6f7215ea67ccca5ac2a28e88",
+          "bytes": 14593,
+          "lines": 661
+        },
+        {
+          "path": "express/lib/express.js",
+          "sha256": "2f25585c03c3050779c8f5f00597f8653f4fb8a97448ef8ef8cb21e65ba4d15d",
+          "bytes": 2409,
+          "lines": 116
+        },
+        {
+          "path": "express/lib/middleware/init.js",
+          "sha256": "48c1d12f1494b20377fcdeec9056272eff84ed8c081e1e56dc2aea395f77d19c",
+          "bytes": 853,
+          "lines": 43
+        },
+        {
+          "path": "express/lib/middleware/query.js",
+          "sha256": "6edce3963588b42e41942900b24218e665b97df0c0b1c74090b2b934fa68ca08",
+          "bytes": 885,
+          "lines": 47
+        },
+        {
+          "path": "express/lib/request.js",
+          "sha256": "64ac10752c0516d789cb0698bb433586d4ce3b46f7f06ee3cb2880762b8bda40",
+          "bytes": 12505,
+          "lines": 525
+        },
+        {
+          "path": "express/lib/response.js",
+          "sha256": "4b5c338cb66eb53b07ef900bacf4cd520f057ae53996402286f4334e02806d56",
+          "bytes": 28729,
+          "lines": 1179
+        },
+        {
+          "path": "express/lib/router/index.js",
+          "sha256": "19c5ca9b025396612dbe464d07fbe7104ff9170c4d6a1c7e5507df4dbbf4d5cb",
+          "bytes": 15123,
+          "lines": 673
+        },
+        {
+          "path": "express/lib/router/layer.js",
+          "sha256": "c90709dcba8d9a6cfd1f2b4ef6d7a22d833e317f0c876d884342cee5a96f8a02",
+          "bytes": 3296,
+          "lines": 181
+        },
+        {
+          "path": "express/lib/router/route.js",
+          "sha256": "86db123570815a63dc23aa88d73e1b3dce908692ac2e3cf20fa350d69de63337",
+          "bytes": 4399,
+          "lines": 230
+        },
+        {
+          "path": "express/lib/utils.js",
+          "sha256": "9035c6d946ece511e749043cc823e32d3efe6727b8a9d52aac89649e99584f09",
+          "bytes": 5871,
+          "lines": 303
+        },
+        {
+          "path": "express/lib/view.js",
+          "sha256": "ec627880c1b43aee5887164ac2e9c58f01e4ee8086e23a829eddf1af3858c021",
+          "bytes": 3325,
+          "lines": 182
+        }
+      ]
+    },
+    {
+      "name": "wazero",
+      "repository": "tetratelabs/wazero",
+      "tag": "v1.10.1",
+      "source": "Go module cache verified by go.sum",
+      "files": [
+        {
+          "path": "wazero/internal/assemblyscript/logging/logging.go",
+          "sha256": "c1b1d013561fe9c7a39a36b5d295786bf9a64f0f1ad87923ad4c83bb460d85f6",
+          "bytes": 767,
+          "lines": 32
+        },
+        {
+          "path": "wazero/internal/assemblyscript/names.go",
+          "sha256": "083d63bb2963219779fb77ed2bd27a1eee9bf90f3dbde9e78d8288bb5de38058",
+          "bytes": 96,
+          "lines": 7
+        },
+        {
+          "path": "wazero/internal/descriptor/table.go",
+          "sha256": "25b6f2fe23c8a88fdf4e2db9ec93dec7ee92a09c2f754a2e59be2c8974b27ac6",
+          "bytes": 4451,
+          "lines": 149
+        },
+        {
+          "path": "wazero/internal/emscripten/emscripten.go",
+          "sha256": "43621119da368e5ee5b3a3b05dcc91836bfc60feef4ab4ad0ac3a10504490df8",
+          "bytes": 6529,
+          "lines": 175
+        },
+        {
+          "path": "wazero/internal/engine/interpreter/compiler.go",
+          "sha256": "289f13095b63724dbb922998d8f5d1e057ff117f1cf2e8fe8a80f404e870bd87",
+          "bytes": 99110,
+          "lines": 3675
+        },
+        {
+          "path": "wazero/internal/engine/interpreter/format.go",
+          "sha256": "3681e2eccabd7349fab598a66a7258e7ad9897894423e552eed1fc694ce112c5",
+          "bytes": 386,
+          "lines": 22
+        },
+        {
+          "path": "wazero/internal/engine/interpreter/interpreter.go",
+          "sha256": "d1e6c07356f1856e64697f986fc9b3cb81a880ca28dc947dc425b155c52ce907",
+          "bytes": 150567,
+          "lines": 4665
+        },
+        {
+          "path": "wazero/internal/engine/interpreter/operations.go",
+          "sha256": "a8a07c0e2a750f057f9b71e3ddad834c70a7addc66d521cbdf8ace4f03dc8201",
+          "bytes": 109938,
+          "lines": 2845
+        },
+        {
+          "path": "wazero/internal/engine/interpreter/signature.go",
+          "sha256": "20f1cc8ebf7eba921705625dfd7562cabc23e0e410295e8aeadde6d1cae1fb02",
+          "bytes": 32004,
+          "lines": 767
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/abi.go",
+          "sha256": "08119df42d2029e9924ae85de5dc60f70fe004c0ad069e2da5340ad460b0b629",
+          "bytes": 4651,
+          "lines": 170
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/backend.go",
+          "sha256": "5590167fe168cc17e974382ecd71586b112830492a7892872e84ef0fbac9ae86",
+          "bytes": 145,
+          "lines": 3
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/compiler.go",
+          "sha256": "8c12ecb87dcb5c92ecab14f1bfa0132f7bc845bca3f25fb81501fc5676db5fa2",
+          "bytes": 13010,
+          "lines": 402
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/compiler_lower.go",
+          "sha256": "36c68b73586a53be168bc1afbcae783956f48f9f655a51d821779a1998db5bf2",
+          "bytes": 6371,
+          "lines": 226
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/go_call.go",
+          "sha256": "a982cc659e02cf123ed2402a373130842c24006177881341509344a3c1d38085",
+          "bytes": 993,
+          "lines": 33
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/abi.go",
+          "sha256": "863e30f59f70bb5027b83404a702cfe317b9b0a1bc5728e3aaee41ba66ac125e",
+          "bytes": 5905,
+          "lines": 186
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/abi_entry_amd64.go",
+          "sha256": "e1376523d710395b7f46a162f0d22ecb1c21c62e5e8ab74bb2e9e7e5fd3fd174",
+          "bytes": 709,
+          "lines": 9
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/abi_entry_preamble.go",
+          "sha256": "5039c2d7aa018e990534d1f368a3bda8f1261a270067b06ae917d7dd0804b0f7",
+          "bytes": 8548,
+          "lines": 248
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/abi_go_call.go",
+          "sha256": "d93178321c9094a2023bd74c0c04669ed34bc0d4d420fd825467d58cc0b8d4e4",
+          "bytes": 16291,
+          "lines": 440
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/cond.go",
+          "sha256": "53c36510de9e3f86a60bc779dd859f52b2c7c3f4e68d6abc3f8a165b819d42e9",
+          "bytes": 3237,
+          "lines": 168
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/ext.go",
+          "sha256": "a79775d1da9316e01ffcb723d47e384ca64be9b3224e857fb0538f50d0ff8034",
+          "bytes": 679,
+          "lines": 35
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/instr.go",
+          "sha256": "074ca4a5b418b3cec24f7366c8b1cf236cd1fc31e892b7a1895d0e30db5dd9ad",
+          "bytes": 58587,
+          "lines": 2495
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/instr_encoding.go",
+          "sha256": "bc71af9924401514490a553318309075cffdf52455ff80c00d540cd2f53a2808",
+          "bytes": 48011,
+          "lines": 1714
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/lower_constant.go",
+          "sha256": "e4b7eb58b880e7a89adfa7b1310ec002db7c8a4dfcc29e70871ab3d077abcd81",
+          "bytes": 1792,
+          "lines": 71
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/lower_mem.go",
+          "sha256": "d7c9d2263fb20bbbd17972bb6db0f5b8ad98a61f4d9c110e899bcdbb7c7f7fe8",
+          "bytes": 6443,
+          "lines": 187
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/machine.go",
+          "sha256": "aba3520fbc95afb0b700b30fb78dfdd36c45df678956bb6a775580feef59babb",
+          "bytes": 114917,
+          "lines": 3782
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/machine_pro_epi_logue.go",
+          "sha256": "d8307fd92831ff4d58af301a2872cb8bf0f61c20a9015a1c949e84382c9420ae",
+          "bytes": 12342,
+          "lines": 334
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/machine_regalloc.go",
+          "sha256": "2359b940c74477f918f60556bb64183551e6f8c9852341f2173799bad430ccc0",
+          "bytes": 9829,
+          "lines": 352
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/machine_vec.go",
+          "sha256": "3b66da3e65a4e064991ee031760eb8530d90af638cc563e8dced4051ab72750b",
+          "bytes": 39730,
+          "lines": 992
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/operands.go",
+          "sha256": "7cab8f71739426461f70ecc48c8b8efe0ac6c623506a5f8806087145ef808ba4",
+          "bytes": 8439,
+          "lines": 336
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/reg.go",
+          "sha256": "06d367f9fc5aa5cd460e8e20e8de25c223bb8650f1adae979472baed093445bb",
+          "bytes": 4408,
+          "lines": 181
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/amd64/stack.go",
+          "sha256": "dce704e48e9747ac02c5b21ba9e273378c64072d1d1ee8beda5c0d73461bade7",
+          "bytes": 3735,
+          "lines": 130
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/abi.go",
+          "sha256": "c63ed106423e46a26bcf7ca6184f49a5eae58f8583117c0c278168a5baadffd3",
+          "bytes": 14145,
+          "lines": 376
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/abi_entry_arm64.go",
+          "sha256": "71de7d738e6d62257c7e8c5c3d0b70f33dc604a12c91f616b2fe693d77793c95",
+          "bytes": 709,
+          "lines": 9
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/abi_entry_preamble.go",
+          "sha256": "519082d492a3dbf016d76e1b6583a0619e35e8fde80babbe3016d2e797ef884a",
+          "bytes": 8284,
+          "lines": 233
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/abi_go_call.go",
+          "sha256": "be77b3602a080b776296187bf04bb252815901628fef1d6bc474ef75c53ca099",
+          "bytes": 15270,
+          "lines": 430
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/cond.go",
+          "sha256": "3f8b9649c2c390ecfb84018323f137f96028ee62324f5bb75fe620c1ebc10c6e",
+          "bytes": 5300,
+          "lines": 215
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/instr.go",
+          "sha256": "18793c15bda39e5817e31317b02624c456baefb7d628968a072695e7fa2e17d9",
+          "bytes": 67857,
+          "lines": 2562
+        },
+        {
+          "path": "wazero/internal/engine/wazevo/backend/isa/arm64/instr_encoding.go",
+          "sha256": "a361f6eea5ee979c76b06ee30a8d698110b1869bd40eb22fa0d6f4377973a502",
+          "bytes": 72315,
+          "lines": 2357
+        }
+      ],
+      "archive_url": "https://codeload.github.com/tetratelabs/wazero/tar.gz/refs/tags/v1.10.1",
+      "archive_sha256": "3f524d3fd1d89873d9e6f8d9591ea09e657bc855424f78754dbd074fa6804dd0"
+    }
+  ],
+  "files": 163,
+  "lines": 248811
+}
