@@ -54,6 +54,25 @@ outside this module. `ActionClass` lives in `pkg/agentapi` for the same
 reason — a third-party tool has to be able to declare its own class, which it
 could not do if the type stayed in `internal/permission`.
 
+### Proposed workspace and indexing boundaries
+
+The [Phase 2 plan](phase-2-memory-mcp.md#wp22--repo-map) proposes the following private packages for v0.4.
+They are not present implementations, and the workspace/index split still requires formal work packages and review.
+
+| Proposed package | Responsibility |
+|---|---|
+| `internal/workspace` | User-attached roots, stable root/entry identities, immutable primary root, session membership, nested ownership, instruction readiness and authorized navigation. |
+| `internal/index` | Shared catalog/frontier, observed generations, document/search adapters, source invalidation, durable source-linked notes and the resource scheduler. |
+| `internal/repomap` | Code extraction and bounded deterministic declaration queries over the shared index, exposed as the read-class `repo_map` tool. |
+
+Workspace authorization precedes both live and cached access; derived data never grants access or enables a module.
+Keep durable user/agent notes and root configuration separate from rebuildable catalogs, postings and symbol caches, even if one local storage engine hosts both.
+Cache eviction/rebuild must not delete notes, and note validation/invalidation must not rewrite source files.
+One scheduler owns background resource admission across roots and adapters; `repo_map` consumes bounded leases rather than adding a worker pool.
+Storage-driver, parser and extractor selection remains gated by target builds, resource measurements and cancellation behavior; no database or helper is selected by this package diagram.
+The [WP2.2 contract](repo-map-contract.md) records consumed authority, freshness and scheduling invariants.
+User commands such as `/repos` remain RPC clients of the core; these private packages do not become shell imports or additional public SDK surface.
+
 ## Key interfaces (contract)
 
 All modality interfaces are declared in the MVP even though only Chat is

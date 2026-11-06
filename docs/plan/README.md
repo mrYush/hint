@@ -11,6 +11,7 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `architecture.md` | Core architecture, package layout, key interfaces, platform/provider matrices |
 | `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
 | `mcp-client-spike.md` | Design spike: MCP specification and SDK choice, transport/auth surface and context budget (Q6, WP2.1) |
+| `repo-map-contract.md` | Supporting contract for WP2.2: requests, bounded output, freshness, consumed workspace/scheduler interfaces and context-cost evaluation; phase-2 owns scope and status |
 | `phase-0-mvp-cli.md` … `phase-7-feature-store.md` | One file per roadmap phase: goal, work packages, task checklists, acceptance criteria |
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
