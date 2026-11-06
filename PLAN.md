@@ -58,7 +58,7 @@ Estimates assume one developer part-time; roughly halve them for full-time.
 | 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
 | 2 | Workspace/index, memory, MCP client, A2A, open integration surfaces, code maturity | v0.4 | Re-estimate after workspace/index decomposition and measurements | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
 | 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
-| 4 | Desktop widgets (macOS/Windows/Linux) | v0.6 | 6–10 wk | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
+| 4 | Desktop widgets and editor integration (Zed over ACP, macOS/Windows/Linux) | v0.6 | 6–10 wk for the widgets; WP4.5 is re-estimated with the phase | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
 | 5 | Mobile: iPhone / iPad / Android | v0.7 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
 | 6 | Sensors and devices (parallel with 5) | v0.8 | 8–12 wk | [phase-6-sensors.md](docs/plan/phase-6-sensors.md) |
 | 7 | Feature store (third-party catalog) | v0.9–v1.0 | 10–14 wk | [phase-7-feature-store.md](docs/plan/phase-7-feature-store.md) |
