@@ -1190,12 +1190,10 @@ and keep working unchanged. This rung is what keeps a large project's
 instructions under budget for good; the first three make the failure
 graceful while the project has not split yet.
 
-Interplay with the rest of the plan: rung 3 is the only "compaction"
-the preamble ever gets — WP2.5's compaction v2 keeps ignoring it; the
-rung-4 hook (react to the paths a turn touched) is the same hook the
-agent-chosen overview from WP0.8 needs, so they land together; the
-repo map (WP2.2) competes for the same preamble budget and will need
-the rung-0 arithmetic to include it.
+Interplay with the rest of the plan: rung 3 is the only "compaction" the preamble ever gets — WP2.5's compaction v2 keeps ignoring it.
+The rung-4 hook (react to the paths a turn touched) is the same hook the agent-chosen overview from WP0.8 needs, so they land together.
+WP2.2 returns its code map as an on-demand tool result rather than adding it to the instruction preamble.
+Its tool schema and bounded results still consume model context, but are accounted for separately from the rung-0 instruction budget.
 
 - ✅ Rung 0: budget scaled to the profile's context window
       (`WithInstructionBudget` stays the override) —

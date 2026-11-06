@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-11-04
+> Status: living document · Last updated: 2026-11-06
 > Source of truth for the roadmap.
 > Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
@@ -107,6 +107,8 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.12 rungs 0–3 — instructions beyond the budget (the default budget scales to the profile's context window; every instruction file is guaranteed its outline before any gets more, so a nearer file is never dropped; an over-budget Markdown file shows whole sections while they fit and the rest as heading + first sentence + `[...]`; the read-only `instructions` tool returns a file, a section or the `path:line` a quoted rule comes from, over the run's discovered files only; opt-in `instructions.summarize` has a model summarize what not even outlines can fit, cached by content hash under `~/.cache/hint/instructions`).
   WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front matter and `.cursor/rules/*.mdc` as a compatible source; a rule with paths loads once a tool reads or writes a matching file, one without loads always after its directory's `HINT.md`; `agent.Preamble` rebuilds the system prompt before every request from the tool calls in the conversation, so `-c` needs nothing new; `tool.Toucher` is how the file tools name what they touch; the glob matcher is now `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
+  [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map), tracked in [#93](https://github.com/mrYush/hint/issues/93), records the on-demand code-map design and validation gates on `dev/wp2.2-repo-map`.
+  The workspace and shared-index prerequisites are proposed as separate WP2.11/WP2.12 packages; their split and implementation plan remain under review, with no implementation marked complete.
   [WP2.10](docs/plan/phase-2-memory-mcp.md#wp210--new-start-a-fresh-session) is written down: `/new` starts a fresh session from the TUI and the line REPL (`dev/wp2.10-new-session`).
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository.
   WP0.1–WP0.12 have landed.

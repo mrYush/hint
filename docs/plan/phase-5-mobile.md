@@ -17,7 +17,7 @@ A gRPC adapter is the Phase 4 trigger (a non-Go client of `hint serve`), not thi
 
 - [ ] `pkg/agentapi` surface adapted to gomobile constraints (exported types must be bind-compatible; wrap channels into callback interfaces)
 - [ ] Build pipeline: Go core → xcframework (iOS) and AAR (Android) in CI
-- [ ] cgo-dependent features (tree-sitter repo map) excluded via build tags; verify the mobile core builds and runs
+- [ ] Verify the mobile core builds and runs with the selected WP2.2 cgo-free parser adapters; keep unsupported native helpers optional and report unavailable or resource-paused capabilities without breaking file navigation.
 - [ ] Storage paths adapted to app sandboxes (sessions, config, memory DB)
 
 ### WP5.2 — iOS/iPadOS shell (SwiftUI)

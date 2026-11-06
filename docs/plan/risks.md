@@ -2,7 +2,7 @@
 
 | # | Risk | Phases affected | Mitigation |
 |---|---|---|---|
-| R1 | **cgo on mobile / for tree-sitter** breaks cross-compilation | 2, 5 | Keep cgo dependencies behind build tags; the cgo-free core must always build. Repo map degrades to "absent" without cgo; whisper.cpp/piper run as subprocesses, not linked. |
+| R1 | **Parser and native-helper dependencies** break cross-compilation or exceed device resources | 2, 5 | The core must always build without cgo. WP2.2 uses `go/ast` and evaluates cgo-free non-Go adapters before selection; verify all six release targets and mobile embedding separately. Optional native helpers remain isolated capabilities, with explicit unavailable/paused states and live navigation preserved; whisper.cpp/piper run as subprocesses, not linked. |
 | R2 | **Third-party code licensing** — a contribution carrying code under an incompatible license | all | Contributions are original work under MIT; no code is copied from other projects ([CONTRIBUTING.md](../../CONTRIBUTING.md)). |
 | R3 | **OpenAI-compatible dialect drift** (tools/streaming fields differ across vLLM/Ollama/OpenRouter/api-bar.ru) | 0, 2, 3 | Integration tests against a provider matrix in CI. For api-bar.ru specifically, verify streaming, tool-calling, and multimodal endpoints empirically — there is no public documentation. |
 | R4 | **App-store policies** (model-weight downloads, background work, sensor access) | 5, 6 | Early guideline review; weights downloaded post-install; `bash` replaced by a safe tool set on mobile; fallback channel — TestFlight/sideload. |
