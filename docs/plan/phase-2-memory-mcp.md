@@ -82,8 +82,9 @@ MCP resources and prompts, the live reference-server integration test, and the f
 Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
 Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
 The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
-Local implementation and integration checks are complete and ready for owner review; the branch is not merged and the work package remains in progress.
-The [review record](evidence/wp2.2-mac-20261106/readiness.md) links exact verification, cross-component findings and reproducible Mac measurements.
+Owner review identified unresolved correctness and liveness defects; the branch is not ready to merge and the work package remains in progress.
+The remediation checklist below is the current acceptance work for this branch.
+The [earlier review record](evidence/wp2.2-mac-20261106/readiness.md) preserves verification, cross-component findings and reproducible Mac measurements; passing those checks does not cover the newly identified scenarios.
 The owner will run Pi 4/local-model 8k/32k measurements separately using the [evaluation methodology](repo-map-evaluation.md); local Mac checks do not satisfy those gates.
 
 Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
@@ -191,6 +192,9 @@ The historical local spike allocated weighted rank to source declarations rather
 Document full-text backend comparison remains part of the later lexical foundation: compare pure-Go SQLite/FTS5, Bleve and a Tantivy helper under equal retrieval semantics without tying stable source identities to a postings format.
 Public research has not established a universal backend winner or verified this design's Pi resource targets.
 
+The completed checks below record the earlier implementation evidence.
+They do not close the subsequent review findings; the remediation checklist requires new regression evidence and a final verification pass.
+
 - ✅ Record the owner-authorized scope exception and prerequisite package boundaries in this branch (2026-11-06); final code review remains pending.
 - ✅ Test the request/result/error contract through actual limits/permission wrappers, including JSON escaping, small output caps, long entry handles, empty-but-advancing pages and deterministic pagination; `query_test.go`, `model_test.go` and structured-redaction fixtures pass.
 - ✅ Bound examined records and index-read bytes for rare prefixes and large excluded ranges; race regressions cover lossless continuation past 1,025 filtered candidates, 50 declarations in 50 files with a four-file hash budget, growth during bounded reading and concurrent generation/cursor admission.
@@ -201,6 +205,96 @@ Public research has not established a universal backend winner or verified this 
 - [ ] Measure schema cost and unnecessary/invalid/repeated calls on paired positive/negative tasks at 8k/32k windows as specified in the contract; include output reserve, real token counts or labeled estimates, prompt processing, compaction and task correctness.
 - ✅ Fix cold-request/catalog-change schema accounting without double-counting provider usage or changing the instruction-preamble budget; targeted agent tests, race checks and vet passed.
 - ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-mac-20261106/verification.json).
+
+#### Review remediation checklist
+
+Recorded on 2026-11-06 after the owner's implementation-review feedback.
+Work through these slices sequentially in `dev/wp2.2-repo-map`, with a separate review handoff after each slice.
+Use `- [ ]` for work not started, `- ⏳` for work in progress and `- ✅` only when the stated checks pass.
+Every fix starts with a reproducing regression, followed by the implementation and targeted verification.
+This checklist authorizes no assistant commit, push, PR creation or issue closure.
+
+##### Review consolidation
+
+- [ ] Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions.
+- [ ] Record every confirmed P0/P1 and relevant P2 in the slices below; the supplied summary does not describe its P0, so obtain its concrete scenario before claiming it addressed.
+- [ ] Distinguish demonstrated defects, intentional tradeoffs and defensive hardening; retain a written disposition for each finding.
+
+##### Slice 1 — Safe source access and path identity
+
+- [ ] Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation.
+- [ ] Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient.
+- [ ] Verify cancellation and manager shutdown after refused or interrupted source access without abandoning work that still owns the shared slot.
+- [ ] Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy.
+- [ ] Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes.
+- [ ] Pass targeted access/path regressions and relevant portability checks, then hand this slice to the owner for review.
+
+##### Slice 2 — Discovery completion and stable policy revisions
+
+- [ ] Give frontier work explicit outcomes: completed observation/omission, delayed retry for temporary unavailability, and cancellation that preserves unfinished work.
+- [ ] Retire or defer already queued items that become denied, unreadable or nested ownership boundaries instead of continuously rotating them in the hot queue.
+- [ ] Preserve partial coverage for unreadable/offline directories; neither a failed scan nor a canceled scan proves emptiness or deletion.
+- [ ] Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch.
+- [ ] Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries.
+- [ ] Pass targeted discovery/policy regressions and hand this slice to the owner for review.
+
+##### Slice 3 — Query reservations and truthful results
+
+- [ ] Release reservations for failed new queries that never delivered a usable cursor and for definitively invalidated queries, using bounded cleanup independent of an already canceled caller context.
+- [ ] Preserve reservations on retryable continuation errors; test that retrying the same cursor neither loses nor duplicates records.
+- [ ] Release this manager's own reservations on normal shutdown without deleting reservations owned by another live process.
+- [ ] Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task.
+- [ ] Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions.
+- [ ] Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case.
+- [ ] Add an explicit final root-list budget check and boundary tests; treat the missing assertion as hardening unless an actual overflow is reproduced.
+- [ ] Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches; do not suppress cleanup errors without an explicit contract decision.
+- [ ] Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers, then hand this slice to the owner for review.
+
+##### Slice 4 — SQLite initialization, contention and recovery
+
+- [ ] Bound the complete catalog initialization path, including connection setup and PRAGMA work, and distinguish BUSY, capacity and permanent initialization failures.
+- [ ] Define supported ownership of the shared cache across Hint processes: concurrent access with tested recovery, or an explicit owner restriction that leaves ordinary Hint operation available.
+- [ ] Test simultaneous initialization and writes using separate Store instances/processes, including conflicting storage allowances; a concurrent test on one connection is insufficient.
+- [ ] Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status.
+- [ ] Verify bounded retries and recovery after contention ends or capacity becomes available; quota-induced busy loops or inability to recover remain #93 defects.
+- [ ] Pass targeted storage/recovery regressions and hand this slice to the owner for review.
+
+##### Slice 5 — Integrated acceptance and review handoff
+
+- [ ] Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path.
+- [ ] Resolve all confirmed blockers from every review pass and retain reproduction, fix and verification evidence for each disposition.
+- [ ] Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations.
+- [ ] Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against the final source state.
+- [ ] Repeat only measurements affected by the fixes; synthetic million-record metadata results do not substitute for filesystem failure or traversal tests.
+- [ ] Prepare the updated commit text and invite final owner review without committing, pushing or closing #93.
+
+#### Proposed follow-up — Catalog quotas and cleanup
+
+This is a proposed subsequent task, not an implemented work package or an existing issue.
+It improves storage efficiency and maintenance after #93's correctness and recovery requirements pass.
+Hangs, data loss, broken continuation and failure to recover from available capacity cannot be deferred here as optimizations.
+
+- [ ] Formalize the follow-up's scope, branch, issue and acceptance criteria under the planning conventions before implementation.
+- [ ] Introduce separate frontier/data budgets and processing headroom, with backpressure that preserves bounded discovery and useful file-processing progress.
+- [ ] Refine per-root GC to retain only necessary versions and consumed cursor anchors; active pins currently conservatively retain that root's obsolete versions.
+- [ ] Reclaim reservations left by crashed owners without deleting another live process's pins; define ownership and expiry behavior explicitly.
+- [ ] Define retention and bounded cleanup for detached-root obsolete versions and frontier tasks, accounting for other authorized sessions or processes.
+- [ ] Clean obsolete derived-cache schema files safely, preserving user data and any future durable notes.
+- [ ] Measure long-running wide/deep filesystem traversal, repeated edits, many roots, quota pressure and cleanup recovery separately from synthetic catalog insertion/query measurements.
+
+#### Proposed separate acceptance task — Pi/model evaluation and auto mode
+
+Separating these measurements from #93 is a proposed scope change, not approval to remove an existing acceptance requirement.
+Until the owner agrees and the phase/issue criteria are updated, the existing Pi/model gates remain open.
+
+- [ ] Obtain an explicit disposition on closing #93 as a correct manually enabled capability while moving Pi/model acceptance into a separately tracked task.
+- [ ] If approved, record the revised closure boundary in this phase file and issue #93, with the new task's branch, issue and acceptance criteria.
+- [ ] Have the owner run the saved Pi 4 4 GB and local-model 8k/32k methodology, retaining unsupported and unmeasured conditions explicitly.
+- [ ] Measure task usefulness, schema overhead and indexing interference before approving numerical resource profiles or default tool disclosure.
+- [ ] Keep unvalidated `auto` paused until the separate acceptance criteria and owner review pass.
+
+Document full-text search, PDF/DOCX/OCR adapters, durable agent notes, semantic retrieval and reference ranking remain outside #93 as already specified above.
+Their later implementation does not replace any remediation item in this branch.
 
 ### WP2.3 — Vector memory
 
