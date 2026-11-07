@@ -298,7 +298,11 @@ Slice 1 implementation and local verification are complete; final owner review r
   Additional regressions cover source-byte/declaration-count limits and reopening the catalog with a larger record allowance, which must invalidate the old cached omission.
   Self-review accounted for catalog encoding overhead, all-or-nothing declaration publication and admission budgets in derived-source policy identity; a metadata record that itself cannot fit still reports the storage admission error.
   Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-admission-checks.json`.
-- [ ] Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions.
+- ✅ Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions (2026-11-07).
+  `TestCoverageReasonsFollowScopeAndRetainedGeneration` reproduced missing reason buckets; it now checks count equality, retained generations, subtree isolation and optional-field removal at 1024 bytes.
+  Catalog regressions cover changing reasons/file kinds, root isolation and lazy v3-to-v4 classification without double-counting legacy contributions.
+  Self-review kept the vocabulary finite, updated reasons atomically with source counters, preserved unknown legacy reasons explicitly, and avoided all-file scans or per-file RAM state.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-coverage-checks.json`.
 - [ ] Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case.
 - [ ] Add an explicit final root-list budget check and boundary tests; treat the missing assertion as hardening unless an actual overflow is reproduced.
 - [ ] Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches; do not suppress cleanup errors without an explicit contract decision.

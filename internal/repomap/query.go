@@ -142,9 +142,10 @@ func (m *Manager) openQuery(ctx context.Context, space *workspace.Session, in Re
 	}
 	q := &savedQuery{session: space.ID(), snapshot: snap, request: in, lease: lease, directory: info.IsDir(), policy: m.policyRevision(lease.RootID), coverage: Coverage{DiscoveryComplete: discoveryComplete}}
 	if lease.RelativePath == "." {
-		if counts, e := m.store.Status(ctx, lease.RootID); e == nil && counts.Generation == snap.Generation {
+		if counts, reasons, e := m.store.CoverageStatus(ctx, lease.RootID); e == nil && counts.Generation == snap.Generation {
 			q.coverage.KnownFiles, q.coverage.PendingFiles = &counts.Files, &counts.Pending
 			q.coverage.IndexedFiles, q.coverage.OmittedFiles = &counts.Indexed, &counts.Omitted
+			q.coverage.Omissions = reasons
 		}
 	}
 	m.mu.Lock()

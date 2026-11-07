@@ -84,7 +84,14 @@ CREATE TABLE IF NOT EXISTS policy_files (
  root TEXT NOT NULL, path BLOB NOT NULL, fingerprint TEXT NOT NULL,
  PRIMARY KEY(root,path)
 ) WITHOUT ROWID;
-PRAGMA user_version=3;
+CREATE TABLE IF NOT EXISTS coverage_roots (
+ root TEXT PRIMARY KEY, cutover INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS omission_counts (
+ root TEXT NOT NULL, reason TEXT NOT NULL, count INTEGER NOT NULL CHECK(count>=0),
+ PRIMARY KEY(root,reason)
+) WITHOUT ROWID;
+PRAGMA user_version=4;
 `
 
 // Open creates or reopens a private catalog with finite cache and disk limits.
@@ -139,7 +146,7 @@ func Open(path string, options Options) (*Store, error) {
 	ctx, cancel := s.context(context.Background())
 	defer cancel()
 	var version, actualPages, actualPageBytes int64
-	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err == nil && version != 0 && version != 2 && version != 3 {
+	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err == nil && version != 0 && version != 2 && version != 3 && version != 4 {
 		err = fmt.Errorf("index: unsupported catalog schema version %d", version)
 	}
 	if err == nil {
@@ -346,7 +353,8 @@ func (s *Store) PutSource(ctx context.Context, file File, symbols []Symbol) (gen
 	if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO roots(root) VALUES (?)", file.RootID); err != nil {
 		return 0, storeError("initialize root", err)
 	}
-	if err = tx.QueryRowContext(ctx, "SELECT generation FROM roots WHERE root=?", file.RootID).Scan(&generation); err != nil {
+	var omittedBefore int64
+	if err = tx.QueryRowContext(ctx, "SELECT generation,omitted FROM roots WHERE root=?", file.RootID).Scan(&generation, &omittedBefore); err != nil {
 		return 0, storeError("read generation", err)
 	}
 	if generation >= math.MaxInt64 {
@@ -354,7 +362,8 @@ func (s *Store) PutSource(ctx context.Context, file File, symbols []Symbol) (gen
 	}
 	generation++
 	var oldData []byte
-	err = tx.QueryRowContext(ctx, `SELECT f.data FROM heads h JOIN files f ON f.root=h.root AND f.id=h.id AND f.version=h.version WHERE h.root=? AND h.id=?`, file.RootID, file.ID).Scan(&oldData)
+	var oldVersion uint64
+	err = tx.QueryRowContext(ctx, `SELECT f.data,h.version FROM heads h JOIN files f ON f.root=h.root AND f.id=h.id AND f.version=h.version WHERE h.root=? AND h.id=?`, file.RootID, file.ID).Scan(&oldData, &oldVersion)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, storeError("read current source", err)
 	}
@@ -383,6 +392,9 @@ func (s *Store) PutSource(ctx context.Context, file File, symbols []Symbol) (gen
 			file.RootID, symbol.ID, generation, file.ID, file.Path, []byte(symbol.Name), symbol.StartByte, symbol.Kind, symbolData[i], len(symbolData[i])); err != nil {
 			return 0, storeError("write declaration", err)
 		}
+	}
+	if err = updateOmissionCounts(ctx, tx, file, old, oldVersion, generation-1, omittedBefore); err != nil {
+		return 0, err
 	}
 	newFile := fileCount(file) - fileCount(old)
 	if _, err = tx.ExecContext(ctx, `UPDATE roots SET generation=?,files=files+?,pending=pending+?,indexed=indexed+?,omitted=omitted+? WHERE root=?`,
@@ -446,16 +458,6 @@ func (s *Store) EntryLookup(ctx context.Context, rootID, fileID string) (File, e
 
 // Status reads constant-size counters rather than counting the source table.
 func (s *Store) Status(ctx context.Context, rootID string) (Status, error) {
-	ctx, cancel := s.context(ctx)
-	defer cancel()
-	var status Status
-	err := s.db.QueryRowContext(ctx, "SELECT generation,files,pending,indexed,omitted FROM roots WHERE root=?", rootID).
-		Scan(&status.Generation, &status.Files, &status.Pending, &status.Indexed, &status.Omitted)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Status{}, nil
-	}
-	if err != nil {
-		return Status{}, storeError("read counters", err)
-	}
-	return status, nil
+	status, _, err := s.CoverageStatus(ctx, rootID)
+	return status, err
 }

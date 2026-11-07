@@ -46,13 +46,13 @@ An illustrative response, shown expanded for readability:
 File records deduplicate paths, hashes and freshness metadata shared by several declarations.
 Example handles are shortened for readability; implementation handles encode the complete SHA-256 digest with base64url and a root/file/symbol prefix.
 Source-version displays preserve the same complete digest.
-The local schema-v3 catalog migrates v2 retry scheduling transactionally, retaining source observations, queued work and pins; the incompatible experimental v1 schema remains rejected.
+The local schema-v4 catalog migrates v2/v3 catalogs transactionally, retaining source observations, queued work and pins; the incompatible experimental v1 schema remains rejected.
 Declaration IDs are stable within a source/extractor version, not a promise of identity across arbitrary edits.
 Declaration ranges are zero-based UTF-8 byte intervals `[start_byte,end_byte)` in the observed source version, with one-based line coordinates.
 The range may cover the declaration body for locating a later read, but the returned signature never contains that body.
 `enclosing` names the containing type/module where the extractor can establish it syntactically; it does not claim semantic name resolution.
 
-`status.state` is `ready`, `building`, `paused` or `unavailable`, describing index capability/work, not request validity or source freshness.
+`status.state` is `ready`, `building`, `partial`, `paused` or `unavailable`, describing index capability/work, not request validity or source freshness.
 Coverage describes the selected scope at the observed generation, including omitted files by reason and whether discovery completed.
 When all counts are present, `known_files = indexed_files + pending_files + omitted_files`; directories and ownership boundary markers are navigation entries rather than code-file counts.
 Use maintained aggregates or omit unavailable counts; calculating exact subtree counts must not trigger a complete scan on each query.
@@ -63,6 +63,9 @@ Special-file sources are observed through metadata only; extraction and candidat
 Unknown total counts are absent; never derive a percentage from an undiscovered denominator.
 `ready` does not imply zero omissions, and no next cursor means the known generation is exhausted, not that the live filesystem has no other matches.
 Bound omission details using `coverage.omissions` as reason/count buckets; unavailable aggregate counts are absent, and more detail is available through scoped `repo_list` status queries.
+Root totals and reason buckets are read together at one generation and retained with the query; unknown subtree aggregates remain absent rather than borrowing root totals.
+Reason buckets use a finite vocabulary, grouping unfamiliar reasons under `other`; migrated counts use `unclassified` until ordinary source updates classify each legacy contribution exactly once.
+Migration and coverage queries do not scan historical files to reconstruct reasons, and directories/boundary markers contribute to neither totals nor buckets.
 Small responses may omit optional aggregate counts and successful-verification counters to preserve an addressable result, but retain `verification.budget_exhausted` when it is true.
 `page.query_complete` means that this query exhausted its retained generation, independently of discovery coverage.
 `page.stop_reason` is `limit`, `byte_budget`, `work_budget`, `time_budget` or null; a normal work slice may return no entries and a progressing cursor.
