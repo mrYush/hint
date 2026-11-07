@@ -114,14 +114,29 @@ func (l Lease) open(regular bool) (*os.File, error) {
 	return file, nil
 }
 
-// Stat uses the same authorized-open checks as Open and closes the descriptor.
+// Stat reads rooted metadata without opening file contents, including for
+// special files. Authority and identity are rechecked before returning; this
+// is not an atomic snapshot or a content-freshness guarantee.
 func (l Lease) Stat() (os.FileInfo, error) {
-	f, err := l.Open()
-	if err != nil {
+	if err := l.Verify(); err != nil {
 		return nil, err
 	}
-	info, err := f.Stat()
-	return info, errors.Join(err, f.Close())
+	root := l.root()
+	before, err := root.Stat(l.Path)
+	if err != nil {
+		return nil, fmt.Errorf("workspace: stat source: %w", err)
+	}
+	after, err := root.Stat(l.Path)
+	if err != nil {
+		return nil, fmt.Errorf("workspace: recheck source metadata: %w", err)
+	}
+	if !os.SameFile(before, after) {
+		return nil, ErrChanged
+	}
+	if err := l.Verify(); err != nil {
+		return nil, err
+	}
+	return after, nil
 }
 
 // Publish binds a prepared result to the session that issued this lease.

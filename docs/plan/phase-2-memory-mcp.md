@@ -209,10 +209,11 @@ They do not close the subsequent review findings; the remediation checklist requ
 #### Review remediation checklist
 
 Recorded on 2026-11-06 after the owner's implementation-review feedback.
-Work through these slices sequentially in `dev/wp2.2-repo-map`, with a separate review handoff after each slice.
+Work through these slices sequentially in `dev/wp2.2-repo-map`.
+On 2026-11-07 the owner authorized each small remediation step to proceed through implementation, self-review, verification and a separate commit, with owner review of the combined result afterward.
 Use `- [ ]` for work not started, `- ⏳` for work in progress and `- ✅` only when the stated checks pass.
 Every fix starts with a reproducing regression, followed by the implementation and targeted verification.
-This checklist authorizes no assistant commit, push, PR creation or issue closure.
+This authorization is limited to WP2.2 / #93 remediation; it does not authorize pushing, PR creation or issue closure.
 
 ##### Review consolidation
 
@@ -222,13 +223,20 @@ This checklist authorizes no assistant commit, push, PR creation or issue closur
 
 ##### Slice 1 — Safe source access and path identity
 
-Current narrow task (2026-11-07): fix FIFO `.gitignore` policy reads only; extraction, freshness validation and the other remediation slices remain open.
+The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
+Extraction and freshness-validation source opens are the next remediation step.
 
 - ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
 - ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
   `TestPolicyFIFO` covers an existing FIFO and deterministic replacement immediately before the rooted open, with a parent-process timeout protecting the test itself.
   `TestPolicyFingerprintRegularAdmission` covers absent/directory/canceled policy reads; runtime verification was on macOS, while Linux/Windows builds establish compilation only.
   Command results are retained locally in `.tmp/wp22-policy-fifo-checks.json`; this narrow fix is ready for owner review and does not complete Slice 1.
+
+- ✅ Replace `Lease.Stat()`'s content open with rooted metadata observations and authority/identity rechecks; the FIFO subprocess regression failed by timeout before the fix and passes afterward (2026-11-07).
+- ✅ Verify FIFO metadata, file replacement, access revocation, nested boundaries and root replacement; targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
+  Self-review checked that metadata reads never open contents, errors return no metadata, and final authority checks reject revoked roots and changed ownership even when inode identity matches.
+  `TestLeaseStatFIFO`, `TestLeaseStatMetadata` and `TestLeaseStatRechecks` retain the regressions; command results are local in `.tmp/wp22-stat-checks.json`.
+  Runtime verification was on macOS; Linux/Windows cross-builds establish compilation only.
 
 - [ ] Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation.
 - [ ] Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient.
@@ -274,7 +282,7 @@ Current narrow task (2026-11-07): fix FIFO `.gitignore` policy reads only; extra
 - [ ] Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations.
 - [ ] Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against the final source state.
 - [ ] Repeat only measurements affected by the fixes; synthetic million-record metadata results do not substitute for filesystem failure or traversal tests.
-- [ ] Prepare the updated commit text and invite final owner review without committing, pushing or closing #93.
+- [ ] Summarize the reviewed remediation commits and invite final owner review without pushing or closing #93.
 
 #### Proposed follow-up — Catalog quotas and cleanup
 
