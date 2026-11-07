@@ -56,9 +56,29 @@ func (s *Store) Pin(ctx context.Context, rootID string, ttl time.Duration) (snap
 
 // Release idempotently drops one retention reservation.
 func (s *Store) Release(ctx context.Context, reservationID string) error {
+	return s.ReleaseMany(ctx, []string{reservationID})
+}
+
+// ReleaseMany drops only explicitly owned reservations in one bounded write.
+// It never clears all pins merely because a process is shutting down.
+func (s *Store) ReleaseMany(ctx context.Context, reservationIDs []string) error {
+	if len(reservationIDs) > s.options.MaxPins {
+		return ErrTooLarge
+	}
+	if len(reservationIDs) == 0 {
+		return nil
+	}
+	args := make([]any, len(reservationIDs))
+	for i, id := range reservationIDs {
+		if len(id) > maxIDBytes {
+			return ErrTooLarge
+		}
+		args[i] = id
+	}
 	ctx, cancel := s.context(ctx)
 	defer cancel()
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM pins WHERE id=?", reservationID); err != nil {
+	statement := "DELETE FROM pins WHERE id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(args)), ",") + ")"
+	if _, err := s.db.ExecContext(ctx, statement, args...); err != nil {
 		return storeError("release reservation", err)
 	}
 	return nil

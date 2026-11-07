@@ -285,9 +285,14 @@ Slice 1 implementation and local verification are complete; final owner review r
 
 ##### Slice 3 — Query reservations and truthful results
 
-- [ ] Release reservations for failed new queries that never delivered a usable cursor and for definitively invalidated queries, using bounded cleanup independent of an already canceled caller context.
-- [ ] Preserve reservations on retryable continuation errors; test that retrying the same cursor neither loses nor duplicates records.
-- [ ] Release this manager's own reservations on normal shutdown without deleting reservations owned by another live process.
+- ✅ Release reservations for failed new queries that never delivered a usable cursor and for definitively invalidated queries, using bounded cleanup independent of an already canceled caller context (2026-11-07).
+- ✅ Preserve reservations on retryable continuation errors; test that retrying the same cursor neither loses nor duplicates records (2026-11-07).
+- ✅ Release this manager's own reservations on normal shutdown without deleting reservations owned by another live process (2026-11-07).
+  `TestNewQueryFailureReleasesPin`, `TestContinuationRetentionDependsOnFailure` and `TestManagerCloseReleasesOnlyOwnedPins` reproduced leaked reservations, wrongly stale transient continuations and retained shutdown pins before the fix.
+  Retention regressions now also cover repeated encoding failures, cancellation after Pin, failed focused admission, cross-session rejection, canceled continuation and shutdown racing post-Pin cleanup.
+  Self-review added request-lifetime ownership before Pin, bounded retries for failed terminal cleanup and exact-ID batch release on shutdown; a canceled caller cannot prevent cleanup or delete another owner's reservation.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded lifecycle regression suite also passed under race checks.
+  Command results are local in `.tmp/wp22-query-retention-checks.json`.
 - [ ] Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task.
 - [ ] Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions.
 - [ ] Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case.

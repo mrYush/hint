@@ -31,6 +31,7 @@ type savedQuery struct {
 	directory bool
 	coverage  Coverage
 	policy    uint64
+	retired   bool // Guarded by Manager.mu; never resumes after terminal failure.
 }
 
 type mapTool struct {
@@ -157,7 +158,20 @@ func (m *Manager) openQuery(ctx context.Context, space *workspace.Session, in Re
 	return q, nil
 }
 
-func (m *Manager) query(parent context.Context, space *workspace.Session, in Request, budget int) ([]byte, error) {
+func (m *Manager) query(parent context.Context, space *workspace.Session, in Request, budget int) (payload []byte, resultErr error) {
+	// Close marks the manager closed under this same lock before waiting,
+	// so no Pin can race storage shutdown outside focused admission.
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil, errors.New("repo map: index closed")
+	}
+	m.queryWork.Add(1)
+	m.mu.Unlock()
+	defer m.queryWork.Done()
+	if err := m.retryRetiredQueries(parent); err != nil {
+		return nil, err
+	}
 	var q *savedQuery
 	var after *index.Key
 	var err error
@@ -166,6 +180,12 @@ func (m *Manager) query(parent context.Context, space *workspace.Session, in Req
 	} else {
 		q, after, err = m.resume(parent, space, in.Cursor)
 	}
+	defer func() {
+		if q != nil && resultErr != nil && (in.Cursor == "" || invalidReservation(resultErr)) {
+			resultErr = errors.Join(resultErr, m.releaseQuery(q, true))
+			payload = nil
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +333,9 @@ scan:
 	if parent.Err() != nil {
 		return nil, parent.Err()
 	}
+	if m.ctx.Err() != nil {
+		return nil, m.ctx.Err()
+	}
 	if ctx.Err() != nil && !complete {
 		stop = "time_budget"
 	}
@@ -331,19 +354,15 @@ scan:
 	if q.policy != m.policyRevision(q.lease.RootID) {
 		return nil, index.ErrStale
 	}
-	var payload []byte
 	err = space.Publish(q.lease, func() error {
 		var encodeErr error
 		payload, encodeErr = encode(result, budget)
 		return encodeErr
 	})
 	if err == nil && complete {
-		if releaseErr := m.store.Release(parent, q.snapshot.ID); releaseErr != nil {
+		if releaseErr := m.releaseQuery(q, false); releaseErr != nil {
 			return nil, releaseErr
 		}
-		m.mu.Lock()
-		delete(m.queries, q.snapshot.ID)
-		m.mu.Unlock()
 	}
 	return payload, err
 }
@@ -522,9 +541,19 @@ func (m *Manager) resume(ctx context.Context, space *workspace.Session, token st
 	}
 	m.mu.Lock()
 	q := m.queries[base64.RawURLEncoding.EncodeToString(data[:16])]
+	retired := q != nil && q.retired
 	m.mu.Unlock()
-	if q == nil || q.session != space.ID() || !time.Now().Before(q.snapshot.ExpiresAt) || q.lease.Verify() != nil || q.policy != m.policyRevision(q.lease.RootID) {
+	if q == nil || q.session != space.ID() {
 		return nil, nil, index.ErrStale
+	}
+	if retired || !time.Now().Before(q.snapshot.ExpiresAt) || q.policy != m.policyRevision(q.lease.RootID) {
+		return q, nil, index.ErrStale
+	}
+	if err := q.lease.Verify(); err != nil {
+		if invalidReservation(err) {
+			return q, nil, errors.Join(index.ErrStale, err)
+		}
+		return q, nil, err
 	}
 	version := binary.BigEndian.Uint64(data[48:56])
 	if version == 0 {
@@ -532,7 +561,7 @@ func (m *Manager) resume(ctx context.Context, space *workspace.Session, token st
 	}
 	key, err := m.store.LookupKey(ctx, q.snapshot, "s_"+base64.RawURLEncoding.EncodeToString(data[16:48]), version)
 	if err != nil {
-		return nil, nil, fmt.Errorf("resume map: %w", err)
+		return q, nil, fmt.Errorf("resume map: %w", err)
 	}
 	return q, &key, nil
 }

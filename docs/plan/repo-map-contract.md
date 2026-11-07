@@ -199,6 +199,9 @@ Never materialize an all-files allowlist, sort a complete directory in memory, o
 Incomplete, canceled or failed enumeration does not establish that unseen children were deleted.
 Use bounded current-source reconciliation and explicit missing-source evidence for invalidation, with observed coverage and finite storage/retention quotas.
 Pins preserve the ordering keys needed for continuation until expiry or explicit invalidation; storage pressure refuses additional work rather than silently breaking an admitted reservation.
+Failed new queries that never return a usable cursor and definitively invalidated continuations release their reservations with bounded cleanup independent of caller cancellation.
+Retryable continuation failures retain their reservation and consumed key; failed terminal cleanup remains owned for a bounded retry before later requests.
+Normal shutdown joins in-flight queries before releasing only this manager's known reservation IDs and closing the catalog, preserving another live process's pins.
 These obligations are checked by the index/manager tests and the phase-level integration gates.
 
 The shared scheduler grants bounded work leases for query, discovery, extraction and maintenance; WP2.2 does not create a separate pool.

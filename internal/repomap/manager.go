@@ -82,6 +82,7 @@ type Manager struct {
 	streams          map[string]*directoryStream
 	closed           bool
 	closeOnce        sync.Once
+	queryWork        sync.WaitGroup
 	closeErr         error
 	slot             chan struct{}
 	now              func() time.Time
@@ -141,6 +142,7 @@ func (m *Manager) Close() error {
 		m.cancel()
 		<-m.done
 		<-m.sampleDone
+		m.queryWork.Wait()
 		m.slot <- struct{}{}
 		defer func() { <-m.slot }()
 		for _, stream := range m.streams {
@@ -149,6 +151,7 @@ func (m *Manager) Close() error {
 		if m.runner != nil {
 			m.closeErr = errors.Join(m.closeErr, m.runner.Close())
 		}
+		m.closeErr = errors.Join(m.closeErr, m.releaseOwnedQueries())
 		m.closeErr = errors.Join(m.closeErr, m.store.Close())
 	})
 	return m.closeErr
