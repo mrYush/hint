@@ -109,7 +109,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 - **Next:** Phase 2 (`v0.4`).
   Implement and review [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map), including its necessary workspace/catalog/scheduler foundations, as authorized by the owner on 2026-11-06 in the existing `dev/wp2.2-repo-map` branch under [#93](https://github.com/mrYush/hint/issues/93).
   The phase file records the scope exception and package boundaries; tentative WP2.11/WP2.12 proposals do not represent separately delivered foundations.
-  Local implementation is ready for owner review with [recorded verification and measurements](docs/plan/evidence/wp2.2-mac-20261106/readiness.md); the owner's Pi/local-model evaluation remains pending under the [saved methodology](docs/plan/repo-map-evaluation.md).
+  The supplied WP2.2 remediation findings are implemented and locally committed for combined owner review; the [remediation record](docs/plan/evidence/wp2.2-remediation-20261107/README.md) records dispositions, final checks and remaining review inputs.
+  The unspecified P0/full final repomap review remains an open consolidation gate; no claim that every blocker is closed is made.
+  Earlier [corpus/catalog measurements](docs/plan/evidence/wp2.2-mac-20261106/readiness.md) remain historical evidence; the owner's Pi/local-model evaluation remains pending under the [saved methodology](docs/plan/repo-map-evaluation.md).
   Multiple roots, document/notes indexing and the on-demand code map all target v0.4 (confirmed 2026-11-06); the old 8–10-week estimate excludes this scope and is withdrawn pending decomposition and measurements.
   [WP2.10](docs/plan/phase-2-memory-mcp.md#wp210--new-start-a-fresh-session) records the completed `/new` checklist for the TUI and line REPL; it is independent of these foundations.
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository.

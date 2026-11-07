@@ -1,6 +1,8 @@
 # WP2.2 implementation review record
 
 Date: 2026-11-06.
+Historical implementation snapshot; subsequent remediation and current review status are recorded in the [2026-11-07 handoff](../wp2.2-remediation-20261107/README.md).
+The uncommitted-delivery statement and source verification below describe that earlier snapshot, not the current branch.
 Issue: [#93](https://github.com/mrYush/hint/issues/93).
 Branch: `dev/wp2.2-repo-map`; baseline HEAD: `752954bad3903c7b12ec8e48a05b342a054d1148`.
 The implementation is ready for the owner's code review as an uncommitted working-tree change.

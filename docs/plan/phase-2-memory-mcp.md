@@ -217,9 +217,11 @@ This authorization is limited to WP2.2 / #93 remediation; it does not authorize 
 
 ##### Review consolidation
 
-- [ ] Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions.
-- [ ] Record every confirmed P0/P1 and relevant P2 in the slices below; the supplied summary does not describe its P0, so obtain its concrete scenario before claiming it addressed.
-- [ ] Distinguish demonstrated defects, intentional tradeoffs and defensive hardening; retain a written disposition for each finding.
+- [ ] Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (blocked: concluding review not supplied; requested in this conversation).
+  Supplied concrete findings and their implementation/test/commit dispositions are consolidated in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md).
+- [ ] Obtain the concrete unspecified P0 scenario before claiming every blocker addressed (blocked: the supplied summary does not describe it).
+  All concrete supplied findings are recorded and disposed below; this unchecked item preserves the missing review input.
+- ✅ Distinguish demonstrated defects, intentional tradeoffs and defensive hardening in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md), including the explicit missing-review boundary (2026-11-07).
 
 ##### Slice 1 — Safe source access and path identity
 

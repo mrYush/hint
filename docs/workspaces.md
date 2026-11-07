@@ -82,13 +82,22 @@ hint serve --index-max-bytes 1073741824
 ```
 
 The flag is startup configuration, not a setting a repository can supply to itself.
+The shared catalog remembers its disk allowance; all Hint processes using it must request the same value.
+To change it, close every Hint process using that cache, move the derived `code-v2.sqlite` cache aside, and restart with the new allowance; Hint rebuilds its observations.
+Do not remove or move a live SQLite database or its journal.
+An incompatible allowance or an initialization failure disables the optional code index with a diagnostic; ordinary Hint operation remains available.
 Reaching a quota produces explicit partial/unavailable status rather than silently evicting a live pagination reservation.
+Background work waits at least five seconds between capacity retries and one second after SQLite contention, retaining unfinished tasks.
+It resumes when completed work or version cleanup makes space available; a fully occupied catalog without reclaimable data remains partial.
+Unreadable directories remain queued for delayed retry and do not prove that their contents were deleted.
 Large trees have bounded active work and memory; complete indexing still requires enough disk space, idle time and a sufficiently stable filesystem.
 Directory discovery retains at most one active stream per root and eight across the process, so one large root cannot occupy every stream.
 With more than eight roots waiting for directory streams, additional roots report `directory_stream_capacity` until a slot becomes available.
 Live filesystem walks use bounded directory batches and finite examination/depth/path budgets; a traversal that reaches them asks for a narrower scope rather than reporting complete results.
 The startup instruction loader also caps rule discovery and aggregate input, reporting omissions rather than reading an arbitrarily large rules directory into memory.
-The SQLite schema-v2 cache deliberately rejects the earlier experimental schema instead of mixing opaque identity formats.
+The current SQLite schema v5 migrates v2/v3/v4 caches transactionally and rejects the incompatible experimental v1 schema.
+The cache filename stays `code-v2.sqlite`; its name identifies the entry-ID format, not the latest internal schema.
+Close older Hint binaries before allowing a newer binary to upgrade the shared cache.
 
 ## Agent workflow
 
@@ -96,6 +105,8 @@ The SQLite schema-v2 cache deliberately rejects the earlier experimental schema 
 `repo_map` requests declarations and signatures in one selected root, with optional subtree and exact/prefix identifier filters.
 Its Go, Python, JavaScript, TypeScript/TSX and Rust adapters return source locations without function bodies.
 Unsupported or oversized files remain navigation entries with explicit omissions.
+Root-level coverage includes finite reason/count buckets; legacy omissions remain `unclassified` until their source records are updated.
+Subtree queries omit unknown aggregate counts, and small responses may omit optional coverage fields together.
 The map is a tool result, not an automatic addition to the system prompt.
 
 Before a secondary-root edit or command, the agent calls `repo_prepare` for that root and target in a separate model round.
@@ -114,6 +125,9 @@ Map pages contain a retained generation, scope, coverage, source versions and fr
 Neither label replaces a current source read before editing.
 Continue only with `cursor`; `query_complete: false` may accompany an empty page when the bounded scan made progress through filtered or invalidated records.
 A complete query exhausts the retained generation and releases its reservation, so previously used tokens for that query are no longer reusable.
+A missing or replaced attached root returns `root_unavailable`; a missing file in an available root returns `scope_not_found`.
+Definitive root loss invalidates retained cursors; transient I/O errors allow retrying the same cursor.
+Integrations configuring tool output below 1024 bytes omit `repo_map` from the catalog and explain the limit in `repo_list` diagnostics/description.
 The [contract](plan/repo-map-contract.md) specifies exact output limits and error/freshness semantics.
 
 Document full-text search, PDF/DOCX/OCR modules, durable navigation notes, embeddings and reference-graph ranking remain later v0.4 work; this implementation does not claim those capabilities.
