@@ -20,10 +20,14 @@ import (
 
 func TestSourceFIFO(t *testing.T) {
 	if mode := os.Getenv("HINT_TEST_SOURCE_FIFO"); mode != "" {
+		if mode == "directory" {
+			testDirectoryFIFOChild(t, os.Getenv("HINT_TEST_SOURCE_DIR"))
+			return
+		}
 		testSourceFIFOChild(t, mode, os.Getenv("HINT_TEST_SOURCE_DIR"))
 		return
 	}
-	for _, mode := range []string{"existing", "opening", "after-parse", "validation"} {
+	for _, mode := range []string{"existing", "opening", "after-parse", "validation", "directory"} {
 		t.Run(mode, func(t *testing.T) {
 			executable, err := os.Executable()
 			if err != nil {
@@ -38,6 +42,88 @@ func TestSourceFIFO(t *testing.T) {
 				t.Fatalf("source subprocess: %v, deadline: %v\n%s", err, ctx.Err(), out)
 			}
 		})
+	}
+}
+
+func testDirectoryFIFOChild(t *testing.T, base string) {
+	t.Helper()
+	dir := filepath.Join(base, "root")
+	if err := os.MkdirAll(filepath.Join(dir, "scan"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	root, err := tool.NewRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root.Dir(), "scan")
+	checks, trigger, replaced := 0, 0, false
+	root = root.WithAccessCheck(func(abs string) error {
+		if abs == path {
+			checks++
+			if trigger > 0 && checks == trigger {
+				if err := os.Rename(path, path+".old"); err != nil {
+					return err
+				}
+				replaced = true
+				return syscall.Mkfifo(path, 0600)
+			}
+		}
+		return nil
+	})
+	registry, err := workspace.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(t.Context(), Options{Path: filepath.Join(base, "index.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := errors.Join(m.Close(), registry.Close(), root.Close()); err != nil {
+			t.Error(err)
+		}
+	})
+	space := registry.NewSession()
+	m.Track(space)
+	roots, _ := space.Snapshot()
+	id := roots[0].ID
+	items, err := m.store.Take(t.Context(), id, 1)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("initial frontier: %v %v", items, err)
+	}
+	if err := m.store.Ack(t.Context(), items[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.store.Enqueue(t.Context(), id, []byte("scan")); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.roots[id].sweepAt = m.now().Add(time.Hour)
+	work := *m.roots[id]
+	m.mu.Unlock()
+	checks = 0
+	lease, err := space.Resolve(id, "scan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lease.Stat(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Verify(); err != nil {
+		t.Fatal(err)
+	}
+	// Mirror resolution/metadata/admission before the actual directory open.
+	trigger, checks = checks+2, 0
+	if err := m.acquire(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	err = m.step(t.Context(), work)
+	m.release()
+	if !replaced || !errors.Is(err, workspace.ErrNotDirectory) || len(m.streams) != 0 {
+		t.Fatalf("directory replacement: replaced=%v err=%v streams=%d checks=%d trigger=%d", replaced, err, len(m.streams), checks, trigger)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

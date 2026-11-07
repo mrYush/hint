@@ -1,4 +1,4 @@
 package workspace
 
-// Windows has no Unix filesystem FIFOs; regular-file and authority checks still apply.
-const regularOpenFlags = 0
+// Windows has no Unix filesystem FIFOs; file-type and authority checks still apply.
+const nonblockingOpenFlags = 0

@@ -20,16 +20,17 @@ import (
 
 // Errors distinguish membership, lifecycle, and path-authority failures.
 var (
-	ErrBusy        = errors.New("workspace: session has an active turn")
-	ErrUnknownRoot = errors.New("workspace: root is not attached")
-	ErrPrimary     = errors.New("workspace: primary root cannot be detached")
-	ErrAlias       = errors.New("workspace: alias is invalid or already assigned")
-	ErrBoundary    = errors.New("workspace: path belongs to a nested root")
-	ErrChanged     = errors.New("workspace: source or authority changed")
-	ErrClosed      = errors.New("workspace: registry is closed")
-	ErrCapacity    = errors.New("workspace: root capacity reached")
-	ErrStaleEntry  = errors.New("workspace: entry handle is unavailable")
-	ErrNotRegular  = errors.New("workspace: source is not a regular file")
+	ErrBusy         = errors.New("workspace: session has an active turn")
+	ErrUnknownRoot  = errors.New("workspace: root is not attached")
+	ErrPrimary      = errors.New("workspace: primary root cannot be detached")
+	ErrAlias        = errors.New("workspace: alias is invalid or already assigned")
+	ErrBoundary     = errors.New("workspace: path belongs to a nested root")
+	ErrChanged      = errors.New("workspace: source or authority changed")
+	ErrClosed       = errors.New("workspace: registry is closed")
+	ErrCapacity     = errors.New("workspace: root capacity reached")
+	ErrStaleEntry   = errors.New("workspace: entry handle is unavailable")
+	ErrNotRegular   = errors.New("workspace: source is not a regular file")
+	ErrNotDirectory = errors.New("workspace: source is not a directory")
 )
 
 // MaxRoots bounds registry and per-session structural state, not tree size.

@@ -434,7 +434,7 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 			m.setStatus(work.info.ID, Status{State: "paused", Reason: "directory_stream_capacity"})
 			return nil
 		}
-		f, err := lease.Open()
+		f, err := lease.OpenDirectory()
 		if err != nil {
 			return err
 		}

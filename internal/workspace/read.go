@@ -55,7 +55,7 @@ func (l Lease) root() tool.Root {
 // returning the descriptor. Content mutation still requires caller freshness
 // checks, and arbitrary in-root namespace races are not a filesystem sandbox.
 func (l Lease) Open() (*os.File, error) {
-	return l.open(false)
+	return l.open(openAny)
 }
 
 // OpenRegular admits only regular files, preserving Open's authority and
@@ -63,10 +63,35 @@ func (l Lease) Open() (*os.File, error) {
 // cannot wait for a writer before the descriptor's type is checked.
 // This does not bound arbitrary filesystem or device-driver I/O latency.
 func (l Lease) OpenRegular() (*os.File, error) {
-	return l.open(true)
+	return l.open(openRegular)
 }
 
-func (l Lease) open(regular bool) (*os.File, error) {
+// OpenDirectory admits only directories, preserving Open's authority and
+// identity checks. On Unix replacement with a FIFO cannot wait for a writer.
+// This does not bound arbitrary filesystem or device-driver I/O latency.
+func (l Lease) OpenDirectory() (*os.File, error) {
+	return l.open(openDirectory)
+}
+
+type openKind uint8
+
+const (
+	openAny openKind = iota
+	openRegular
+	openDirectory
+)
+
+func (kind openKind) check(info os.FileInfo) error {
+	if kind == openRegular && !info.Mode().IsRegular() {
+		return ErrNotRegular
+	}
+	if kind == openDirectory && !info.IsDir() {
+		return ErrNotDirectory
+	}
+	return nil
+}
+
+func (l Lease) open(kind openKind) (*os.File, error) {
 	if err := l.Verify(); err != nil {
 		return nil, err
 	}
@@ -79,12 +104,12 @@ func (l Lease) open(regular bool) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("workspace: stat before open: %w", err)
 	}
-	if regular && !before.Mode().IsRegular() {
-		return nil, ErrNotRegular
+	if err := kind.check(before); err != nil {
+		return nil, err
 	}
 	var file *os.File
-	if regular {
-		file, err = root.OpenFile(canonical, os.O_RDONLY|regularOpenFlags, 0)
+	if kind != openAny {
+		file, err = root.OpenFile(canonical, os.O_RDONLY|nonblockingOpenFlags, 0)
 	} else {
 		file, err = root.Open(canonical)
 	}
@@ -92,8 +117,8 @@ func (l Lease) open(regular bool) (*os.File, error) {
 		return nil, fmt.Errorf("workspace: open: %w", err)
 	}
 	opened, err := file.Stat()
-	if err == nil && regular && !opened.Mode().IsRegular() {
-		err = ErrNotRegular
+	if err == nil {
+		err = kind.check(opened)
 	}
 	if err == nil && !os.SameFile(before, opened) {
 		err = ErrChanged
