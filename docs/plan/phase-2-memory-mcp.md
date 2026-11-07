@@ -225,7 +225,7 @@ This authorization is limited to WP2.2 / #93 remediation; it does not authorize 
 
 The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
 Extraction and freshness-validation opens admit only regular files, and discovery opens admit only directories.
-Shared path identity remains open in this slice.
+Slice 1 implementation and local verification are complete; final owner review remains part of the combined handoff.
 
 - ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
 - ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
@@ -256,8 +256,13 @@ Shared path identity remains open in this slice.
   Self-review covered empty/root paths, cached decisions, batch preparation, NUL/absolute/traversal rejection and native Windows lexical forms without changing Git-root discovery or ancestor policy.
   This is a lexical API boundary; walkers remain responsible for symlinks and rooted authority.
   Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-ignore-boundary-checks.json`.
-- [ ] Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes.
-- [ ] Pass targeted access/path regressions and relevant portability checks, then hand this slice to the owner for review.
+- ✅ Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes (2026-11-07).
+  `internal/pathkey` owns separator normalization and canonical catalog-path validation; workspace/catalog wrappers share its entry-ID calculation.
+  `TestEntryIDMatchesWorkspaceNativePaths` retains fixed hash vectors and `TestCatalogPlatformPaths` checks source/frontier admission and lookup without losing raw bytes.
+  The Windows mismatch is established by the former differing hash inputs; its regression tests compile for Windows but were not executed on this macOS host.
+  Self-review checked byte preservation, root scope, root-marker separation, Windows drive/backslash rejection and the absence of case/whitespace normalization or new access grants.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-path-identity-checks.json`.
+- ✅ Pass targeted access/path regressions and relevant portability checks, and retain the reviewed slice for final owner review (2026-11-07).
 
 ##### Slice 2 — Discovery completion and stable policy revisions
 

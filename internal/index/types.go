@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strconv"
 	"time"
+
+	"github.com/mrYush/hint/internal/pathkey"
 )
 
 // Errors distinguish resource admission, stale reservations and absent entries.
@@ -162,8 +164,7 @@ type Status struct {
 
 // EntryID identifies a root-relative path without requiring UTF-8 or storing it in a cursor.
 func EntryID(rootID, path string) string {
-	sum := sha256.Sum256([]byte(rootID + "\x00" + path))
-	return "e_" + base64.RawURLEncoding.EncodeToString(sum[:])
+	return pathkey.EntryID(rootID, path)
 }
 
 // SymbolID identifies a declaration's location and name within a stable file handle.

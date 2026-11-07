@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mrYush/hint/internal/pathkey"
 	"modernc.org/sqlite"
 )
 
@@ -229,15 +230,7 @@ func validRoot(root string) bool {
 }
 
 func validPath(path []byte) bool {
-	if len(path) == 0 || path[0] == '/' || strings.ContainsRune(string(path), '\x00') {
-		return false
-	}
-	for _, part := range strings.Split(string(path), "/") {
-		if part == "" || part == "." || part == ".." {
-			return false
-		}
-	}
-	return true
+	return pathkey.Valid(string(path))
 }
 
 func parentPath(path []byte) []byte {

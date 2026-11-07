@@ -15,6 +15,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/mrYush/hint/internal/pathkey"
 	"github.com/mrYush/hint/internal/tool"
 )
 
@@ -329,8 +330,7 @@ func (s *Session) Resolve(repo, path string) (Lease, error) {
 // EntryID gives a bounded opaque identifier over exact path bytes.
 // Its disk-backed mapping belongs to the shared index, not this registry.
 func EntryID(rootID, path string) string {
-	sum := sha256.Sum256([]byte(rootID + "\x00" + filepath.ToSlash(path)))
-	return "e_" + base64.RawURLEncoding.EncodeToString(sum[:])
+	return pathkey.EntryID(rootID, path)
 }
 
 // EntryLookup loads a root-scoped raw relative path from the shared index.

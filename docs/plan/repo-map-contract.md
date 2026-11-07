@@ -158,6 +158,10 @@ Prefix mode uses `name` order, so every exact spelling precedes its longer exten
 Names and paths are ordered as raw UTF-8/filesystem bytes; `start_byte`, `kind` and `symbol_id` refer to declaration fields, with `symbol_id` exposed as the declaration's `id`.
 Subtree/exclusion filtering still consumes the bounded examined-record budget and may require several empty progress pages for sparse matches.
 Use canonical relative path bytes for ordering and escaped display text for presentation.
+Workspace and catalog entry IDs share one lexical identity: SHA-256 of root ID, a NUL separator and the relative path with the host platform's separators converted to `/`.
+Stored catalog/frontier paths require local nonempty components, with no empty, `.` or `..` components, host-platform absolute/drive forms or NUL; `.` is a separate frontier/scope root marker.
+On Windows, stored paths use `/` and reject native backslashes and drive/UNC forms; on Unix, backslashes, colons and non-UTF-8 filename bytes retain their literal identity.
+No case folding or whitespace trimming is performed, and an entry ID is a path identity rather than an inode identity or an access grant.
 Agent notes and read frequency do not alter this ordering.
 The absence of a graph is not incomplete declaration coverage.
 
