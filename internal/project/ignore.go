@@ -3,13 +3,15 @@ package project
 import (
 	"context"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 )
 
 // Ignorer decides which entries a walk of a directory skips. rel is the
 // slash-separated path of the entry relative to the directory the Ignorer
-// was built for ("." names that directory and is never ignored); isDir
+// was built for ("." names that directory and is never ignored); escaping
+// or invalid paths are ignored without accessing them. isDir
 // lets a whole subtree be pruned in one answer.
 type Ignorer interface {
 	Ignored(rel string, isDir bool) bool
@@ -56,6 +58,9 @@ var Basic Ignorer = basic{}
 // answer for a nested path is the same whether or not a walk pruned its
 // parent first.
 func (basic) Ignored(rel string, isDir bool) bool {
+	if !localIgnorePath(rel) {
+		return true
+	}
 	if rel == "." || rel == "" {
 		return false
 	}
@@ -69,6 +74,12 @@ func (basic) Ignored(rel string, isDir bool) bool {
 		}
 	}
 	return false
+}
+
+// localIgnorePath checks the API's lexical boundary before any policy or
+// filesystem access. Walkers separately enforce symlink and root authority.
+func localIgnorePath(rel string) bool {
+	return !strings.ContainsRune(rel, 0) && (rel == "" || filepath.IsLocal(filepath.FromSlash(rel)))
 }
 
 // Rules builds the [Ignorer] for a directory. With a git executable it

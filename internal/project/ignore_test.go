@@ -28,7 +28,7 @@ func TestBasic(t *testing.T) {
 		{"vendor.go", false, false},  // a file named like a skipped dir is not one
 		{"pkg/target", true, true},   // the rule is by name, at any depth
 		{"target.txt", false, false}, // only directories are pruned by name
-		{"..", true, false},          // never an entry of a walk, but not hidden either
+		{"..", true, true},           // escaping the rule root is rejected, not classified as hidden
 		{"vendor/x.go", false, true}, // beneath a pruned directory, asked out of walk order
 		{"a/.git/HEAD", false, true}, // a hidden ancestor hides the file
 	}

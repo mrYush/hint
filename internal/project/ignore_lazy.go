@@ -55,6 +55,9 @@ func newLazyGitIgnorer(ctx context.Context, git, dir string, environ func() []st
 // PrepareIgnore batches one bounded directory page when the implementation
 // supports it; a custom/basic Ignorer needs no preparation.
 func PrepareIgnore(ig Ignorer, parent string, entries []fs.DirEntry) error {
+	if !localIgnorePath(parent) {
+		return errors.New("ignore: parent must be a local relative path")
+	}
 	if batch, ok := ig.(interface {
 		prepare(string, []fs.DirEntry) error
 	}); ok {
@@ -113,8 +116,8 @@ func (g *lazyGitIgnorer) check(names []string) error {
 	}
 	var input strings.Builder
 	for _, name := range names {
-		if len(name) > 16<<10 || strings.ContainsRune(name, 0) {
-			g.err = errors.New("git ignore path exceeds its bound")
+		if len(name) > 16<<10 || !localIgnorePath(name) {
+			g.err = errors.New("git ignore path is invalid or exceeds its bound")
 			return g.err
 		}
 		input.WriteString(name)

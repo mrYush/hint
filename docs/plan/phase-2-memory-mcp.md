@@ -225,7 +225,7 @@ This authorization is limited to WP2.2 / #93 remediation; it does not authorize 
 
 The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
 Extraction and freshness-validation opens admit only regular files, and discovery opens admit only directories.
-Ignore API confinement and shared path identity remain open in this slice.
+Shared path identity remains open in this slice.
 
 - ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
 - ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
@@ -251,7 +251,11 @@ Ignore API confinement and shared path identity remain open in this slice.
   `Lease.OpenDirectory()` shares pre/post-open type, identity and authority checks with regular-file admission; `TestLeaseTypedOpen` covers both accepted and rejected types.
   Self-review checked shared admission behavior and descriptor cleanup; arbitrary filesystem/device-driver latency remains outside the guarantee.
   Targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-directory-fifo-checks.json`.
-- [ ] Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy.
+- ✅ Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy (2026-11-07).
+  `TestIgnoreRejectsEscapingPathsBeforeAccess` reproduced uncached Git access and cached-path admission; it and `TestPrepareIgnoreRejectsEscapingParentBeforeGit` now pass.
+  Self-review covered empty/root paths, cached decisions, batch preparation, NUL/absolute/traversal rejection and native Windows lexical forms without changing Git-root discovery or ancestor policy.
+  This is a lexical API boundary; walkers remain responsible for symlinks and rooted authority.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-ignore-boundary-checks.json`.
 - [ ] Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes.
 - [ ] Pass targeted access/path regressions and relevant portability checks, then hand this slice to the owner for review.
 
