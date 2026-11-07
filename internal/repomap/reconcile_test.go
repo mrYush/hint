@@ -106,6 +106,62 @@ func TestManagerPolicyRevisionChangesOnlyOnObservedPolicy(t *testing.T) {
 	}
 }
 
+func TestPolicyRevisionBeyondCacheCapacityAndReattachment(t *testing.T) {
+	m, space, _ := managerFixture(t, nil)
+	dir := t.TempDir()
+	root, err := space.AttachLocal(dir, "policies")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Track(space)
+	m.mu.Lock()
+	work := *m.roots[root.ID]
+	m.mu.Unlock()
+	for i := range 140 {
+		name := fmt.Sprintf("p%03d", i)
+		if err := os.Mkdir(filepath.Join(dir, name), 0700); err != nil {
+			t.Fatal(err)
+		}
+		managerWrite(t, filepath.Join(dir, name, ".gitignore"), "ignored\n")
+		if err := m.observePolicy(t.Context(), work, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := m.policyRevision(root.ID)
+	if before != 140 {
+		t.Fatalf("policy observations were lost at capacity: %d", before)
+	}
+	for i := range 140 {
+		if err := m.observePolicy(t.Context(), work, fmt.Sprintf("p%03d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := m.policyRevision(root.ID); got != before {
+		t.Fatalf("unchanged policies after RAM saturation changed epoch: %d -> %d", before, got)
+	}
+	managerWrite(t, filepath.Join(dir, "p139", ".gitignore"), "changed\n")
+	for range 2 {
+		if err := m.observePolicy(t.Context(), work, "p139"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before++
+	if got := m.policyRevision(root.ID); got != before {
+		t.Fatalf("edited policy beyond capacity must advance exactly once: %d, want %d", got, before)
+	}
+	if err := space.Detach(root.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.Track(space)
+	if _, err := space.AttachLocal(dir, "policies"); err != nil {
+		t.Fatal(err)
+	}
+	m.Track(space)
+	if got := m.policyRevision(root.ID); got != before {
+		t.Fatalf("reattachment lost durable policy epoch: %d -> %d", before, got)
+	}
+}
+
 func TestManagerDetachReleasesDirectoryStream(t *testing.T) {
 	m, space, _ := managerFixture(t, nil)
 	other := t.TempDir()

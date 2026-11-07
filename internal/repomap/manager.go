@@ -51,7 +51,6 @@ type rootWork struct {
 	gitRoot     bool
 	reconcileAt time.Time
 	policyEpoch uint64
-	policyFiles map[string]string
 	sweepAfter  []byte
 	sweepAt     time.Time
 	gcAt        time.Time
@@ -200,12 +199,22 @@ func (m *Manager) Track(space *workspace.Session) {
 				current.space = space
 			}
 		} else if len(m.roots) < 256 {
-			m.roots[root.ID] = &rootWork{space: space, info: root, members: map[string]*workspace.Session{space.ID(): space}, status: Status{State: "building"}, reconcileAt: m.now(), policyFiles: make(map[string]string)}
+			m.roots[root.ID] = &rootWork{space: space, info: root, members: map[string]*workspace.Session{space.ID(): space}, status: Status{State: "building"}, reconcileAt: m.now()}
 			added = append(added, root)
 		}
 	}
 	m.mu.Unlock()
 	for _, root := range added {
+		epoch, err := m.store.PolicyRevision(m.ctx, root.ID)
+		if err != nil {
+			m.setStatus(root.ID, Status{State: "paused", Reason: "storage_unavailable"})
+		} else {
+			m.mu.Lock()
+			if current := m.roots[root.ID]; current != nil {
+				current.policyEpoch = max(current.policyEpoch, epoch)
+			}
+			m.mu.Unlock()
+		}
 		if err := m.store.Enqueue(m.ctx, root.ID, []byte(".")); err != nil {
 			m.setStatus(root.ID, Status{State: "paused", Reason: "storage_unavailable"})
 		}

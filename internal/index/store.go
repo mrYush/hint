@@ -77,6 +77,13 @@ CREATE TABLE IF NOT EXISTS frontier (
 );
 CREATE INDEX IF NOT EXISTS frontier_root ON frontier(root,sequence);
 CREATE INDEX IF NOT EXISTS frontier_ready ON frontier(root,not_before,sequence);
+CREATE TABLE IF NOT EXISTS policy_epochs (
+ root TEXT PRIMARY KEY, epoch INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS policy_files (
+ root TEXT NOT NULL, path BLOB NOT NULL, fingerprint TEXT NOT NULL,
+ PRIMARY KEY(root,path)
+) WITHOUT ROWID;
 PRAGMA user_version=3;
 `
 

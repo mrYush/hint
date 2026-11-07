@@ -112,25 +112,21 @@ func (m *Manager) observePolicy(ctx context.Context, work rootWork, directory st
 	if err != nil {
 		return err
 	}
+	var epoch uint64
+	if err := lease.Publish(func() error {
+		var err error
+		epoch, err = m.store.ObservePolicy(ctx, work.info.ID, []byte(filepath.ToSlash(path)), fingerprint)
+		return err
+	}); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	current := m.roots[work.info.ID]
 	if current == nil {
 		return workspace.ErrChanged
 	}
-	previous, known := current.policyFiles[path]
-	if !known && fingerprint == "absent" {
-		return nil
-	}
-	if known && previous == fingerprint {
-		return nil
-	}
-	current.policyEpoch++
-	// This is a small observation cache, never a resident all-files allowlist.
-	// Additional policies still revoke cursors when encountered, without growing RAM.
-	if known || len(current.policyFiles) < 128 {
-		current.policyFiles[path] = fingerprint
-	}
+	current.policyEpoch = max(current.policyEpoch, epoch)
 	return nil
 }
 

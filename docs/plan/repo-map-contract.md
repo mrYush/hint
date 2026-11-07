@@ -192,6 +192,8 @@ Rotate unfinished directories fairly so processing one wide directory cannot pre
 Complete queued exclusions and nested boundaries with durable omission records; retain temporarily unreadable/offline work with a persisted five-second retry delay.
 Seek eligible work by retry time and sequence without sorting or scanning all delayed tasks, and let a newer invalidation reset an older delay.
 An empty eligible page with delayed tasks is `partial` / `retry_wait`, never completed discovery; cancellation preserves the task without recording a failed observation.
+Ignore-policy fingerprints and per-root revisions persist in the same bounded catalog; RAM cache capacity must not turn an unchanged observation into a policy change.
+Only changed observed fingerprints advance the revision; deleted policies remove their fingerprint row, while the revision survives restart and root reattachment.
 Restart unfinished enumeration idempotently after interruption and serve navigation/query pages with indexed keyset seeks.
 Never materialize an all-files allowlist, sort a complete directory in memory, or hide an unbounded scan behind an output `LIMIT`.
 Incomplete, canceled or failed enumeration does not establish that unseen children were deleted.

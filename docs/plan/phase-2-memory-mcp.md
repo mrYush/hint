@@ -274,9 +274,14 @@ Slice 1 implementation and local verification are complete; final owner review r
   Self-review added clearing stale directory omissions after successful enumeration and retrying failed root reconciliation; publication, retained descriptor ownership, cancellation and newer invalidations were rechecked.
   Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the additional retained-stream regression passed under race checks.
   Command results are local in `.tmp/wp22-frontier-outcomes-checks.json`.
-- [ ] Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch.
-- [ ] Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries.
-- [ ] Pass targeted discovery/policy regressions and hand this slice to the owner for review.
+- ✅ Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch (2026-11-07).
+  `TestPolicyRevisionBeyondCacheCapacityAndReattachment` reproduced an unchanged second pass advancing epoch 140 to 152; it now preserves the epoch, advances once for an edit beyond 128 entries and restores it on root reattachment.
+  `TestPolicyObservationsAreDurableAndRootScoped` covers restart, absence/deletion/recreation, root separation and atomic rejection of canceled or oversized observations.
+  Self-review removed the per-root path map, preserved monotonic publication across concurrent tracking/observation, retained discovery after a failed revision read, and avoided keeping absent-policy tombstones.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded beyond-capacity edit case also passed under race checks.
+  Command results are local in `.tmp/wp22-policy-durable-checks.json`.
+- ✅ Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries (2026-11-07).
+- ✅ Pass targeted discovery/policy regressions and retain this reviewed slice for final owner review (2026-11-07).
 
 ##### Slice 3 — Query reservations and truthful results
 
