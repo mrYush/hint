@@ -348,12 +348,15 @@ Slice 1 implementation and local verification are complete; final owner review r
   Definitive continuation invalidation takes precedence over physical-root and cleanup errors; transient continuation tests still retain their reservation.
   Targeted race checks, vet and pinned lint passed; final whole-source gates are repeated below.
 
-- ⏳ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path.
-- [ ] Resolve all confirmed blockers from every review pass and retain reproduction, fix and verification evidence for each disposition.
-- ⏳ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations.
-- ⏳ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against the final source state.
-- ⏳ Repeat only measurements affected by the fixes; synthetic million-record metadata results do not substitute for filesystem failure or traversal tests.
-- [ ] Summarize the reviewed remediation commits and invite final owner review without pushing or closing #93.
+- ✅ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path (2026-11-07).
+- [ ] Complete the all-review blocker disposition after the unspecified P0/full concluding repomap review is supplied; all concrete supplied findings have linked fixes and regression evidence.
+- ✅ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations (2026-11-07).
+- ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against final code revision `748459b` (2026-11-07).
+  The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, exact commands/results and production helper smoke checks.
+- ✅ Repeat the affected real-corpus cold/warm/query measurements and a 10k catalog smoke; retain historical 100k/1m measurements as historical only (2026-11-07).
+  The [measurement report](evidence/wp2.2-remediation-20261107/measurements.md) records three successful corpus pairs and the rejected ignored-directory fixture attempt.
+  Actual contention, frontier exhaustion and recovery are covered by regressions rather than inferred from metadata scaling.
+- ✅ Summarize the reviewed remediation commits in the [handoff](evidence/wp2.2-remediation-20261107/README.md) and submit the combined result for final owner review, without pushing or closing #93 (2026-11-07).
 
 #### Proposed follow-up — Catalog quotas and cleanup
 

@@ -58,7 +58,9 @@ The [user guide](../../../workspaces.md) documents cache handling, status, retry
 ## Final verification and measurement evidence
 
 The [verification artifact](verification.json) records the exact source SHA-256 inventory, commands, results, platform and built helper smoke cases.
-Its final success requires a stable source inventory through testing.
+All final gates passed on source revision `748459b`, with a stable source inventory through testing: ordinary and race suites, vet, golangci-lint v2.13.2, formatting/diff checks and all six CGO-disabled builds.
+The built production helper passed Go/Python/JS/TS/TSX/Rust smoke cases.
+Subsequent handoff changes are documentation and evidence only.
 Tests needing local network listeners ran with sandbox escalation; Windows/Linux results are cross-build evidence, not runtime acceptance.
 The [measurement report](measurements.md) records affected local corpus/catalog reruns and preserves a failed fixture-location attempt explicitly.
 Historical million-record results remain [separate evidence](../wp2.2-mac-20261106/metadata.md), not a new million-file traversal or a new result for this source revision.
