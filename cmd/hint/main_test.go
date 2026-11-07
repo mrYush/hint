@@ -310,6 +310,16 @@ func TestSystemPrompt(t *testing.T) {
 		},
 	}
 	got := systemPrompt(pc, pc.Instructions, nil)
+	bare := systemPrompt(&project.Context{Dir: "/tmp/x"}, nil, nil)
+	const identity = "You are hint, an open-source coding assistant developed by mrYush (https://github.com/mrYush/hint)."
+	for _, prompt := range []string{got, bare} {
+		if !strings.HasPrefix(prompt, identity) {
+			t.Errorf("prompt must start with the built-in identity:\n%s", prompt)
+		}
+		if !strings.Contains(prompt, "The configured provider and model are the engine you run on, not your identity or your developer.") {
+			t.Errorf("prompt must keep the provider out of the product identity:\n%s", prompt)
+		}
+	}
 	for _, want := range []string{
 		"Working directory: /w/app/sub\n",
 		"Git repository root: /w/app\n",
@@ -328,11 +338,14 @@ func TestSystemPrompt(t *testing.T) {
 		t.Error("instructions must come after the overview")
 	}
 
+	if i, j := strings.Index(got, `<file path="/w/app/HINT.md">`), strings.Index(got, `<file path="/w/app/sub/AGENTS.md">`); i < 0 || j < 0 || i >= j {
+		t.Error("project instructions must keep their original order")
+	}
+
 	// Outside a repository, with nothing to show, the prompt says so and
 	// carries no empty sections.
-	got = systemPrompt(&project.Context{Dir: "/tmp/x"}, nil, nil)
-	if !strings.Contains(got, "Not inside a git repository") || strings.Contains(got, "Contents of") || strings.Contains(got, "<project_instructions>") {
-		t.Errorf("bare prompt:\n%s", got)
+	if !strings.Contains(bare, "Not inside a git repository") || strings.Contains(bare, "Contents of") || strings.Contains(bare, "<project_instructions>") {
+		t.Errorf("bare prompt:\n%s", bare)
 	}
 	if got = systemPrompt(&project.Context{Dir: "/w/app", GitRoot: "/w/app"}, nil, nil); !strings.Contains(got, "It is the root of a git repository") {
 		t.Errorf("root prompt:\n%s", got)
@@ -464,6 +477,11 @@ func TestOneShotText(t *testing.T) {
 	reqs := chat.seen()
 	if len(reqs) != 1 || len(reqs[0].Messages) != 2 || reqs[0].Messages[1].Text() != "the question" {
 		t.Fatalf("requests = %+v", reqs)
+	}
+	// TestSystemPrompt checks the builder in isolation; this checks that the
+	// one-shot path actually sends its first message to the provider.
+	if got := reqs[0].Messages[0].Text(); !strings.HasPrefix(got, "You are hint, ") {
+		t.Errorf("one-shot request must open with the built-in identity: %.120s", got)
 	}
 	if infos := sessionsOf(t, as); len(infos) != 1 || infos[0].Messages != 2 {
 		t.Errorf("sessions = %+v; want one with 2 messages", infos)

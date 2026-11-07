@@ -836,17 +836,25 @@ func toolRegistry(root tool.Root, pc *project.Context, secrets func() []string, 
 	return tool.NewRegistry(tools...)
 }
 
-// systemPrompt assembles the run's system message: the assistant's
-// standing orders, then the project context — where it is, what it looks
-// like, and what the project's own instruction files say. The instruction
-// files come last so they read as the most specific guidance; they are
-// the user's words to the agent, not tool output, which is why they
-// belong in the system message at all. instructions is the layout to
-// show (pc.Instructions, or one with the rules a conversation has
-// touched) and pending the rules not loaded yet.
+// systemPrompt assembles the run's system message: the product identity and
+// the assistant's standing orders, then the project context — where it is,
+// what it looks like, and what the project's own instruction files say. The
+// identity comes first so it is established before project instructions,
+// which may extend the assistant's behaviour; the instruction files come
+// last so they read as the most specific guidance. They are the user's
+// words to the agent, not tool output, which is why they belong in the
+// system message at all. instructions is the layout to show (pc.Instructions,
+// or one with the rules a conversation has touched) and pending the rules
+// not loaded yet.
 func systemPrompt(pc *project.Context, instructions []project.Instruction, pending []project.Rule) string {
 	var b strings.Builder
-	b.WriteString("You are a helpful assistant aiding a developer with their project.\n\n" +
+	// The identity is deliberately the first thing in the prompt: a fresh
+	// session with no configuration must still know the product it is, and
+	// the model is instructed to name the provider only as its engine.
+	b.WriteString("You are hint, an open-source coding assistant developed by mrYush (https://github.com/mrYush/hint). " +
+		"When asked who you are, give your product name, developer, and source URL. " +
+		"The configured provider and model are the engine you run on, not your identity or your developer. " +
+		"You help the user with their project.\n\n" +
 		"You have tools to explore the project: list_dir, read_file, glob and grep. " +
 		"Use them to look at the actual code before answering instead of guessing, " +
 		"and refer to files by their paths. Use todo to show a plan for multi-step work. " +
