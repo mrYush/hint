@@ -308,7 +308,10 @@ Slice 1 implementation and local verification are complete; final owner review r
   `TestToolDisclosureUsesEffectiveOutputLimit` checks catalog construction, status and wrapped execution at 1/64/512/1023/1024/2048/unlimited bytes.
   Self-review preserved transient continuation reservations, explicit access denial and delayed discovery retries for unavailable roots; integrators must supply their combined limits when constructing the catalog.
   Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-root-disclosure-checks.json`.
-- [ ] Add an explicit final root-list budget check and boundary tests; treat the missing assertion as hardening unless an actual overflow is reproduced.
+- ✅ Add an explicit final root-list budget check and boundary tests (2026-11-07).
+  `TestRootListingFinalBudgetBoundary` covers 1023/1024/1025/2048-byte limits, escaped paths and complete pagination without duplicates or loss.
+  Self-review found no existing overflow; the final assertion is defensive hardening.
+  Targeted race checks, vet, pinned lint and formatting passed; whole gates are repeated at the final source state.
 - [ ] Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches; do not suppress cleanup errors without an explicit contract decision.
 - [ ] Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers, then hand this slice to the owner for review.
 

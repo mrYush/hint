@@ -173,6 +173,9 @@ func (m *Manager) listRoots(space *workspace.Session, cursor string, budget int)
 	}
 	roots, revision := space.Snapshot()
 	defer func() {
+		if len(output) > budget {
+			output, resultErr = "", errors.New("root listing envelope exceeds output budget")
+		}
 		_, currentRevision := space.Snapshot()
 		if currentRevision != revision {
 			output, resultErr = "", workspace.ErrChanged

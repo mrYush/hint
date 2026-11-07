@@ -190,3 +190,55 @@ func TestTreeHistoricalBoundaryIsNotLiveExistenceClaim(t *testing.T) {
 		t.Fatalf("historical boundary lacks explicit availability qualification: %v %s", err, text)
 	}
 }
+
+func TestRootListingFinalBudgetBoundary(t *testing.T) {
+	m, space, _ := managerFixture(t, nil)
+	for i := range 20 {
+		path := filepath.Join(t.TempDir(), strings.Repeat("\n\t", 60))
+		if err := os.Mkdir(path, 0700); err != nil {
+			t.Skipf("control-character paths unavailable: %v", err)
+		}
+		if _, err := space.AttachLocal(path, fmt.Sprintf("root%02d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	roots, _ := space.Snapshot()
+	for _, budget := range []int{1023, 1024, 1025, 2048} {
+		t.Run(fmt.Sprint(budget), func(t *testing.T) {
+			cursor := ""
+			seen := make(map[string]bool)
+			for pages := 0; pages <= len(roots); pages++ {
+				text, err := m.listRoots(space, cursor, budget)
+				if budget < MinOutputBytes {
+					if err == nil || text != "" {
+						t.Fatalf("invalid cap: %q %v", text, err)
+					}
+					return
+				}
+				if err != nil || len(text) > budget {
+					t.Fatalf("%d bytes, err %v", len(text), err)
+				}
+				for _, root := range roots {
+					if strings.Contains(text, "["+root.ID+"]") {
+						if seen[root.ID] {
+							t.Fatal("duplicate root")
+						}
+						seen[root.ID] = true
+					}
+				}
+				next := treeNext(text)
+				if next == "" {
+					if len(seen) != len(roots) {
+						t.Fatalf("lost roots: %d/%d", len(seen), len(roots))
+					}
+					return
+				}
+				if next == cursor {
+					t.Fatal("no progress")
+				}
+				cursor = next
+			}
+			t.Fatal("pagination did not finish")
+		})
+	}
+}
