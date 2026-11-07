@@ -159,12 +159,19 @@ func (m *Manager) Close() error {
 
 // Tools returns session-bound tools; grants are checked again on each request.
 func (m *Manager) Tools(space *workspace.Session) []agentapi.Tool {
+	return m.ToolsWithLimits(space, tool.DefaultLimits())
+}
+
+// ToolsWithLimits applies the effective tool limits at disclosure and execution.
+// Callers adding outer limits must pass their combined minimum here as well.
+func (m *Manager) ToolsWithLimits(space *workspace.Session, limits tool.Limits) []agentapi.Tool {
 	m.mu.Lock()
 	enabled := m.governor.mode == ModeOn || (m.governor.mode == ModeAuto && m.governor.profile.Validated)
 	m.mu.Unlock()
-	tools := []agentapi.Tool{tool.WithLimits(&listTool{manager: m, space: space}, tool.DefaultLimits())}
-	if enabled {
-		tools = append(tools, tool.WithLimits(&mapTool{manager: m, space: space}, tool.DefaultLimits()))
+	lowBudget := limits.MaxOutput > 0 && limits.MaxOutput < MinOutputBytes
+	tools := []agentapi.Tool{tool.WithLimits(&listTool{manager: m, space: space, lowBudget: lowBudget}, limits)}
+	if enabled && !lowBudget {
+		tools = append(tools, tool.WithLimits(&mapTool{manager: m, space: space}, limits))
 	}
 	return tools
 }

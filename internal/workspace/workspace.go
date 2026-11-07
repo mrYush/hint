@@ -21,17 +21,18 @@ import (
 
 // Errors distinguish membership, lifecycle, and path-authority failures.
 var (
-	ErrBusy         = errors.New("workspace: session has an active turn")
-	ErrUnknownRoot  = errors.New("workspace: root is not attached")
-	ErrPrimary      = errors.New("workspace: primary root cannot be detached")
-	ErrAlias        = errors.New("workspace: alias is invalid or already assigned")
-	ErrBoundary     = errors.New("workspace: path belongs to a nested root")
-	ErrChanged      = errors.New("workspace: source or authority changed")
-	ErrClosed       = errors.New("workspace: registry is closed")
-	ErrCapacity     = errors.New("workspace: root capacity reached")
-	ErrStaleEntry   = errors.New("workspace: entry handle is unavailable")
-	ErrNotRegular   = errors.New("workspace: source is not a regular file")
-	ErrNotDirectory = errors.New("workspace: source is not a directory")
+	ErrBusy            = errors.New("workspace: session has an active turn")
+	ErrUnknownRoot     = errors.New("workspace: root is not attached")
+	ErrRootUnavailable = errors.New("workspace: attached root is unavailable")
+	ErrPrimary         = errors.New("workspace: primary root cannot be detached")
+	ErrAlias           = errors.New("workspace: alias is invalid or already assigned")
+	ErrBoundary        = errors.New("workspace: path belongs to a nested root")
+	ErrChanged         = errors.New("workspace: source or authority changed")
+	ErrClosed          = errors.New("workspace: registry is closed")
+	ErrCapacity        = errors.New("workspace: root capacity reached")
+	ErrStaleEntry      = errors.New("workspace: entry handle is unavailable")
+	ErrNotRegular      = errors.New("workspace: source is not a regular file")
+	ErrNotDirectory    = errors.New("workspace: source is not a directory")
 )
 
 // MaxRoots bounds registry and per-session structural state, not tree size.
@@ -318,6 +319,16 @@ func (s *Session) Resolve(repo, path string) (Lease, error) {
 	}
 	abs, err := root.ResolveExact(filepath.Join(root.Dir(), path))
 	if err != nil {
+		// A missing/replaced root can first appear as a path-resolution error.
+		// Preserve authority denial, but distinguish root loss from missing scope.
+		if !errors.Is(err, tool.ErrDenied) {
+			probe := Lease{RootID: id, MembershipRevision: revision, session: s, topologyRevision: topology}
+			if probe.Valid() {
+				if rootErr := probe.verifyRoot(); rootErr != nil {
+					return Lease{}, rootErr
+				}
+			}
+		}
 		return Lease{}, err
 	}
 	l := Lease{RootID: id, MembershipRevision: revision, Path: abs, RelativePath: root.Rel(abs), session: s, topologyRevision: topology}

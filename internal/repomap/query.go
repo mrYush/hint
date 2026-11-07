@@ -74,7 +74,11 @@ func (t *mapTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 			reason = "retention_capacity"
 		case errors.Is(err, workspace.ErrUnknownRoot):
 			code = "unknown_root"
-		case errors.Is(err, workspace.ErrChanged), errors.Is(err, index.ErrStale):
+		case errors.Is(err, index.ErrStale):
+			code = "stale_cursor"
+		case errors.Is(err, workspace.ErrRootUnavailable):
+			code = "root_unavailable"
+		case errors.Is(err, workspace.ErrChanged):
 			code = "stale_cursor"
 		case errors.Is(err, workspace.ErrStaleEntry), errors.Is(err, os.ErrNotExist), errors.Is(err, index.ErrNotFound):
 			code = "scope_not_found"
@@ -83,7 +87,7 @@ func (t *mapTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 		case errors.Is(err, context.DeadlineExceeded):
 			code = "query_timeout"
 		}
-		return mapFailure(callID, code, err.Error(), code == "index_unavailable" || code == "query_timeout", reason), nil
+		return mapFailure(callID, code, err.Error(), code == "index_unavailable" || code == "query_timeout" || code == "root_unavailable", reason), nil
 	}
 	return agentapi.TextResult(callID, "repo_map", string(result)), nil
 }

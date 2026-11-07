@@ -303,7 +303,11 @@ Slice 1 implementation and local verification are complete; final owner review r
   Catalog regressions cover changing reasons/file kinds, root isolation and lazy v3-to-v4 classification without double-counting legacy contributions.
   Self-review kept the vocabulary finite, updated reasons atomically with source counters, preserved unknown legacy reasons explicitly, and avoided all-file scans or per-file RAM state.
   Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-coverage-checks.json`.
-- [ ] Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case.
+- ✅ Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case (2026-11-07).
+  `TestMapDistinguishesUnavailableRootFromMissingScope` covers missing/replaced roots, missing files and stale retained cursors through the output wrapper.
+  `TestToolDisclosureUsesEffectiveOutputLimit` checks catalog construction, status and wrapped execution at 1/64/512/1023/1024/2048/unlimited bytes.
+  Self-review preserved transient continuation reservations, explicit access denial and delayed discovery retries for unavailable roots; integrators must supply their combined limits when constructing the catalog.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-root-disclosure-checks.json`.
 - [ ] Add an explicit final root-list budget check and boundary tests; treat the missing assertion as hardening unless an actual overflow is reproduced.
 - [ ] Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches; do not suppress cleanup errors without an explicit contract decision.
 - [ ] Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers, then hand this slice to the owner for review.

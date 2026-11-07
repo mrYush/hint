@@ -19,18 +19,8 @@ func (l Lease) Verify() error {
 		return ErrChanged
 	}
 	root := l.root()
-	// The registered handle may still address an old directory after its
-	// pathname is replaced. Never serve that old directory as the new root.
-	openedRoot, err := root.Stat(root.Dir())
-	if err != nil {
-		return fmt.Errorf("workspace: stat root handle: %w", err)
-	}
-	currentRoot, err := os.Stat(root.Dir())
-	if err != nil {
-		return fmt.Errorf("workspace: stat root location: %w", err)
-	}
-	if !os.SameFile(openedRoot, currentRoot) {
-		return ErrChanged
+	if err := l.verifyRoot(); err != nil {
+		return err
 	}
 	if _, err := root.ResolveExact(l.Path); err != nil {
 		return err
@@ -40,6 +30,34 @@ func (l Lease) Verify() error {
 	}
 	if !l.Valid() {
 		return ErrChanged
+	}
+	return nil
+}
+
+func (l Lease) verifyRoot() error {
+	root := l.root()
+	// The registered handle may still address an old directory after its
+	// pathname is replaced. Never serve that old directory as the new root.
+	openedRoot, err := root.Stat(root.Dir())
+	if err != nil {
+		if errors.Is(err, tool.ErrOutsideRoot) {
+			// ResolveExact rejects the missing root's surviving ancestor.
+			// Diagnose that physical loss without relabeling policy denial.
+			if _, locationErr := os.Stat(root.Dir()); locationErr != nil {
+				return fmt.Errorf("workspace: stat root location: %w", errors.Join(ErrRootUnavailable, locationErr))
+			}
+		}
+		if !errors.Is(err, tool.ErrDenied) && !errors.Is(err, tool.ErrOutsideRoot) {
+			err = errors.Join(ErrRootUnavailable, err)
+		}
+		return fmt.Errorf("workspace: stat root handle: %w", err)
+	}
+	currentRoot, err := os.Stat(root.Dir())
+	if err != nil {
+		return fmt.Errorf("workspace: stat root location: %w", errors.Join(ErrRootUnavailable, err))
+	}
+	if !os.SameFile(openedRoot, currentRoot) {
+		return errors.Join(ErrRootUnavailable, ErrChanged)
 	}
 	return nil
 }

@@ -80,6 +80,9 @@ Long display names or signatures may be abbreviated with explicit truncation fla
 Reduce an oversized entry to an addressable stub with declaration/file handles, coordinates and an explicit omission reason before consuming it; do not silently lose its location or trap every subsequent page behind it.
 Bound identifiers/cursors and optional display metadata so the minimal envelope plus one stub fits 1024 bytes; verify that invariant with worst-case serialization fixtures.
 If the effective configured cap is below 1024 bytes, do not register/disclose `repo_map`; expose the configuration reason through status instead of trying to fit JSON into an arbitrarily small limit.
+`Manager.ToolsWithLimits` uses the supplied effective limits for both disclosure and execution; the default tool catalog uses `tool.DefaultLimits`.
+Integrators adding a tighter outer limit must pass that combined limit at catalog construction.
+The reason also appears in the `repo_list` description when even a short status cannot fit the configured cap.
 Apply capability/catalog changes between turns and invalidate the context-cost baseline accordingly; cached calls to an unavailable tool use the existing dispatcher failure path, outside this map-payload contract.
 
 The existing generic `tool.WithLimits` performs head/tail text truncation and can turn JSON into invalid data or lose its cursor.
@@ -115,6 +118,8 @@ Do not promise constant page latency or `O(log N + page_size)` for arbitrary fil
 Request failures return `IsError: true` and a JSON `error` object with `code`, bounded `message` and `retryable` fields.
 Codes are `invalid_args`, `unknown_root`, `access_denied`, `root_unavailable`, `scope_not_found`, `stale_cursor`, `index_unavailable` and `query_timeout`.
 `stale_cursor` is not retryable with the same arguments; a new scoped request may succeed.
+An attached but missing, replaced or unreadable root yields `root_unavailable` for a new request; an absent scope within an available root yields `scope_not_found`.
+Continuation after definitive root loss/replacement is stale; transient I/O failures retain its reservation for retry.
 Partial coverage, paused extraction and unsupported source files are ordinary response states, not failed tool calls.
 Keep the code in the text payload: the existing `ToolResult.Message()` does not carry `IsError` into the provider message.
 Machinery failures and cancellation inherited from the turn retain the existing Go error/turn-cancellation semantics.

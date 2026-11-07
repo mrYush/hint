@@ -16,7 +16,7 @@ const sourceRetryDelay = 5 * time.Second
 
 func sourceAccessFailure(err error) bool {
 	var pathError *os.PathError
-	return definitiveAccess(err) || errors.Is(err, workspace.ErrNotDirectory) || errors.Is(err, workspace.ErrNotRegular) || errors.As(err, &pathError)
+	return errors.Is(err, workspace.ErrRootUnavailable) || definitiveAccess(err) || errors.Is(err, workspace.ErrNotDirectory) || errors.Is(err, workspace.ErrNotRegular) || errors.As(err, &pathError)
 }
 
 func (m *Manager) sourceFailure(ctx context.Context, work rootWork, item index.QueueItem, cause error) error {
@@ -37,7 +37,7 @@ func (m *Manager) retrySource(ctx context.Context, work rootWork, item index.Que
 }
 
 func (m *Manager) recordSourceFailure(ctx context.Context, work rootWork, item index.QueueItem, cause error, reason string, retry bool) error {
-	if ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, workspace.ErrChanged) || errors.Is(cause, workspace.ErrClosed) || errors.Is(cause, workspace.ErrUnknownRoot) || errors.Is(cause, index.ErrCapacity) || errors.Is(cause, index.ErrTooLarge) {
+	if ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) || (errors.Is(cause, workspace.ErrChanged) && !errors.Is(cause, workspace.ErrRootUnavailable)) || errors.Is(cause, workspace.ErrClosed) || errors.Is(cause, workspace.ErrUnknownRoot) || errors.Is(cause, index.ErrCapacity) || errors.Is(cause, index.ErrTooLarge) {
 		return errors.Join(cause, ctx.Err())
 	}
 	// A failed or newly forbidden traversal must not retain a descriptor that
@@ -55,7 +55,7 @@ func (m *Manager) recordSourceFailure(ctx context.Context, work rootWork, item i
 	}
 	parent, err := work.space.Resolve(work.info.ID, ".")
 	if err != nil {
-		if errors.Is(err, workspace.ErrChanged) || errors.Is(err, workspace.ErrClosed) || errors.Is(err, workspace.ErrUnknownRoot) {
+		if (errors.Is(err, workspace.ErrChanged) && !errors.Is(err, workspace.ErrRootUnavailable)) || errors.Is(err, workspace.ErrClosed) || errors.Is(err, workspace.ErrUnknownRoot) {
 			return err
 		}
 		// No current root authority means no metadata publication. Retain the

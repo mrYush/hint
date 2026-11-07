@@ -32,13 +32,18 @@ type listArgs struct {
 }
 
 type listTool struct {
-	manager *Manager
-	space   *workspace.Session
+	manager   *Manager
+	space     *workspace.Session
+	lowBudget bool
 }
 
 func (*listTool) Name() string { return "repo_list" }
-func (*listTool) Description() string {
-	return "List attached roots, a paginated text tree for repo/path or entry_id, or detailed index diagnostics with status=true alone. Continue using only cursor. The tree shows current observations and may still be building."
+func (t *listTool) Description() string {
+	description := "List attached roots, a paginated text tree for repo/path or entry_id, or detailed index diagnostics with status=true alone. Continue using only cursor. The tree shows current observations and may still be building."
+	if t.lowBudget {
+		description += " repo_map is unavailable: output budget below 1024 bytes."
+	}
+	return description
 }
 func (*listTool) Class() agentapi.ActionClass  { return agentapi.ClassRead }
 func (*listTool) InputSchema() json.RawMessage { return listSchema }
@@ -85,6 +90,12 @@ func (t *listTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	}
 	if in.Status {
 		text := t.manager.StatusText()
+		if t.lowBudget {
+			text = "repo_map unavailable: output_budget_below_1024\n" + text
+			if len(text) > budget {
+				text = "repo_map unavailable: output_budget_below_1024"
+			}
+		}
 		if len(text) > budget {
 			return agentapi.ErrorResult(callID, t.Name(), "index diagnostics exceed the configured output budget"), nil
 		}
