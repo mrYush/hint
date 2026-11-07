@@ -222,6 +222,14 @@ This checklist authorizes no assistant commit, push, PR creation or issue closur
 
 ##### Slice 1 — Safe source access and path identity
 
+Current narrow task (2026-11-07): fix FIFO `.gitignore` policy reads only; extraction, freshness validation and the other remediation slices remain open.
+
+- ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
+- ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
+  `TestPolicyFIFO` covers an existing FIFO and deterministic replacement immediately before the rooted open, with a parent-process timeout protecting the test itself.
+  `TestPolicyFingerprintRegularAdmission` covers absent/directory/canceled policy reads; runtime verification was on macOS, while Linux/Windows builds establish compilation only.
+  Command results are retained locally in `.tmp/wp22-policy-fifo-checks.json`; this narrow fix is ready for owner review and does not complete Slice 1.
+
 - [ ] Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation.
 - [ ] Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient.
 - [ ] Verify cancellation and manager shutdown after refused or interrupted source access without abandoning work that still owns the shared slot.

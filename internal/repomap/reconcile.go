@@ -148,7 +148,10 @@ func (m *Manager) observePolicy(ctx context.Context, work rootWork, directory st
 }
 
 func policyFingerprint(ctx context.Context, lease workspace.Lease) (value string, resultErr error) {
-	f, err := lease.Open()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	f, err := lease.OpenRegular()
 	if errors.Is(err, os.ErrNotExist) {
 		return "absent", nil
 	}

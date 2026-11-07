@@ -29,6 +29,7 @@ var (
 	ErrClosed      = errors.New("workspace: registry is closed")
 	ErrCapacity    = errors.New("workspace: root capacity reached")
 	ErrStaleEntry  = errors.New("workspace: entry handle is unavailable")
+	ErrNotRegular  = errors.New("workspace: source is not a regular file")
 )
 
 // MaxRoots bounds registry and per-session structural state, not tree size.

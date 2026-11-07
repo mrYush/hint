@@ -11,7 +11,31 @@ import (
 
 	"github.com/mrYush/hint/internal/index"
 	"github.com/mrYush/hint/internal/repomap/extract"
+	"github.com/mrYush/hint/internal/workspace"
 )
+
+func TestPolicyFingerprintRegularAdmission(t *testing.T) {
+	_, space, path := managerFixture(t, nil)
+	lease, err := space.Resolve("", ".gitignore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := policyFingerprint(t.Context(), lease)
+	if err != nil || got != "absent" {
+		t.Fatalf("missing policy: %q, %v", got, err)
+	}
+	if err := os.Mkdir(filepath.Join(path, ".gitignore"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policyFingerprint(t.Context(), lease); !errors.Is(err, workspace.ErrNotRegular) {
+		t.Fatalf("directory policy: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := policyFingerprint(ctx, lease); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled policy admission: %v", err)
+	}
+}
 
 func TestManagerReconciliationRetiresDeletedSubtree(t *testing.T) {
 	m, space, path := managerFixture(t, &managerTestExtractor{run: extract.Extract})
