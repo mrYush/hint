@@ -16,6 +16,18 @@ Optional PDF extraction and heavy OCR retain explicit capability/admission rules
 The workspace/index foundations are required release capabilities, but their proposed WP2.11/WP2.12 decomposition still needs formal work packages and review.
 Re-estimate the phase after that decomposition and the parser/backend measurements; do not carry forward the old estimate or invent a new duration without those inputs.
 
+## Built-in identity for v0.4.0
+
+**Branch:** `feature/hint-identity`
+
+The built-in identity is required before v0.4.0 ([#96](https://github.com/mrYush/hint/issues/96)).
+Release acceptance is tracked separately in [#95](https://github.com/mrYush/hint/issues/95).
+
+- ✅ Add the identity to the shared system prompt for TUI, `--plain`, `-p`, and `serve`.
+- ✅ Cover the identity with and without project instructions in `TestSystemPrompt`, including the existing instruction order.
+- ✅ Verify the identity in a fresh, unrecorded `-p` session in an empty directory with the configured GLM model (2026-11-07).
+  The answer named hint, mrYush and the source URL, and described GLM as the engine.
+
 ## Work packages
 
 ### WP2.1 — MCP client
