@@ -149,7 +149,9 @@ func WithPreamble(p Preamble) Option {
 	return func(a *Agent) { a.preamble = p }
 }
 
-// WithEstimator overrides the default character-based token [Estimator].
+// WithEstimator overrides the default bytes/4 message [Estimator]. If e
+// also implements [ToolEstimator], it estimates the tool catalog too;
+// otherwise tools retain their default bytes/4 approximation.
 func WithEstimator(e Estimator) Option {
 	return func(a *Agent) { a.estimator = e }
 }
@@ -185,7 +187,11 @@ func (a *Agent) schemas() []agentapi.ToolSchema {
 
 	schemas := make([]agentapi.ToolSchema, 0, len(names))
 	for _, name := range names {
-		schemas = append(schemas, agentapi.SchemaOf(a.tools[name]))
+		schema := agentapi.SchemaOf(a.tools[name])
+		// A tool may rebuild its schema between rounds. Keep the catalog
+		// used for estimation and any retry independent of its raw buffer.
+		schema.InputSchema = append(schema.InputSchema[:0:0], schema.InputSchema...)
+		schemas = append(schemas, schema)
 	}
 	return schemas
 }

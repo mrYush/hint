@@ -1,0 +1,19 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/mrYush/hint/internal/index
+cpu: Apple M5
+BenchmarkMetadata
+    benchmark_test.go:44: catalog build: 1000/10000 entries in 610ms
+    benchmark_test.go:44: catalog build: 2000/10000 entries in 1.279s
+    benchmark_test.go:44: catalog build: 3000/10000 entries in 1.922s
+    benchmark_test.go:44: catalog build: 4000/10000 entries in 2.576s
+    benchmark_test.go:44: catalog build: 5000/10000 entries in 3.202s
+    benchmark_test.go:44: catalog build: 6000/10000 entries in 3.83s
+    benchmark_test.go:44: catalog build: 7000/10000 entries in 4.454s
+    benchmark_test.go:44: catalog build: 8000/10000 entries in 5.081s
+    benchmark_test.go:44: catalog build: 9000/10000 entries in 5.708s
+    benchmark_test.go:44: catalog build: 10000/10000 entries in 6.347s
+BenchmarkMetadata-10    	      20	     37673 ns/op	    634676 build-ns/entry	         6.347 build-seconds	  22433792 db-bytes	      2243 db-bytes/entry	     10000 entries	    9617 B/op	     170 allocs/op
+PASS
+        6.74 real         1.32 user         3.82 sys
+time: sysctl kern.clockrate: Operation not permitted

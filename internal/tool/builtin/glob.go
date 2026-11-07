@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"encoding/json"
 	"errors"
@@ -79,16 +80,23 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		return agentapi.ErrorResult(callID, globName, fmt.Sprintf("%s is not a directory", t.root.Rel(dir))), nil
 	}
 
-	var paths []string
+	var hits globHits
 	if t.rg != "" {
+		var paths []string
 		paths, err = t.globRipgrep(ctx, dir, in.Pattern)
+		if err == nil {
+			for _, path := range paths {
+				if info, statErr := t.root.Stat(path); statErr == nil {
+					retainGlobHit(&hits, globHit{path: path, mod: info.ModTime()})
+				}
+			}
+		}
 	}
 	if t.rg == "" || err != nil {
 		// Ripgrep unavailable or unhappy: the pure-Go walk is the
-		// reference behaviour anyway.
-		// See listDir.Run for why a git failure is not reported here.
+		// reference behaviour. Its lazy policy retains and reports failures.
 		ig, _ := t.rules.Ignorer(ctx, dir)
-		paths, err = globWalk(ctx, t.root, dir, matcher, ig)
+		hits, err = globWalk(ctx, t.root, dir, matcher, ig)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -97,19 +105,7 @@ func (t *globTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		return agentapi.ErrorResult(callID, globName, pathError(t.root, dir, err)), nil
 	}
 
-	type hit struct {
-		path string
-		mod  time.Time
-	}
-	hits := make([]hit, 0, len(paths))
-	for _, p := range paths {
-		info, err := t.root.Stat(p)
-		if err != nil {
-			continue
-		}
-		hits = append(hits, hit{path: p, mod: info.ModTime()})
-	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].mod.After(hits[j].mod) })
+	sort.Slice(hits, func(i, j int) bool { return betterGlobHit(hits[i], hits[j]) })
 
 	if len(hits) == 0 {
 		return agentapi.TextResult(callID, globName, "No files found"), nil
@@ -156,11 +152,13 @@ func (t *globTool) globRipgrep(ctx context.Context, dir, pattern string) ([]stri
 	return out, nil
 }
 
-// globWalk is the pure-Go listing: every regular file under dir that ig
-// keeps, whose path relative to dir matches.
-func globWalk(ctx context.Context, root tool.Root, dir string, m *glob.Matcher, ig project.Ignorer) ([]string, error) {
-	var out []string
-	err := root.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+// globWalk retains only the newest result window and one truncation marker.
+// Match count and directory width never grow the retained hit collection.
+func globWalk(ctx context.Context, root tool.Root, dir string, m *glob.Matcher, ig project.Ignorer) (globHits, error) {
+	var out globHits
+	err := root.WalkDirBatch(dir, func(parent string, entries []fs.DirEntry) error {
+		return project.PrepareIgnore(ig, relSlash(dir, parent), entries)
+	}, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == dir {
 				return err
@@ -184,9 +182,47 @@ func globWalk(ctx context.Context, root tool.Root, dir string, m *glob.Matcher, 
 			return nil
 		}
 		if m.Match(rel) {
-			out = append(out, path)
+			if info, statErr := root.Stat(path); statErr == nil {
+				retainGlobHit(&out, globHit{path: path, mod: info.ModTime()})
+			}
 		}
 		return nil
 	})
+	if err == nil {
+		err = project.IgnoreError(ig)
+	}
 	return out, err
+}
+
+// globHits is a worst-first heap: eviction removes the oldest match, breaking
+// equal-time ties by path so filesystem enumeration order cannot affect output.
+type globHit struct {
+	path string
+	mod  time.Time
+}
+type globHits []globHit
+
+func betterGlobHit(a, b globHit) bool {
+	return a.mod.After(b.mod) || a.mod.Equal(b.mod) && a.path < b.path
+}
+func (h globHits) Len() int           { return len(h) }
+func (h globHits) Less(i, j int) bool { return betterGlobHit(h[j], h[i]) }
+func (h globHits) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *globHits) Push(value any)    { *h = append(*h, value.(globHit)) }
+func (h *globHits) Pop() any {
+	old := *h
+	value := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return value
+}
+
+func retainGlobHit(h *globHits, candidate globHit) {
+	if len(*h) < maxGlobResults+1 {
+		heap.Push(h, candidate)
+		return
+	}
+	if betterGlobHit(candidate, (*h)[0]) {
+		(*h)[0] = candidate
+		heap.Fix(h, 0)
+	}
 }

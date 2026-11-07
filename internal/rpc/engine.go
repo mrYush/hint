@@ -17,6 +17,8 @@ import (
 var (
 	ErrNotFound = errors.New("not found")
 	ErrInvalid  = errors.New("invalid")
+	// ErrBusy rejects a mutation while a session has active work.
+	ErrBusy = errors.New("busy")
 )
 
 // Parent says where a fork's history came from: the session and the user

@@ -1,7 +1,9 @@
 package project
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -134,18 +136,18 @@ func DiscoverRules(dirs []string) ([]Rule, []string) {
 	var warnings []string
 	for _, dir := range dirs {
 		for _, sub := range RuleDirs {
-			entries, err := os.ReadDir(filepath.Join(dir, sub))
+			names, more, err := boundedRuleNames(filepath.Join(dir, sub))
 			if err != nil {
 				continue
 			}
-			names := make([]string, 0, len(entries))
-			for _, e := range entries {
-				if e.Type().IsRegular() && ruleExtensions[filepath.Ext(e.Name())] {
-					names = append(names, e.Name())
-				}
+			if more {
+				warnings = append(warnings, fmt.Sprintf("%s: rule discovery stopped at 256 entries", filepath.Join(dir, sub)))
 			}
 			sort.Strings(names)
 			for _, name := range names {
+				if len(rules) >= 128 {
+					return rules, append(warnings, "rule discovery stopped at 128 documents")
+				}
 				p := filepath.Join(dir, sub, name)
 				r, warn := readRule(p, dir)
 				if warn != "" {
@@ -158,14 +160,51 @@ func DiscoverRules(dirs []string) ([]Rule, []string) {
 	return rules, warnings
 }
 
+func boundedRuleNames(dir string) (names []string, more bool, resultErr error) {
+	file, err := os.Open(dir)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	count := 0
+	for {
+		entries, err := file.ReadDir(32)
+		for _, entry := range entries {
+			count++
+			if count > 256 {
+				return names, true, nil
+			}
+			if entry.Type().IsRegular() && ruleExtensions[filepath.Ext(entry.Name())] {
+				names = append(names, entry.Name())
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return names, false, nil
+		}
+		if err != nil {
+			return names, false, err
+		}
+	}
+}
+
 // readRule builds the Rule for the file at p under root.
 func readRule(p, root string) (Rule, string) {
-	r := Rule{Path: p, Root: root}
-	data, err := os.ReadFile(p)
+	data, more, err := readBounded(p, 64<<10)
 	if err != nil {
-		return r, fmt.Sprintf("%s: %v", p, err)
+		return Rule{Path: p, Root: root}, fmt.Sprintf("%s: %v", p, err)
 	}
-	header, body, ok := splitFrontMatter(string(data))
+	rule, warning := ParseRule(p, root, data)
+	if more {
+		rule.Paths = nil
+		warning = fmt.Sprintf("%s: rule metadata exceeds 64 KiB; loaded unconditionally", p)
+	}
+	return rule, warning
+}
+
+// ParseRule parses already-authorized content using the normal rule semantics.
+func ParseRule(p, root, content string) (Rule, string) {
+	r := Rule{Path: p, Root: root}
+	header, body, ok := splitFrontMatter(content)
 	var h ruleHeader
 	var warn string
 	if ok {

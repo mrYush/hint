@@ -35,8 +35,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 	out <- agentapi.Event{Kind: agentapi.EventTurnStart}
 
 	var total agentapi.Usage
-	var lastUsage agentapi.Usage
-	usageBaseline := 0
+	var lastUsage usageBaseline
 
 	for iter := 0; ; iter++ {
 		select {
@@ -56,12 +55,15 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 		if changed := a.refreshPrefix(ctx, &messages, out); changed {
 			// The prefix the last usage figure was measured with is gone:
 			// estimate the whole request afresh rather than trust it.
-			lastUsage = agentapi.Usage{}
-			usageBaseline = 0
+			lastUsage = usageBaseline{}
 		}
 
-		if a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, lastUsage, usageBaseline)) {
-			compacted, err := a.compact(ctx, messages, out)
+		// Estimate and send one catalog snapshot, including on reactive
+		// retries. A subsequent logical round can refresh a changed schema.
+		tools := a.schemas()
+		toolTokens := a.estimateTools(tools)
+		if a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, toolTokens, lastUsage)) {
+			compacted, err := a.compact(ctx, messages, toolTokens, out)
 			if err != nil {
 				// Proactive compaction is a courtesy, not a requirement: if
 				// it fails, report it and try the request as-is — the
@@ -71,8 +73,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 					agentapi.ErrUnknown, err, "proactive compaction")}
 			} else {
 				messages = compacted
-				lastUsage = agentapi.Usage{}
-				usageBaseline = 0
+				lastUsage = usageBaseline{}
 			}
 		}
 
@@ -85,7 +86,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 		for {
 			baseline := len(messages)
 			var err error
-			res, err = a.streamOnce(ctx, messages, out)
+			res, err = a.streamOnce(ctx, agentapi.ChatRequest{Messages: messages, Tools: tools}, out)
 			if err != nil {
 				if agentapi.KindOf(err) == agentapi.ErrCanceled {
 					endTurn(out, total, agentapi.FinishCanceled)
@@ -97,11 +98,14 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 			}
 			if !res.overflow {
 				total = total.Add(res.usage)
-				lastUsage = res.usage
-				usageBaseline = baseline
+				lastUsage = usageBaseline{
+					inputTokens: res.usage.InputTokens,
+					messages:    baseline,
+					toolTokens:  toolTokens,
+				}
 				break
 			}
-			compacted, cerr := a.compact(ctx, messages, out)
+			compacted, cerr := a.compact(ctx, messages, toolTokens, out)
 			if cerr != nil {
 				out <- agentapi.Event{Kind: agentapi.EventError, Err: toError(cerr)}
 				out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
@@ -111,8 +115,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 			// The history the last usage figure was measured with is gone:
 			// the next attempt must estimate from scratch, and a stale
 			// baseline would index past the shorter history.
-			lastUsage = agentapi.Usage{}
-			usageBaseline = 0
+			lastUsage = usageBaseline{}
 		}
 
 		assistant := res.message
@@ -191,20 +194,26 @@ func samePrefix(a, b []agentapi.Message) bool {
 	return true
 }
 
-// occupancy estimates how many tokens the next request would cost.
-//
-// When the last Stream call reported real usage, that InputTokens count is
-// exact for the messages as they stood at that call, so only the messages
-// appended since (baseline) need estimating; otherwise the whole history is
-// estimated from scratch, e.g. before the first call of the turn. A
-// baseline past the end of messages can only come from a stale figure —
-// history shrank under it — so that case falls back to the whole-history
-// estimate rather than slicing out of range.
-func (a *Agent) occupancy(messages []agentapi.Message, lastUsage agentapi.Usage, baseline int) int64 {
-	if lastUsage.InputTokens > 0 && baseline <= len(messages) {
-		return lastUsage.InputTokens + a.estimator.Estimate(messages[baseline:])
+// usageBaseline binds reported input usage to the history and estimated
+// catalog cost of the same request. Provider input usage already includes
+// its tools; adding the entire catalog again would count them twice.
+type usageBaseline struct {
+	inputTokens int64
+	messages    int
+	toolTokens  int64
+}
+
+// occupancy estimates the next request's input cost. Warm requests reuse
+// reported usage plus estimates for appended messages and the catalog's
+// cost change. That correction is approximate even when the provider's
+// baseline was measured. Prefix replacement and compaction invalidate the
+// baseline; absent usage or an invalid offset also requires a cold estimate
+// of all messages and the actual tool catalog.
+func (a *Agent) occupancy(messages []agentapi.Message, toolTokens int64, baseline usageBaseline) int64 {
+	if baseline.inputTokens > 0 && baseline.messages >= 0 && baseline.messages <= len(messages) {
+		return max(0, baseline.inputTokens+a.estimator.Estimate(messages[baseline.messages:])+toolTokens-baseline.toolTokens)
 	}
-	return a.estimator.Estimate(messages)
+	return max(0, a.estimator.Estimate(messages)+toolTokens)
 }
 
 // endTurn emits the turn's final accumulated usage followed by its

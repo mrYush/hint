@@ -37,6 +37,8 @@ const (
 	// MaxInstructionFileSize bounds how much of one file is read at all;
 	// beyond it the rest is not even outlined.
 	MaxInstructionFileSize = 1 << 20
+	// MaxInstructionInputBytes caps aggregate disk input before prompt fitting.
+	MaxInstructionInputBytes = 4 << 20
 )
 
 // InstructionBudgetFor returns the default budget for a model whose
@@ -146,20 +148,31 @@ func ReadInstructionFiles(ctx context.Context, paths []string, budget int, s Sum
 
 // readInstructionFiles loads the raw documents that Layout shares with
 // configured in-memory sources before fitting them all under one budget.
-func readInstructionFiles(_ context.Context, paths []string) ([]rawFile, []string) {
+func readInstructionFiles(ctx context.Context, paths []string) ([]rawFile, []string) {
 	var files []rawFile
 	var warnings []string
-	for _, p := range paths {
-		content, more, err := readBounded(p, MaxInstructionFileSize)
+	remaining := MaxInstructionInputBytes
+	for i, p := range paths {
+		if err := ctx.Err(); err != nil {
+			warnings = append(warnings, fmt.Sprintf("instruction loading stopped: %v", err))
+			break
+		}
+		if remaining <= 0 || i >= 128 {
+			warnings = append(warnings, "instruction discovery input limit reached; use the instructions tool for remaining documents")
+			break
+		}
+		limit := min(MaxInstructionFileSize, remaining)
+		content, more, err := readBounded(p, limit)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s: %v", p, err))
 			continue
 		}
+		remaining -= len(content)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
 		if more {
-			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", p, MaxInstructionFileSize))
+			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", p, limit))
 		}
 		files = append(files, newRawFile(p, content))
 	}

@@ -225,6 +225,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.sessionsLoaded(msg), nil
 	case attachedMsg:
 		return m.attached(msg), nil
+	case reposMsg:
+		return m.reposResult(msg)
 	case profilesMsg:
 		return m.profilesLoaded(msg), nil
 	case profileMsg:
@@ -642,6 +644,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		return m.loadPrompts(true, "")
 	case "/completion":
 		return m.completionCommand(arg)
+	case "/repos":
+		return m.reposCommand(fields[1:])
 	case "/profile":
 		if arg == "" {
 			return m.openProfiles()

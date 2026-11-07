@@ -8,7 +8,9 @@
 Closes #
 
 <!-- Use Refs #N instead of Closes #N when this PR does not complete the
-     issue. A PR merged into develop closes the issue automatically. -->
+     issue. GitHub processes closing keywords only for the default branch (main).
+     For develop, close completed issues after merge or carry their closing
+     keywords into the release PR to main; keep incomplete issues as Refs. -->
 
 ## Scope note
 

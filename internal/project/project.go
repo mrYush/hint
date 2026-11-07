@@ -281,6 +281,9 @@ func Load(ctx context.Context, dir string, opts ...Option) (*Context, error) {
 	pc.Instructions, warnings = pc.Layout(ctx, nil)
 	pc.Warnings = append(pc.Warnings, warnings...)
 
+	if _, none := l.overview.(None); none {
+		return pc, nil
+	}
 	ig, err := NewRules(l.git).Ignorer(ctx, abs)
 	if err != nil {
 		pc.Warnings = append(pc.Warnings, fmt.Sprintf("%v; .gitignore not applied", err))

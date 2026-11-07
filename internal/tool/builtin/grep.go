@@ -45,9 +45,10 @@ var grepSchema = tool.MustSchema(grepArgs{})
 
 // grepMatch is one matching line.
 type grepMatch struct {
-	path string
-	line int
-	text string
+	truncated bool
+	path      string
+	line      int
+	text      string
 }
 
 type grepTool struct {
@@ -127,7 +128,7 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 	var b strings.Builder
 	for _, m := range matches {
 		line := m.text
-		if len(line) > maxGrepLine {
+		if m.truncated || len(line) > maxGrepLine {
 			line = text.Cut(line, maxGrepLine) + "... [line truncated]"
 		}
 		fmt.Fprintf(&b, "%s:%d: %s\n", t.root.Rel(m.path), m.line, line)
@@ -191,7 +192,7 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 		if err != nil {
 			continue
 		}
-		matches = append(matches, grepMatch{path: filepath.Join(t.root.Dir(), path), line: line, text: text})
+		matches = append(matches, boundedGrepMatch(filepath.Join(t.root.Dir(), path), line, text))
 	}
 	if len(matches) > maxGrepMatches {
 		cancel() // enough; stop rg early
@@ -225,8 +226,11 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {
 			return nil
 		}
-		found, err := grepFile(root, path, re, maxGrepMatches+1-len(matches))
+		found, err := grepFile(ctx, root, path, re, maxGrepMatches+1-len(matches))
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return nil //nolint:nilerr // unreadable or binary: skip the file, keep searching
 		}
 		matches = append(matches, found...)
@@ -241,9 +245,15 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		return nil, err
 	}
 	if !info.IsDir() {
-		return matches, visit(target)
+		err := visit(target)
+		if errors.Is(err, filepath.SkipAll) {
+			err = nil
+		}
+		return matches, err
 	}
-	err = root.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
+	err = root.WalkDirBatch(target, func(parent string, entries []fs.DirEntry) error {
+		return project.PrepareIgnore(ig, relSlash(target, parent), entries)
+	}, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == target {
 				return err
@@ -265,12 +275,15 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 		}
 		return visit(path)
 	})
+	if err == nil {
+		err = project.IgnoreError(ig)
+	}
 	return matches, err
 }
 
 // grepFile returns up to limit matching lines of one file, or an error for
 // a binary or unreadable one.
-func grepFile(root tool.Root, path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
+func grepFile(ctx context.Context, root tool.Root, path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
 	f, err := root.Open(path)
 	if err != nil {
 		return nil, err
@@ -288,13 +301,20 @@ func grepFile(root tool.Root, path string, re *regexp.Regexp, limit int) ([]grep
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	line := 0
 	for sc.Scan() && len(out) < limit {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		line++
 		if re.Match(sc.Bytes()) {
-			out = append(out, grepMatch{path: path, line: line, text: strings.TrimRight(sc.Text(), "\r")})
+			out = append(out, boundedGrepMatch(path, line, strings.TrimRight(sc.Text(), "\r")))
 		}
 	}
 	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func boundedGrepMatch(path string, line int, content string) grepMatch {
+	return grepMatch{path: path, line: line, text: strings.Clone(text.Cut(content, maxGrepLine)), truncated: len(content) > maxGrepLine}
 }

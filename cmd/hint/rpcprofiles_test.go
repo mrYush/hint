@@ -20,7 +20,10 @@ func twoProfiles() *config.Config {
 	return &config.Config{
 		Providers: []config.Profile{
 			{Name: "fake", Kind: config.KindOpenAI, APIKey: "sk-test-1234567890abcdef", Model: "m", ContextWindow: 4000},
-			{Name: "other", Kind: config.KindOpenAI, APIKey: "sk-other-1234567890abcdef", Model: "mo", ContextWindow: 2000},
+			// The original tool catalog alone costs about 2.1k estimated tokens.
+			// Keep this profile-switch fixture out of compaction; budget behavior
+			// is covered by the agent's dedicated schema-accounting tests.
+			{Name: "other", Kind: config.KindOpenAI, APIKey: "sk-other-1234567890abcdef", Model: "mo", ContextWindow: 8000},
 			{Name: "nokey", Kind: config.KindOpenAI, Model: "mn"},
 		},
 		DefaultProvider: "fake",

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,15 +15,19 @@ import (
 	"github.com/mrYush/hint/internal/agent"
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/debuglog"
+	"github.com/mrYush/hint/internal/index"
 	"github.com/mrYush/hint/internal/mcp"
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/project"
 	"github.com/mrYush/hint/internal/provider"
+	"github.com/mrYush/hint/internal/repomap"
+	"github.com/mrYush/hint/internal/repomap/worker"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
 	"github.com/mrYush/hint/internal/shell"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/internal/tool/builtin"
+	"github.com/mrYush/hint/internal/workspace"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -56,6 +61,9 @@ type assembly struct {
 	consent mcp.Consent
 	// mcpDial replaces the real MCP transport in tests.
 	mcpDial mcp.DialFunc
+	// mapPath opts into the persistent optional catalog; tests use private paths.
+	mapPath   string
+	mapRunner repomap.Extractor
 }
 
 // rpcEngine is the core every entry point serves: one working directory,
@@ -100,8 +108,13 @@ type rpcEngine struct {
 	// listModels stands in for provider.Models in tests.
 	listModels func(context.Context, config.Profile) ([]provider.Model, error)
 
-	mu   sync.Mutex
-	live map[string]*rpcSession
+	mu          sync.Mutex
+	live        map[string]*rpcSession
+	workspace   *workspace.Registry
+	mapIndex    *repomap.Manager
+	primaryRoot tool.Root
+	closeOnce   sync.Once
+	indexModeMu sync.RWMutex
 }
 
 // tracef writes to the debug log when there is one.
@@ -114,6 +127,9 @@ func (e *rpcEngine) tracef(format string, args ...any) {
 // newRPCEngine assembles the engine from the process: configuration,
 // home and working directory, the debug log. cleanup releases the log.
 func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEngine, func(), error) {
+	if opts.indexMaxBytes != 0 && opts.indexMaxBytes < 512<<10 {
+		return nil, nil, errors.New("--index-max-bytes must be at least 524288 bytes")
+	}
 	cfg, err := config.Load(opts.flags)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading configuration: %w", err)
@@ -124,6 +140,10 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "" // sessions and logs then land under relative defaults; better than refusing to run
+	}
+	var mapPath string
+	if cache, cacheErr := os.UserCacheDir(); cacheErr == nil {
+		mapPath = filepath.Join(cache, "hint", "index", "code-v2.sqlite")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -163,6 +183,7 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	warnFileKeys(cfg, notices)
 	consent := mcpConsent(home)
 	eng, err := newEngine(ctx, assembly{
+		mapPath: mapPath,
 		chat:    chat,
 		cfg:     cfg,
 		opts:    opts,
@@ -197,16 +218,25 @@ func deniedPaths(home, cwd string, lookupEnv func(string) (string, bool), sessio
 // newEngine builds the stack for as: the working-directory root, the
 // project context, the tools, the limits. Warnings that belong to the
 // run (a cut HINT.md, git refusing to answer) are printed here once.
-func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
+func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error) {
 	root, err := tool.NewRoot(as.cwd)
 	if err != nil {
 		return nil, fmt.Errorf("working directory: %w", err)
 	}
+	defer func() {
+		if resultErr != nil {
+			resultErr = errors.Join(resultErr, root.Close())
+		}
+	}()
 	// hint's own files are off limits to the file tools even when the
 	// working directory holds them (a run from $HOME, or the project's
 	// .hint/config.yaml): a key must not reach the model through
 	// read_file. The engine reads them itself, not through the tools.
-	root = root.Deny(append([]string{filepath.Join(root.Dir(), ".hint", "config.yaml")}, as.denied...)...)
+	denied := append([]string{filepath.Join(root.Dir(), ".hint", "config.yaml")}, as.denied...)
+	if as.mapPath != "" {
+		denied = append(denied, filepath.Dir(as.mapPath))
+	}
+	root = root.Deny(denied...)
 
 	// The project context is this run's view of the directory: the
 	// instruction files, the overview and git's ignore rules, bounded by
@@ -238,20 +268,60 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 		debugLog = func(line string) { as.trace.Printf("%s", line) }
 	}
 	e := &rpcEngine{
-		cwd:       root.Dir(),
-		store:     as.store,
-		chat:      as.chat,
-		pc:        pc,
-		mode:      as.opts.mode,
-		limits:    limits,
-		notices:   as.notices,
-		trace:     as.trace,
-		debugLog:  debugLog,
-		setup:     newSetupInfo(as.cfg, as.cwd, as.opts.flags),
-		cfg:       as.cfg,
-		reload:    as.reload,
-		providers: map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
+		primaryRoot: root,
+		cwd:         root.Dir(),
+		store:       as.store,
+		chat:        as.chat,
+		pc:          pc,
+		mode:        as.opts.mode,
+		limits:      limits,
+		notices:     as.notices,
+		trace:       as.trace,
+		debugLog:    debugLog,
+		setup:       newSetupInfo(as.cfg, as.cwd, as.opts.flags),
+		cfg:         as.cfg,
+		reload:      as.reload,
+		providers:   map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
 	}
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		if e.mapIndex != nil {
+			resultErr = errors.Join(resultErr, e.mapIndex.Close())
+		}
+		if e.workspace != nil {
+			resultErr = errors.Join(resultErr, e.workspace.Close())
+		}
+		if e.mcp != nil {
+			resultErr = errors.Join(resultErr, e.mcp.Close())
+		}
+	}()
+	e.workspace, err = workspace.New(root, workspace.WithRootPolicy(func(attached tool.Root) tool.Root {
+		denied := append([]string{filepath.Join(attached.Dir(), ".hint", "config.yaml")}, as.denied...)
+		if as.mapPath != "" {
+			denied = append(denied, filepath.Dir(as.mapPath))
+		}
+		return attached.Deny(denied...)
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("workspace: %w", err)
+	}
+	if as.mapPath != "" {
+		runner := as.mapRunner
+		if runner == nil {
+			if executable, executableErr := os.Executable(); executableErr == nil {
+				runner = &worker.Process{Command: []string{executable, "internal-extract"}, Environ: e.environ, Timeout: 3 * time.Second}
+			}
+		}
+		e.mapIndex, err = repomap.New(ctx, repomap.Options{Path: as.mapPath, Runner: runner,
+			Environ: e.environ, Sampler: repomap.LocalResourceSampler(as.mapPath), Store: index.Options{MaxBytes: as.opts.indexMaxBytes}})
+		if err != nil {
+			fmt.Fprintf(as.notices, "hint: code index unavailable: %s\n", config.Redact(err.Error(), e.secrets()))
+		}
+	}
+	e.chat = e.observeInference(e.chat)
+	e.providers[rpc.ProfileRef{Profile: as.cfg.DefaultProvider}] = e.chat
 	// MCP servers are created here but not started: the first turn calls
 	// ensureMCP, and prompt operations connect explicitly, so a run that never
 	// uses MCP pays no process startup cost. Config and consent problems that
@@ -267,11 +337,11 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("MCP servers: %w", err)
 	}
+	e.mcp = manager
 	// The tools read the secrets and the environment through the engine,
 	// so a configuration reloaded by a profile switch is what they see.
 	registry, err := toolRegistry(root, pc, e.secrets, e.environ)
 	if err != nil {
-		_ = manager.Close()
 		return nil, fmt.Errorf("registering tools: %w", err)
 	}
 	e.registry = registry
@@ -284,11 +354,24 @@ func newEngine(ctx context.Context, as assembly) (*rpcEngine, error) {
 	return e, nil
 }
 
-// closeMCP releases the MCP sessions and their subprocesses, if any.
+// closeMCP releases owned helpers, storage and roots once the engine has stopped.
 func (e *rpcEngine) closeMCP() {
-	if e.mcp != nil {
-		_ = e.mcp.Close()
-	}
+	e.closeOnce.Do(func() {
+		var err error
+		if e.mapIndex != nil {
+			err = errors.Join(err, e.mapIndex.Close())
+		}
+		if e.workspace != nil {
+			err = errors.Join(err, e.workspace.Close())
+		}
+		err = errors.Join(err, e.primaryRoot.Close())
+		if e.mcp != nil {
+			err = errors.Join(err, e.mcp.Close())
+		}
+		if err != nil && e.notices != nil {
+			fmt.Fprintf(e.notices, "hint: cleanup: %s\n", config.Redact(err.Error(), e.secrets()))
+		}
+	})
 }
 
 // secrets is every configured API key, for the redaction of tool results.
@@ -440,17 +523,20 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	})
 	initial := pre.initial()
 	live := &rpcSession{
-		id:      id,
-		created: time.Now(),
-		eng:     e,
-		file:    sess,
-		rec:     session.NewRecorder(sess, len(initial)),
-		pre:     pre,
-		gate:    gate,
-		slot:    slot,
-		notices: e.notices,
-		trace:   e.trace,
+		workspace: e.workspace.NewSession(),
+		id:        id,
+		created:   time.Now(),
+		eng:       e,
+		file:      sess,
+		rec:       session.NewRecorder(sess, len(initial)),
+		pre:       pre,
+		gate:      gate,
+		slot:      slot,
+		notices:   e.notices,
+		trace:     e.trace,
 	}
+	live.restoreWorkspace()
+	pre.lookup = live.lookupSessionTool
 	// The default profile as the configuration stands now; the engine's
 	// own provider is the fallback should it have become unusable since.
 	ref := e.defaultRef()
@@ -476,9 +562,14 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 // rpcSession is one open conversation. The server does not call RunTurn
 // twice at once.
 type rpcSession struct {
-	id      string
-	created time.Time
-	eng     *rpcEngine
+	workspace        *workspace.Session
+	repoInstructions repoInstructions
+	reposMu          sync.Mutex
+	repoHistory      []session.WorkspaceRef
+	repoTurns        int
+	id               string
+	created          time.Time
+	eng              *rpcEngine
 	// file is nil for an ephemeral session.
 	file    *session.Session
 	rec     *session.Recorder
@@ -502,9 +593,11 @@ type rpcSession struct {
 	profile rpc.ProfileRef
 	// agChat and agLimits are what use built the agent from; applyMCP
 	// rebuilds it with the MCP tools once they are loaded.
-	agChat     agentapi.ChatProvider
-	agLimits   agent.Limits
-	mcpApplied bool
+	agChat          agentapi.ChatProvider
+	agLimits        agent.Limits
+	mcpApplied      bool
+	catalogMode     repomap.Mode
+	catalogRevision uint64
 
 	// warnedSave remembers that the "session not fully saved" notice was
 	// printed, so a conversation on a broken disk says it once, not per
@@ -548,19 +641,33 @@ func (s *rpcSession) Profile() rpc.ProfileRef {
 // before the first request if the session cannot be written at all; a
 // read-only disk is better learned about now than after the answer.
 func (s *rpcSession) RunTurn(ctx context.Context, text string, ask permission.Prompter) (<-chan agentapi.Event, error) {
+	s.eng.indexModeMu.RLock()
+	release, err := s.workspace.BeginTurn()
+	if err != nil {
+		s.eng.indexModeMu.RUnlock()
+		return nil, fmt.Errorf("begin workspace turn: %w", err)
+	}
+	releaseWorkspace := release
+	release = func() {
+		releaseWorkspace()
+		s.eng.indexModeMu.RUnlock()
+	}
 	s.slot.set(ask)
 	// MCP servers start on the first turn, not while the engine is built.
 	// A failure here is a turn failure, before anything is recorded.
 	if err := s.eng.ensureMCP(ctx); err != nil {
+		release()
 		s.slot.set(nil)
 		return nil, err
 	}
 	s.applyMCP(ctx)
 	user := agentapi.UserMessage(text)
 	if err := s.rec.Append(user); err != nil {
+		release()
 		s.slot.set(nil)
 		return nil, err
 	}
+	s.repoTurns++
 	history := append(append([]agentapi.Message{}, s.pre.initial()...), s.rec.Messages()...)
 	s.agMu.Lock()
 	ag := s.ag
@@ -569,6 +676,7 @@ func (s *rpcSession) RunTurn(ctx context.Context, text string, ask permission.Pr
 	out := ag.RunTurn(ctx, history)
 	ch := make(chan agentapi.Event)
 	go func() {
+		defer release()
 		defer close(ch)
 		defer s.slot.set(nil)
 		for ev := range out {
@@ -777,24 +885,31 @@ func systemPrompt(pc *project.Context, instructions []project.Instruction, pendi
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// applyMCP refreshes the preamble and rebuilds the session's agent after the
-// one lazy MCP load. The permission gate and recorder survive; the prompt and
-// tool list now include configured resources and MCP tools.
+// applyMCP rebuilds after lazy MCP loading or a between-turn capability change.
+// The permission gate and recorder survive; a new agent drops the previous
+// request's context-cost baseline when its tool catalog changes.
 func (s *rpcSession) applyMCP(ctx context.Context) {
 	s.agMu.Lock()
 	defer s.agMu.Unlock()
-	if s.mcpApplied {
+	var mode repomap.Mode
+	if s.eng.mapIndex != nil {
+		mode = s.eng.mapIndex.Mode()
+	}
+	_, revision := s.workspace.Snapshot()
+	if s.mcpApplied && s.catalogMode == mode && s.catalogRevision == revision {
 		return
 	}
+	s.catalogMode = mode
+	s.catalogRevision = revision
 	s.mcpApplied = true
 	s.pre.refresh(ctx)
 	if s.agChat == nil {
 		return
 	}
 	s.ag = agent.New(s.agChat,
-		agent.WithTools(s.eng.registry.Tools()...),
+		agent.WithTools(s.sessionTools()...),
 		agent.WithAuthorizer(s.gate),
 		agent.WithLimits(s.agLimits),
-		agent.WithPreamble(s.pre),
+		agent.WithPreamble(s.workspacePreamble()),
 	)
 }

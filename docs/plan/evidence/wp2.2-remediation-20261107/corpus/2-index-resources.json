@@ -1,0 +1,10 @@
+{
+  "run": 2,
+  "mode": "index",
+  "returncode": 0,
+  "peak_process_family_rss_bytes": 117129216,
+  "rss_samples": 44,
+  "sampling_interval_seconds": 0.1,
+  "elapsed_seconds": 5.068369542000001,
+  "test_binary_sha256": "9da5a6b851c27ca50b4021139540befbbab91f9ee19ef26ca1549cbe2c765529"
+}

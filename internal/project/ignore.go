@@ -2,15 +2,16 @@ package project
 
 import (
 	"context"
-	"errors"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 )
 
 // Ignorer decides which entries a walk of a directory skips. rel is the
 // slash-separated path of the entry relative to the directory the Ignorer
-// was built for ("." names that directory and is never ignored); isDir
+// was built for ("." names that directory and is never ignored); escaping
+// or invalid paths are ignored without accessing them. isDir
 // lets a whole subtree be pruned in one answer.
 type Ignorer interface {
 	Ignored(rel string, isDir bool) bool
@@ -57,6 +58,9 @@ var Basic Ignorer = basic{}
 // answer for a nested path is the same whether or not a walk pruned its
 // parent first.
 func (basic) Ignored(rel string, isDir bool) bool {
+	if !localIgnorePath(rel) {
+		return true
+	}
 	if rel == "." || rel == "" {
 		return false
 	}
@@ -72,62 +76,18 @@ func (basic) Ignored(rel string, isDir bool) bool {
 	return false
 }
 
-// gitIgnorer layers git's view of a directory over [Basic]: an entry is
-// kept only when `git ls-files` listed it (tracked, or untracked and not
-// ignored) or listed something beneath it.
-type gitIgnorer struct {
-	files map[string]struct{} // every path git listed, relative to the directory
-	dirs  map[string]struct{} // every ancestor directory of a listed path
-}
-
-func newGitIgnorer(listed []string) *gitIgnorer {
-	g := &gitIgnorer{
-		files: make(map[string]struct{}, len(listed)),
-		dirs:  make(map[string]struct{}),
-	}
-	for _, p := range listed {
-		p = path.Clean(p)
-		g.files[p] = struct{}{}
-		for d := path.Dir(p); d != "." && d != "/"; d = path.Dir(d) {
-			if _, seen := g.dirs[d]; seen {
-				break
-			}
-			g.dirs[d] = struct{}{}
-		}
-	}
-	return g
-}
-
-func (g *gitIgnorer) Ignored(rel string, isDir bool) bool {
-	if Basic.Ignored(rel, isDir) {
-		return true
-	}
-	rel = path.Clean(rel)
-	if rel == "." {
-		return false
-	}
-	if isDir {
-		if _, ok := g.dirs[rel]; ok {
-			return false
-		}
-	} else if _, ok := g.files[rel]; ok {
-		return false
-	}
-	// git lists a submodule as one entry at its mount point; everything
-	// beneath such an entry is kept, since git cannot say more about it.
-	for d := path.Dir(rel); d != "." && d != "/"; d = path.Dir(d) {
-		if _, ok := g.files[d]; ok {
-			return false
-		}
-	}
-	return true
+// localIgnorePath checks the API's lexical boundary before any policy or
+// filesystem access. Walkers separately enforce symlink and root authority.
+func localIgnorePath(rel string) bool {
+	return !strings.ContainsRune(rel, 0) && (rel == "" || filepath.IsLocal(filepath.FromSlash(rel)))
 }
 
 // Rules builds the [Ignorer] for a directory. With a git executable it
 // asks git inside a repository and falls back to [Basic] elsewhere; with
 // none it is [Basic] everywhere.
 type Rules struct {
-	git string
+	git     string
+	environ func() []string
 }
 
 // NewRules returns Rules using the git executable at gitPath, or the
@@ -136,21 +96,15 @@ func NewRules(gitPath string) Rules {
 	return Rules{git: gitPath}
 }
 
-// Ignorer returns the rules for dir. The Ignorer is always usable: when
-// git cannot answer for an unexpected reason (a corrupt index, a killed
-// process) the result is [Basic] and the error says why, so a caller
-// that has somewhere to report it can. Not being in a repository, or
-// having no git at all, is the expected case and reports no error.
+// Ignorer returns bounded, demand-driven rules for dir without listing files.
+// A missing Git worktree uses Basic; a failed policy observation is fail-closed
+// and can be reported through IgnoreError after traversal.
 func (r Rules) Ignorer(ctx context.Context, dir string) (Ignorer, error) {
 	if r.git == "" {
 		return Basic, nil
 	}
-	listed, err := gitListFiles(ctx, r.git, dir)
-	if err != nil {
-		if errors.Is(err, ErrNotRepository) {
-			return Basic, nil
-		}
-		return Basic, err
+	if _, ok := FindGitRoot(dir); !ok {
+		return Basic, nil
 	}
-	return newGitIgnorer(listed), nil
+	return newLazyGitIgnorer(ctx, r.git, dir, r.environ)
 }

@@ -1,15 +1,20 @@
 # Phase 2 — Memory, MCP, A2A, open integration surfaces, code maturity
 
-> Status: In progress · Target release: **v0.4** · Estimate: 8–10 weeks (part-time)
+> Status: In progress · Target release: **v0.4** · Estimate: re-estimation required after workspace/index decomposition; the previous 8–10 weeks excluded that scope
 > Depends on: Phase 1
-> Exit bar: core parity with a mature coding agent, plus `hint` reachable by and able to reach other agents.
+> Exit bar: core parity with a mature coding agent, workspace navigation and incremental indexing, plus `hint` reachable by and able to reach other agents.
 
 ## Goal
 
-Open the agent to the outside in every direction it can be extended — tools (MCP servers, HTTP APIs described by OpenAPI), other agents (A2A, both as caller and as callee), instructions (MCP prompts and resources next to the rule files) and knowledge (local databases, document indexes) — make it effective on large codebases (repo map), give it long-term memory (vector store), plus deeper git integration and smarter compaction.
+Open the agent to the outside in every direction it can be extended — tools (MCP servers, HTTP APIs described by OpenAPI), other agents (A2A, both as caller and as callee), instructions (MCP prompts and resources next to the rule files) and knowledge (local databases, document indexes) — make it effective across explicitly attached repositories and ordinary folders through bounded workspace navigation, incremental indexing and on-demand code maps, give it long-term memory (vector store), plus deeper git integration and smarter compaction.
 
 Every surface goes through the same two gates the architecture already fixes: the permission layer (a class per tool, confirmation for writes and commands) and the untrusted-input rule (what comes back from a tool, a server, an agent or a document is data, never instructions).
 Added 2026-10-18 together with WP2.6 and WP2.7.
+
+Release scope confirmed on 2026-11-06: multiple roots, the shared lexical document/notes index and the on-demand code map all target v0.4.
+Optional PDF extraction and heavy OCR retain explicit capability/admission rules; their absence does not block ordinary navigation.
+The workspace/index foundations are required release capabilities, but their proposed WP2.11/WP2.12 decomposition still needs formal work packages and review.
+Re-estimate the phase after that decomposition and the parser/backend measurements; do not carry forward the old estimate or invent a new duration without those inputs.
 
 ## Work packages
 
@@ -72,21 +77,341 @@ MCP resources and prompts, the live reference-server integration test, and the f
 
 ### WP2.2 — Repo map
 
-Requires tree-sitter (cgo) → build-tag isolation, see risks.
+**Branch:** `dev/wp2.2-repo-map`
 
-- [ ] go-tree-sitter parsing → def/ref tags per file
-- [ ] File graph + PageRank ranking of symbols
-- [ ] Map rendered into a 1–2k token budget, included in the system prompt
-- [ ] SQLite cache keyed by file mtime
-- [ ] `cgo`-free fallback: no repo map, warning once (core must still build without cgo)
-- [ ] Benchmark: map build time on a 100k-line repo
+Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
+Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
+The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
+The owner accepted the remediation on 2026-11-07, subject to correcting the FIFO-test coverage and synchronizing the documents.
+The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements are the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+The remediation checklist below records the acceptance work and its evidence for this branch.
+The [remediation record](evidence/wp2.2-remediation-20261107/README.md) is the current review handoff; the [original corpus measurements](evidence/wp2.2-mac-20261106/README.md) and [catalog scaling evidence](evidence/wp2.2-mac-20261106/metadata.md) remain historical measurements.
+Local Mac checks do not satisfy the Pi 4/local-model 8k/32k gates; those measurements moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
+
+Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
+The read-class `repo_map` tool returns signatures, enclosing type/module context and source locations without function bodies.
+Maps are tool results, never automatically inserted into the system prompt; no model-window threshold or `map_control` is required.
+Ordinary file access and scoped symbol lookup must not wait for full discovery, parsing or deferred background graph work.
+
+#### Package boundaries and workspace contract
+
+The product includes user-added Git repositories, separate worktrees and ordinary folders, with multiple roots available in one task.
+A URL source becomes available only after a successful clone.
+Nested repositories and submodules are attached explicitly as separate roots; the parent shows their boundary and does not index or operate on their contents through the parent identity.
+Users add or remove roots between turns, with membership revisions recorded in session history.
+The user interface is `/repos` and a paginated text tree in both shells; the agent requests the code map separately.
+
+Keep workspace administration and the shared index in separate internal packages, while integrating their necessary baseline in this branch:
+
+| Area | Interface consumed by WP2.2 | Status of the boundary |
+|---|---|---|
+| Workspace foundation | Authorized scoped root/entry handles, membership revisions, prepared instructions and paginated navigation/status | Included in WP2.2 under the owner-authorized scope exception; `internal/workspace` owns authority and the RPC engine owns administration |
+| Shared-index baseline | Versioned source observations, declaration storage/query generations, invalidation, bounded scheduling leases and coverage/status | Included in WP2.2 under the same exception; `internal/index` owns the disk catalog and frontier, with one shared manager for bounded work |
+| WP2.2 | Code extraction, scoped symbol lookup and bounded deterministic map rendering | Consumes those contracts without introducing another catalog or worker pool |
+
+Scope exception under the planning conventions: #93 requires these foundations to provide a usable end-to-end map, and the owner explicitly requested completion in the existing branch rather than splitting the implementation after review.
+The delivery order remains workspace navigation, the shared indexing baseline, then code-map integration and acceptance.
+The tentative WP2.11/WP2.12 branch names were proposals, not separate implemented packages; later document/notes work still requires its own finalized scope, issue and branch.
+The shared index's first document-search profile is Russian/English, with basic lexical support for other languages; semantic retrieval is later work under WP2.3.
+PDF text extraction may require a user-connected local module, and OCR remains a separate optional heavy capability.
+Persistent agent notes live outside roots, may be saved automatically within a narrow permission grant, and depend on verified source observations.
+They are untrusted, separately labeled suggestions and do not change source-hit ranking by default; rebuilding derived caches never deletes durable notes.
+Document extraction, note storage, URL browsing, embeddings, reference-graph extraction/PageRank, an interactive file panel and a mandatory background daemon are not WP2.2 deliverables.
+
+The detailed [code-map contract](repo-map-contract.md) defines request/result fields, byte limits, cursor/error semantics, freshness and the consumed workspace/catalog/scheduler interfaces.
+It belongs to this work package; completed component checks do not by themselves establish full phase acceptance.
+
+#### Extraction, retrieval and ranking
+
+Use `go/ast` for Go.
+The pinned comparison selected wasitter v0.1.0 through wazero v1.10.1 for Python, JavaScript, TypeScript/TSX and Rust; [adapter evidence](../../internal/repomap/extract/README.md) records grammar provenance, binary/cold/warm costs and the gotreesitter tradeoff.
+The shared catalog uses modernc.org/sqlite v1.61.1 to retain CGO-free builds; this does not select a semantic-search or document-extraction backend.
+Bound source bytes, extraction output, worker concurrency, per-job deadline and capture/work-unit counts where supported, with tested interruption and explicit incomplete-parse detection.
+The deadline is the minimum of caller and job limits; synchronous `context.WithTimeout` alone does not stop an uncooperative parser, including `go/ast`.
+Require native interrupt/fuel or process supervision before admitting such an adapter to automatic background work; do not release a lease while canceled work still runs.
+Unsupported, oversized, paused, timed-out, work-budget-exhausted or failed sources remain visible files with an omission reason.
+A parser failure or missing optional capability does not make the workspace unavailable.
+
+Accept explicit root/subtree scope and exact/prefix symbol queries over all indexed tags in that scope before truncating output.
+Apply current root permissions and exclusions before ordering and output selection.
+The request selects `repo` (ID/alias, default immutable primary), `path` or scoped `entry_id`, optional `symbol`/`match`, and a bounded `limit`; continuation accepts only `cursor`.
+The ceiling is 8192 UTF-8 bytes of the serialized JSON text payload, including escaping, metadata and cursor, further reduced by the configured output limit.
+The builder emits whole records, not head/tail-truncated JSON; integrate with the existing tool limits without losing the cursor or bypassing permission/cancellation.
+Every result identifies `root_id`, `membership_revision`, scope, observed generation, file versions/freshness, coverage, capability state, truncation and relevant failures.
+Cursor state binds query, scope, membership/policy revisions, a retention reservation and last consumed key, with bounded lifetime and no open transaction between calls.
+Bound examined records and index-read bytes as well as results; normal work-slice exhaustion returns partial progress, retaining any candidate whose mandatory checks or complete output did not fit.
+Expiry, changed membership/policy or generation eviction returns `stale_cursor`, never a silent restart; errors remain explicit in the JSON text as well as `ToolResult.IsError`.
+`paused`, incomplete coverage and unsupported files are response states, not request errors; `/repos` and `repo_list` expose detailed capability/status on demand.
+An empty page with `query_complete: false` is not a negative lookup; only a completed traversal without matches establishes absence in that indexed generation, never absence on disk.
+
+The first version labels deterministic `(relative_path_bytes, start_byte, kind, symbol_id)` ordering as `path` for unfiltered/exact lookup, and `(name_bytes, relative_path_bytes, start_byte, kind, symbol_id)` as `name` for prefix lookup.
+Exact spellings naturally precede their longer extensions in name-byte order, avoiding a global sort or duplicate exact-match bucket.
+No references or dependency graph are extracted, and equal names across files or roots do not imply semantic bindings.
+PageRank is deferred to a separately reviewed experiment defining reference roles, node model, repeated-name policy, unresolved names and an exact oracle, followed by task-level benefit measurements.
+Its absence is not incomplete declaration coverage and does not block v0.4.
+
+#### Scale, freshness and resource limits
+
+The consumed foundation contract requires a disk-backed catalog/frontier and bounded positive-count `File.ReadDir(n)` batches; an output cap over `WalkDir` does not bound wide-directory memory.
+An all-files resident allowlist, whole-directory in-memory sort and materialized reference/definition Cartesian product are forbidden scalability shortcuts.
+Retain a bounded pool of active directory streams between work slices so reopening a huge directory does not repeatedly skip its tail.
+Restart unfinished enumeration idempotently after interruption and serve keyset pages from observed generations, with explicit partial/building and expired-cursor states.
+An unreadable/offline directory or canceled enumeration is not an empty directory; infer deletion of unseen children only after a successful completed enumeration.
+Do not promise an atomic live filesystem snapshot or a hard deadline for every filesystem operation.
+
+Index current working-file observations, including dirty and eligible untracked files, rather than assuming Git commit state is current.
+Reuse authorized reads and prioritize agent-touched files; a partial read covers only its observed range.
+Version derived data by root, source and extractor policy, invalidate Hint edits promptly, and reconcile external changes incrementally.
+File stats cannot prove freshness after equal-size, restored-mtime edits.
+`content_checked` requires a full candidate reread/hash match during the request, matching extractor policy, no detected read race and rechecked access; otherwise use `observed` without implying current-source verification.
+Known changed/deleted/inaccessible sources are suppressed, not relabeled `observed`; partial reads cannot validate a whole AST or enclosing context.
+The proposed optional hashing budget is four distinct files, 1 MiB and 100 ms of cooperative work per response; mandatory access/metadata checks have a separate finite query budget, whose exhaustion preserves the next candidate for continuation.
+Background reconciliation and candidate rehash discover external same-stat edits; `content_checked` describes the bytes checked at a time, not an immutable filesystem snapshot or permission to edit without a current read.
+Recheck current access before publishing cached signatures/ranges, and invalidate affected jobs/cursors on root-membership changes.
+Preserve rooted file access, existing exclusions, the permission layer and RPC shell separation; the index never grants access.
+The primary root is immutable/default and grants no automatic parent access; only user-owned actions/configuration add roots or enable extractors.
+Project files, tool output and notes cannot expand authority; nested ownership also applies through symlink aliases, and submodules are not initialized automatically.
+Revocation prevents queued and in-flight publication to the affected session; root instructions precede the first edit/execute, and the shell remains outside file-tool confinement.
+
+One resource scheduler governs discovery, extraction and maintenance across roots, with fair background progress when capacity permits.
+Indexing is quiet, resumable and optional; explicit status requests show progress and pause reasons without chat spam.
+On Pi 4 with 4 GB and a local model, auto mode pauses expensive work under resource pressure while retaining live access and bounded queries over existing data.
+Admission and hysteresis follow the [scheduler contract](repo-map-contract.md#resource-admission-and-resumption): memory/CPU/I/O/disk signals, sample age, leases and inference activity, including completion/compaction/fallback requests.
+Stop background admission on high-water conditions and pause background extraction/maintenance during inference in the low-resource auto profile; foreground queries retain their own finite budgets.
+Handle emergencies immediately and resume background work only after all lower-water conditions hold for the configured dwell/cooldown; explicit `on` does not override authority, finite budgets or emergency protection.
+Unknown telemetry is not zero pressure; numerical profiles must be measured and published before automatic execution is enabled.
+The proposed evaluation targets are at most 128 MiB additional indexing RSS and no more than 5% median inference degradation; these are unmeasured review targets, not achieved limits.
+Measure all helpers, cache pressure, temporary disk and I/O alongside model latency and throughput.
+Arbitrarily large trees require bounded active work, not infinite storage or constant completion time; completion needs enough storage, available work time and a sufficiently stable tree.
+
+#### Evidence and validation
+
+[The parser benchmark ledger](https://github.com/odvcencio/gotreesitter/blob/main/BENCH.md), [the API-route timeout reproduction](https://github.com/odvcencio/gotreesitter/issues/1558) and [WASM adapter limits](https://github.com/zema1/wasitter/blob/main/USAGE.md) motivate a pinned comparison of correctness, cold/warm extraction, memory and cancellation rather than selecting a parser from headline timings.
+The timeout report concerns C++ and does not prove a defect in every proposed language or that its tested native deadline fails.
+[Aider's ranking implementation](https://github.com/Aider-AI/aider/blob/main/aider/repomap.py), [a firsthand output report](https://github.com/Aider-AI/aider/issues/3932) and [an original retrieval comparison](https://agent-retrieval-bench.github.io/blog.html) motivate signature and task-level evaluation; the comparison's Aider-style baseline is not Aider itself.
+The historical local spike allocated weighted rank to source declarations rather than destination declarations, so its ranking results are not Aider-parity evidence.
+Document full-text backend comparison remains part of the later lexical foundation: compare pure-Go SQLite/FTS5, Bleve and a Tantivy helper under equal retrieval semantics without tying stable source identities to a postings format.
+Public research has not established a universal backend winner or verified this design's Pi resource targets.
+
+The completed checks below record the earlier implementation evidence.
+They do not close the subsequent review findings; the remediation checklist requires new regression evidence and a final verification pass.
+
+- ✅ Record the owner-authorized scope exception and prerequisite package boundaries in this branch (2026-11-06); the owner accepted the result for merge on 2026-11-07.
+- ✅ Test the request/result/error contract through actual limits/permission wrappers, including JSON escaping, small output caps, long entry handles, empty-but-advancing pages and deterministic pagination; `query_test.go`, `model_test.go` and structured-redaction fixtures pass.
+- ✅ Bound examined records and index-read bytes for rare prefixes and large excluded ranges; race regressions cover lossless continuation past 1,025 filtered candidates, 50 declarations in 50 files with a four-file hash budget, growth during bounded reading and concurrent generation/cursor admission.
+- ✅ Validate declarations, signatures, enclosing context and source ranges on adapter fixtures, malformed/incomplete/generated/minified sources and a pinned 248,811-line real polyglot corpus; the [local report](evidence/wp2.2-mac-20261106/README.md) retains three explicit TypeScript omissions rather than claiming full grammar coverage.
+- ✅ Record grammar versions, binary growth, cold/warm extraction cost, memory, finite job limits and interruption behavior, including a deliberately noncooperative helper fixture; see the [adapter evidence](../../internal/repomap/extract/README.md), worker tests and local report.
+- ✅ With controlled workspace/index fixtures, test authority and generation changes between query/publication, nested ownership, cursor expiry, paused/unavailable states, partial-read limits, same-stat rewrites and verification-budget exhaustion; component race checks passed.
+- ✅ With controlled scheduler/runner fixtures, test parser pause/cancellation, no premature slot reuse, no background-pool bypass and known-emergency cancellation; manager/governor/worker tests cover the delivered foundation, while document extraction and durable notes remain later work.
+- ✅ The 8k/32k schema-cost and call-behavior measurement moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) by the owner on 2026-11-07; the measurement itself is not claimed here.
+- ✅ Fix cold-request/catalog-change schema accounting without double-counting provider usage or changing the instruction-preamble budget; targeted agent tests, race checks and vet passed.
+- ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-remediation-20261107/verification.json).
+
+Scope note for the PR: this branch also contains the documentation-only Zed/ACP plan from `416ced3` in Phase 4.
+The owner accepted the rest of the PR scope on 2026-11-07; retain this small planning addition under the [documented branch-scope exception](README.md) instead of rewriting reviewed history.
+No Zed integration is implemented by WP2.2.
+
+- ✅ Disclose the inherited Zed/ACP planning-only change in this package and the PR scope note (2026-11-07).
+
+#### Review remediation checklist
+
+Recorded on 2026-11-06 after the owner's implementation-review feedback.
+Work through these slices sequentially in `dev/wp2.2-repo-map`.
+The owner explicitly requested this workflow in the conversation on 2026-11-07: implementation, self-review, verification and a separate local commit, followed by combined owner review.
+This records the conversation authorization required by AGENTS.md; the checklist itself grants no authority.
+Use `- [ ]` for work not started, `- ⏳` for work in progress and `- ✅` only when the stated checks pass.
+Every fix starts with a reproducing regression, followed by the implementation and targeted verification.
+That workflow authorization is limited to WP2.2 / #93 remediation and does not authorize pushing or closing issues.
+The subsequent owner request authorizes preparing the PR after the remaining FIFO-test and documentation corrections; publication is separate from drafting its text.
+
+##### Review consolidation
+
+- ✅ Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (review received; the remaining FIFO-test/documentation findings are recorded below).
+  Supplied concrete findings and their implementation/test/commit dispositions are consolidated in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md).
+- ✅ Withdraw the unspecified P0 requirement by explicit owner decision on 2026-11-07: its description was lost and the owner instructed that it need not be fixed.
+  No P0 scenario was recovered, reproduced or fixed; this is an owner dismissal, not technical verification.
+  All concrete supplied findings are recorded and disposed below.
+- ✅ Distinguish demonstrated defects, intentional tradeoffs and defensive hardening in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md), including the explicit owner dismissal of the lost P0 (2026-11-07).
+
+##### Slice 1 — Safe source access and path identity
+
+The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
+Extraction and freshness-validation opens admit only regular files, and discovery opens admit only directories.
+Slice 1 implementation and local verification are complete; owner review passed, with the final policy-test coverage correction recorded below.
+
+- ✅ Reproduce the existing FIFO policy-read hang in a subprocess with an external deadline and implement regular-file admission (2026-11-07).
+  The original replacement trigger ran during boundary verification before pre-stat; that test did not establish an open-time replacement race.
+  The corrected trigger counts all Verify checks, then the pre-stat and Root.OpenFile checks; two mutation tests now establish the intended coverage.
+- ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
+  `TestPolicyFIFO` now covers an existing FIFO and deterministic replacement immediately before the rooted open, with a parent-process timeout protecting the test itself.
+  Removing O_NONBLOCK makes the replacement subtest time out; removing the opened-descriptor type check makes it reject with the wrong error.
+  [Mutation evidence](evidence/wp2.2-remediation-20261107/fifo-validation.json) records both detected regressions; production source was unchanged by the build overlays.
+  `TestPolicyFingerprintRegularAdmission` covers absent/directory/canceled policy reads; runtime verification was on macOS, while Linux/Windows builds establish compilation only.
+  Current whole-source checks are recorded in the [verification artifact](evidence/wp2.2-remediation-20261107/verification.json).
+
+- ✅ Replace `Lease.Stat()`'s content open with rooted metadata observations and authority/identity rechecks; the FIFO subprocess regression failed by timeout before the fix and passes afterward (2026-11-07).
+- ✅ Verify FIFO metadata, file replacement, access revocation, nested boundaries and root replacement; targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
+  Self-review checked that metadata reads never open contents, errors return no metadata, and final authority checks reject revoked roots and changed ownership even when inode identity matches.
+  `TestLeaseStatFIFO`, `TestLeaseStatMetadata` and `TestLeaseStatRechecks` retain the regressions; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+  Runtime verification was on macOS; Linux/Windows cross-builds establish compilation only.
+
+- ✅ Use regular-file admission for extraction, post-parse rehash and cached-candidate validation; existing FIFOs and replacement before opening/after parsing no longer wait for a writer (2026-11-07).
+  `TestSourceFIFO` reproduced all four hangs before the fix and now checks durable omissions, suppressed stale declarations, ordinary-file recovery, cancellation, reusable admission and shutdown.
+  Self-review checked both source opens, type-change invalidation, omission publication authority and error-path descriptor ownership.
+  Whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+
+- ✅ Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation (2026-11-07).
+- ✅ Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient (2026-11-07).
+- ✅ Verify cancellation and manager shutdown after refused or interrupted source access without abandoning work that still owns the shared slot (2026-11-07).
+  `TestSourceFIFO/directory` additionally reproduced a directory-to-FIFO race by timeout before the fix and now verifies rejection with no retained stream and successful shutdown.
+  `Lease.OpenDirectory()` shares pre/post-open type, identity and authority checks with regular-file admission; `TestLeaseTypedOpen` covers both accepted and rejected types.
+  Self-review checked shared admission behavior and descriptor cleanup; arbitrary filesystem/device-driver latency remains outside the guarantee.
+  Targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy (2026-11-07).
+  `TestIgnoreRejectsEscapingPathsBeforeAccess` reproduced uncached Git access and cached-path admission; it and `TestPrepareIgnoreRejectsEscapingParentBeforeGit` now pass.
+  Self-review covered empty/root paths, cached decisions, batch preparation, NUL/absolute/traversal rejection and native Windows lexical forms without changing Git-root discovery or ancestor policy.
+  This is a lexical API boundary; walkers remain responsible for symlinks and rooted authority.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes (2026-11-07).
+  `internal/pathkey` owns separator normalization and canonical catalog-path validation; workspace/catalog wrappers share its entry-ID calculation.
+  `TestEntryIDMatchesWorkspaceNativePaths` retains fixed hash vectors and `TestCatalogPlatformPaths` checks source/frontier admission and lookup without losing raw bytes.
+  The Windows mismatch is established by the former differing hash inputs; its regression tests compile for Windows but were not executed on this macOS host.
+  Self-review checked byte preservation, root scope, root-marker separation, Windows drive/backslash rejection and the absence of case/whitespace normalization or new access grants.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Pass targeted access/path regressions and relevant portability checks, and retain the reviewed slice for final owner review (2026-11-07).
+
+##### Slice 2 — Discovery completion and stable policy revisions
+
+- ✅ Give frontier work explicit outcomes: completed observation/omission, delayed retry for temporary unavailability, and cancellation that preserves unfinished work (2026-11-07).
+- ✅ Retire or defer already queued items that become denied, unreadable or nested ownership boundaries instead of continuously rotating them in the hot queue (2026-11-07).
+- ✅ Preserve partial coverage for unreadable/offline directories; neither a failed scan nor a canceled scan proves emptiness or deletion (2026-11-07).
+  `TestFrontierTerminalAndRetryOutcomes` first reproduced all three hot-queue failures; it now covers terminal drain, delayed recovery, offline-root reconciliation, retained-stream cleanup and cancellation without false deletion.
+  `TestFrontierDelaySurvivesRestartAndNewInvalidation`, `TestFrontierV2MigrationPreservesWork` and `TestFrontierRetryUsesBoundedSeek` cover durable scheduling, revision races, migration/pin preservation and indexed ordering without a temporary sort.
+  Self-review added clearing stale directory omissions after successful enumeration and retrying failed root reconciliation; publication, retained descriptor ownership, cancellation and newer invalidations were rechecked.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the additional retained-stream regression passed under race checks.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch (2026-11-07).
+  `TestPolicyRevisionBeyondCacheCapacityAndReattachment` reproduced an unchanged second pass advancing epoch 140 to 152; it now preserves the epoch, advances once for an edit beyond 128 entries and restores it on root reattachment.
+  `TestPolicyObservationsAreDurableAndRootScoped` covers restart, absence/deletion/recreation, root separation and atomic rejection of canceled or oversized observations.
+  Self-review removed the per-root path map, preserved monotonic publication across concurrent tracking/observation, retained discovery after a failed revision read, and avoided keeping absent-policy tombstones.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded beyond-capacity edit case also passed under race checks.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries (2026-11-07).
+- ✅ Pass targeted discovery/policy regressions and retain this reviewed slice for final owner review (2026-11-07).
+
+##### Slice 3 — Query reservations and truthful results
+
+- ✅ Release reservations for failed new queries that never delivered a usable cursor and for definitively invalidated queries, using bounded cleanup independent of an already canceled caller context (2026-11-07).
+- ✅ Preserve reservations on retryable continuation errors; test that retrying the same cursor neither loses nor duplicates records (2026-11-07).
+- ✅ Release this manager's own reservations on normal shutdown without deleting reservations owned by another live process (2026-11-07).
+  `TestNewQueryFailureReleasesPin`, `TestContinuationRetentionDependsOnFailure` and `TestManagerCloseReleasesOnlyOwnedPins` reproduced leaked reservations, wrongly stale transient continuations and retained shutdown pins before the fix.
+  Retention regressions now also cover repeated encoding failures, cancellation after Pin, failed focused admission, cross-session rejection, canceled continuation and shutdown racing post-Pin cleanup.
+  Self-review added request-lifetime ownership before Pin, bounded retries for failed terminal cleanup and exact-ID batch release on shutdown; a canceled caller cannot prevent cleanup or delete another owner's reservation.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded lifecycle regression suite also passed under race checks.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task (2026-11-07).
+  `TestOversizedDeclarationBecomesDurableOmission` reproduced a 7,000-parameter Go declaration passing extraction but failing catalog admission; it now completes the task with `output_budget_exceeded` and reuses that observation until the source changes.
+  Additional regressions cover source-byte/declaration-count limits and reopening the catalog with a larger record allowance, which must invalidate the old cached omission.
+  Self-review accounted for catalog encoding overhead, all-or-nothing declaration publication and admission budgets in derived-source policy identity; a metadata record that itself cannot fit still reports the storage admission error.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions (2026-11-07).
+  `TestCoverageReasonsFollowScopeAndRetainedGeneration` reproduced missing reason buckets; it now checks count equality, retained generations, subtree isolation and optional-field removal at 1024 bytes.
+  Catalog regressions cover changing reasons/file kinds, root isolation and lazy v3-to-v4 classification without double-counting legacy contributions.
+  Self-review kept the vocabulary finite, updated reasons atomically with source counters, preserved unknown legacy reasons explicitly, and avoided all-file scans or per-file RAM state.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case (2026-11-07).
+  `TestMapDistinguishesUnavailableRootFromMissingScope` covers missing/replaced roots, missing files and stale retained cursors through the output wrapper.
+  `TestToolDisclosureUsesEffectiveOutputLimit` checks catalog construction, status and wrapped execution at 1/64/512/1023/1024/2048/unlimited bytes.
+  Self-review preserved transient continuation reservations, explicit access denial and delayed discovery retries for unavailable roots; integrators must supply their combined limits when constructing the catalog.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Add an explicit final root-list budget check and boundary tests (2026-11-07).
+  `TestRootListingFinalBudgetBoundary` covers 1023/1024/1025/2048-byte limits, escaped paths and complete pagination without duplicates or loss.
+  Self-review found no existing overflow; the final assertion is defensive hardening.
+  Targeted race checks, vet, pinned lint and formatting passed; whole gates are repeated at the final source state.
+- ✅ Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches (2026-11-07).
+  `BeforeBatch` runs only for nonempty batches; `TestBeforeBatchSkipsEmptyEOF` covers empty, single-entry and full batches.
+  `SkipAll` stops visitation but deliberately preserves cleanup failures, matching the repository rule not to discard errors; `TestSkipAllPreservesCloseFailure` also checks joined callback errors.
+  Targeted race checks for fswalk/project, vet, pinned lint and formatting passed; self-review checked the early-return/deferred-close paths.
+- ✅ Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers; retain this reviewed slice for final owner review (2026-11-07).
+
+##### Slice 4 — SQLite initialization, contention and recovery
+
+- ✅ Bound catalog initialization contention, including connection setup/PRAGMA waits, and distinguish BUSY, capacity, conflicting limits and permanent initialization failures (2026-11-07).
+  `OpenContext` applies one caller/operation deadline and 10 ms retries; SQLite internal BUSY waiting is zero on every connection, including reconnects.
+  Arbitrary filesystem/device syscalls remain non-preemptible, as documented.
+- ✅ Support concurrent Store instances/processes with identical persisted disk/pin allowances; reject conflicting allowances rather than letting another writer bypass the quota (2026-11-07).
+  Schema upgrades require stopping older binaries; changing the shared allowances requires a fresh derived cache.
+  Initialization acquires write ownership before reading the schema version, preventing duplicate migrations.
+- ✅ Test simultaneous initialization/migration and writes using two independent subprocesses, plus separate Store connections with conflicting storage/pin allowances (2026-11-07).
+  `TestOpenContentionIsBoundedAndRecovers` checks a 30 ms open budget against an exclusive lock and subsequent open/write recovery.
+  Cancellation before disk access and corrupt-database classification also have regressions.
+  Self-review checked reconnection limits, transaction rollback, persisted allowance consistency and the distinction between lock waiting and uninterruptible filesystem I/O.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status (2026-11-07).
+- ✅ Verify bounded retries and recovery after contention ends or capacity becomes available (2026-11-07).
+  `TestDiscoveryQuotaPreservesWorkAndCursorThenRecovers` uses a separate SQLite connection holding an exclusive lock, fills the shared 512 KiB allowance with frontier tasks, then frees completed tasks and verifies resumed file processing.
+  It checks preserved queued work, a usable preexisting cursor, truthful `storage_busy`/`storage_capacity` status and twenty attempted background slices that perform no retry work during cooldown.
+  Self-review added 1 s BUSY and 5 s capacity cooldowns and propagated failed frontier rotation instead of masking it as a successful slice.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
+- ✅ Pass targeted storage/recovery regressions and retain this slice for final owner review (2026-11-07).
+
+##### Slice 5 — Integrated acceptance and review handoff
+
+- ✅ Fix the additional self-review finding where root replacement after cursor resume returned retryable `root_unavailable` despite releasing the cursor (2026-11-07).
+  `TestRootReplacementAfterCursorResumeIsStale` reproduced the incorrect response, then passed with explicit `stale_cursor` and verified pin release.
+  Definitive continuation invalidation takes precedence over physical-root and cleanup errors; transient continuation tests still retain their reservation.
+  Targeted race checks, vet and pinned lint passed; final whole-source gates are repeated below.
+
+- ✅ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path (2026-11-07).
+- ✅ Complete the all-review disposition: concrete findings have linked fixes and regression evidence, the lost P0 is explicitly withdrawn, and release acceptance is tracked in #95 (2026-11-07).
+- ✅ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations (2026-11-07).
+- ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds after the FIFO-test correction (2026-11-07).
+  The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, before/after source diff and Git status, exact commands/results, lint version and production helper smoke checks.
+- ✅ Repeat the affected real-corpus cold/warm/query measurements and a 10k catalog smoke; retain historical 100k/1m measurements as historical only (2026-11-07).
+  The [measurement report](evidence/wp2.2-remediation-20261107/measurements.md) records three successful corpus pairs and the rejected ignored-directory fixture attempt.
+  Actual contention, frontier exhaustion and recovery are covered by regressions rather than inferred from metadata scaling.
+- ✅ Summarize the reviewed remediation commits in the [handoff](evidence/wp2.2-remediation-20261107/README.md) and submit the combined result for final owner review, without pushing or closing #93 (2026-11-07).
+
+#### Proposed follow-up — Catalog quotas and cleanup
+
+This is a proposed subsequent task, not an implemented work package or an existing issue.
+It improves storage efficiency and maintenance after #93's correctness and recovery requirements pass.
+Hangs, data loss, broken continuation and failure to recover from available capacity cannot be deferred here as optimizations.
+
+- [ ] Formalize the follow-up's scope, branch, issue and acceptance criteria under the planning conventions before implementation.
+- [ ] Introduce separate frontier/data budgets and processing headroom, with backpressure that preserves bounded discovery and useful file-processing progress.
+- [ ] Refine per-root GC to retain only necessary versions and consumed cursor anchors; active pins currently conservatively retain that root's obsolete versions.
+- [ ] Reclaim reservations left by crashed owners without deleting another live process's pins; define ownership and expiry behavior explicitly.
+- [ ] Define retention and bounded cleanup for detached-root obsolete versions and frontier tasks, accounting for other authorized sessions or processes.
+- [ ] Clean obsolete derived-cache schema files safely, preserving user data and any future durable notes.
+- [ ] Measure long-running wide/deep filesystem traversal, repeated edits, many roots, quota pressure and cleanup recovery separately from synthetic catalog insertion/query measurements.
+
+#### Separate acceptance task — Pi/model evaluation and auto mode (v0.4.0 release gate)
+
+The owner approved this split on 2026-11-07: #93 closes as a correct manually enabled capability, and the measurements become the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+`auto` stays paused until that gate passes.
+
+- ✅ Owner disposition (2026-11-07): #93 closes as a correct manually enabled capability; Pi/model acceptance moves to the v0.4.0 release gate.
+- ✅ Revised closure boundary recorded in this phase file and in #95 (2026-11-07), with the new task and its acceptance criteria.
+  The PR must explicitly supersede the old planning-only text in #93; that issue body is not evidence of the current implementation status.
+- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95): the owner runs the saved Pi 4 4 GB and local-model 8k/32k methodology there, retaining unsupported and unmeasured conditions explicitly.
+- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95), together with the numerical resource-profile and default-disclosure decisions.
+- ✅ `auto` stays paused; the v0.4.0 release gate is what can change it.
+
+Document full-text search, PDF/DOCX/OCR adapters, durable agent notes, semantic retrieval and reference ranking remain outside #93 as already specified above.
+Their later implementation does not replace any remediation item in this branch.
 
 ### WP2.3 — Vector memory
+
+WP2.3 owns embedding-backed storage and semantic retrieval for document chunks, notes and history.
+It consumes authorized source identities, locators, extractor versions and invalidation from the lexical foundation; WP2.7 only exposes/configures that capability through integration adapters.
+The dependency order for document search is the lexical foundation, then WP2.3 semantic indexing/retrieval, then WP2.7 integration; lexical search and code maps do not wait for embeddings.
 
 - [ ] First `Embedder` implementation: openai-compatible `/v1/embeddings` + Ollama
 - [ ] Storage: sqlite-vec
 - [ ] `memory_search` tool + automatic fact capture (opt-in)
-- [ ] Division of labor: repo map for code, vectors for documents/notes/history
+- [ ] Index and retrieve document chunks semantically with source locators, scoped authorization and deletion/version invalidation from the shared lexical foundation.
+- [ ] Keep semantic retrieval for documents, notes and history separate from WP2.2 code maps and the proposed shared lexical index; reuse source identities and freshness rules instead of duplicating the file catalog or durable navigation notes.
 - [ ] Privacy: memory store is per-user, local, excluded from logs
 
 ### WP2.4 — Git integration
@@ -138,7 +463,9 @@ Each is a small adapter onto what the core already has (the tool registry, the i
 - [ ] **Local databases as knowledge.**
   A read-only `sql` tool over SQLite and PostgreSQL connection strings from config (`databases:`), `SELECT` only, a row and byte budget, the schema offered to the model as an instruction outline; write access stays out until there is a sandbox story (see WP1.7's limits).
 - [ ] **Document indexes.**
-  Directories and URL lists in config indexed into the WP2.3 vector store on a schedule or on demand (`hint index`), so `memory_search` answers from the team's docs, not only from past sessions.
+  Configure and expose WP2.3's semantic document retrieval through integration adapters after the local lexical baseline; WP2.3 owns semantic indexing/retrieval, not this package.
+  The lexical baseline for explicitly attached folders, PDF/DOCX adapters and source-linked navigation notes belongs to the proposed shared-index package described under WP2.2, not a second index implemented here.
+  Document URL ingestion remains a separate integration surface; it is not implied by the workspace's clone-before-use Git URL support.
 - [ ] **Instruction sources beyond the repository.**
   A `rules:` list of extra rule directories and URLs (a team's shared rule pack, a company-wide `HINT.md`), fetched with a cache and a signature or pinned hash, read with the same budget and outline rules as `.hint/rules`.
 - [ ] **Procedure files (skills).**
@@ -213,12 +540,45 @@ Decisions (2026-11-04):
 - **Fork stays `f`.**
   `/new` does not take an id or a turn, and the session list does not grow a "new" row.
 
+## Workspace/index integration gates for v0.4
+
+These gates cover the phase's complete workspace/index scope.
+The authorized WP2.2 scope exception implements the workspace and code-catalog baseline; document adapters and durable notes still need their own formalized work package.
+The full workspace, lexical document/notes index and on-demand code-map scope is required for v0.4, with optional heavy modules allowed to be unavailable or paused.
+Approval of WP2.2 does not imply that the later document/notes implementation or its backend has passed review.
+
+| Owner | Verification boundary |
+|---|---|
+| WP2.2 component | Extraction correctness/cancellation, deterministic scoped retrieval, bounded JSON/cursors, schema cost and fake workspace/index/scheduler contract tests. |
+| Workspace baseline in WP2.2 | Root/entry identity, clone lifecycle, routing, nested ownership, membership history, instruction readiness and authorization. |
+| Code-index baseline in WP2.2 | Catalog/frontier, resource governor, invalidation, reconciliation and storage recovery. |
+| Later lexical document/notes foundation | Document adapters, lexical retrieval, durable notes and their source-validation/retention contracts. |
+| Phase integration | Real services working together across multiple roots, low-resource operation and measured task benefit. |
+
+- [ ] Formalize the remaining document/notes scope, branch, issue and acceptance criteria, then re-estimate v0.4 work using dependency order and measured parser/backend costs.
+- [ ] With real services, cover Git and ordinary folders, dirty/untracked files, separate worktrees, failed/interrupted clones, nested repositories/submodules, symlink aliases, duplicate names, detach/reattach and source changes; only explicitly authorized roots become available.
+- [ ] Exercise `/repos`, the paginated text tree and agent navigation in both shells through RPC; root changes occur between turns, instructions precede edits, and revocation suppresses queued/in-flight cached publications to the affected session.
+- [ ] In the index foundation, test 10k/100k/1m metadata entries, wide/deep trees, many roots and a tiny root competing with a huge one; assert bounded batches, queues, active streams/FDs, caches and staging disk, plus tail progress whenever capacity is available.
+  The [Mac catalog measurements](evidence/wp2.2-mac-20261106/metadata.md) complete the synthetic 10k/100k/1m cases, and manager tests cover tiny/wide-root progress, eight-stream capacity, blocked-child priority and retained-tail completion without repeated frontier scans.
+  This does not establish million-file filesystem traversal latency, peak staging disk under all workloads or hardware/model acceptance; the full phase gate remains open.
+- [ ] Cover watcher loss/overflow, external same-stat changes, offline/unreadable directories, interrupted enumeration, generation/cursor eviction, crash/restart and disk exhaustion; unfinished scans never imply deletion, and partial status never implies full coverage.
+- [ ] Index English/Russian text and DOCX with source locators, plus text-layer PDF through a connected local module; test absent modules, malformed/oversized inputs and optional OCR admission/cancellation without blocking live file access.
+- [ ] Persist and inspect/delete source-linked agent notes across sessions; changed/deleted or unauthorized sources invalidate their evidence, stale jobs cannot resurrect deleted notes, and rebuilding derived caches preserves durable notes.
+- [ ] Publish numerical resource profiles and verify governor hysteresis, telemetry loss, overlapping inference, emergency pause and resumable progress with fake clocks plus measurements on Pi 4 4 GB alongside a local model.
+- [ ] Compare indexing off/on in cold/warm conditions with the same model/configuration, storage and cooling; record additional RSS for the Hint process and all indexing helpers relative to the indexing-off baseline, CPU/I/O, temporary disk, p95/median latency, time to first token, throughput and thermal/throttling state against the proposed 128 MiB and 5% median-degradation targets.
+- [ ] Run paired tasks for live tools, file catalog, lexical text retrieval, symbol/map retrieval and added notes; report correctness, source-evidence accuracy, prompt/output tokens, tool calls, latency, index-creation cost and regressions before claiming a performance gain.
+
+The million-entry discovery fixtures do not replace WP2.2's separate 100k-line polyglot extraction corpus.
+The existing Pi hardware record predates indexing and includes thermal throttling; it is not evidence that these new resource targets have passed.
+Continuous pressure, unavailable storage or a perpetually changing tree may prevent index completion; live navigation and truthful partial results must remain usable.
+
 ## Acceptance criteria
 
 1. A third-party MCP server from config contributes tools that the agent uses under the permission system, a resource it serves is read as an instruction file, and a prompt it serves runs as a slash command.
-2. On a large repo, the agent answers "where is X implemented?" using the repo map without reading every file.
+2. Across attached Git and ordinary-folder roots, the agent answers "where is X implemented?" using an on-demand code map without reading every file, with explicit partial coverage and bounded resource use on large trees.
 3. `memory_search` recalls a fact stored in a previous session.
 4. With auto-commit on, every applied edit is a well-formed git commit.
 5. Another agent fetches `hint serve`'s Agent Card and completes a task through A2A, answering a permission question on the way; `hint` delegates a question to a remote agent named in its config and uses the answer under the permission system.
 6. An OpenAPI-described API and a read-only database appear as tools from config alone, each under its declared permission class.
 7. With more MCP tools than the WP2.1 budget, the agent finds and calls a hidden tool without a restart.
+8. The agent searches indexed text/documents and reuses source-linked notes across sessions; optional modules and resource pauses remain explicit, and deleting/rebuilding derived caches preserves durable notes.

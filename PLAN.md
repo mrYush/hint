@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-11-04
+> Status: living document · Last updated: 2026-11-07
 > Source of truth for the roadmap.
 > Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
@@ -56,9 +56,10 @@ Estimates assume one developer part-time; roughly halve them for full-time.
 | 0 | MVP CLI: agent loop, tools, permissions, sessions | v0.2.0 | 6–10 wk | [phase-0-mvp-cli.md](docs/plan/phase-0-mvp-cli.md) |
 | — | Install indexes: apt + Scoop, cask cleanup. Parallel with Phase 1; does not gate v0.3 | current final tag | — | [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) |
 | 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
-| 2 | Memory, MCP client, A2A, open integration surfaces, code maturity | v0.4 | 8–10 wk | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
-| 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
-| 4 | Desktop widgets (macOS/Windows/Linux) | v0.6 | 6–10 wk | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
+| 2 | Workspace/index, memory, MCP client, A2A, open integration surfaces, code maturity | v0.4 | Re-estimate after workspace/index decomposition and measurements | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
+| 2R | Post-v0.4 global review, product research and roadmap reset | v0.4.1 (conditional) | 2–3 wk | [phase-2r-review.md](docs/plan/phase-2r-review.md) |
+| 3 | Multimodality: VLM, attachments, terminal images, STT, TTS | v0.5 | 6–8 wk for WP3.1–WP3.4; WP3.5–WP3.6 re-estimated with the phase | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
+| 4 | Desktop widgets and editor integration (Zed over ACP, macOS/Windows/Linux) | v0.6 | 6–10 wk for the widgets; WP4.5 is re-estimated with the phase | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
 | 5 | Mobile: iPhone / iPad / Android | v0.7 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
 | 6 | Sensors and devices (parallel with 5) | v0.8 | 8–12 wk | [phase-6-sensors.md](docs/plan/phase-6-sensors.md) |
 | 7 | Feature store (third-party catalog) | v0.9–v1.0 | 10–14 wk | [phase-7-feature-store.md](docs/plan/phase-7-feature-store.md) |
@@ -69,6 +70,14 @@ Pre-release tags carry a suffix (`v0.2.0-alpha`); every tag is full semver, as G
 [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) publishes the current CLI to the indexes a user installs from: the Homebrew cask (macOS and Linux, already shipped), an apt repository (Ubuntu, Debian and the other apt systems, including Raspberry Pi OS) and a Scoop bucket (Windows).
 It runs **in parallel with Phase 1**.
 `v0.3` does not wait for it, and a tag that only updates those indexes is not the Phase 1 release.
+
+Scope added 2026-11-07 for `v0.5`, after `v0.4.0`: [WP3.5](docs/plan/phase-3-multimodality.md#wp35--image-and-document-attachments) attaches images and arbitrary documents from paths, URLs and the clipboard, and [WP3.6](docs/plan/phase-3-multimodality.md#wp36--images-in-the-terminal) draws images inline in the terminal, at least in the TUI.
+They do not change Phase 2 or the `v0.4` release gate.
+Phase 2R runs first and may revise that scope in the updated plan.
+
+Phase 2R is inserted between Phase 2 and Phase 3 (decided 2026-11-07).
+It starts immediately after the `v0.4.0` tag, does not renumber the later phases, and ends with the next version of this plan.
+It tags `v0.4.1` only for fixes the review accepts; otherwise it records the decision to skip the tag and Phase 3 starts from the updated plan.
 
 Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
@@ -107,7 +116,13 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   WP0.12 rungs 0–3 — instructions beyond the budget (the default budget scales to the profile's context window; every instruction file is guaranteed its outline before any gets more, so a nearer file is never dropped; an over-budget Markdown file shows whole sections while they fit and the rest as heading + first sentence + `[...]`; the read-only `instructions` tool returns a file, a section or the `path:line` a quoted rule comes from, over the run's discovered files only; opt-in `instructions.summarize` has a model summarize what not even outlines can fit, cached by content hash under `~/.cache/hint/instructions`).
   WP0.12 rung 4 — split rules (`.hint/rules/*.md` with `paths:` front matter and `.cursor/rules/*.mdc` as a compatible source; a rule with paths loads once a tool reads or writes a matching file, one without loads always after its directory's `HINT.md`; `agent.Preamble` rebuilds the system prompt before every request from the tool calls in the conversation, so `-c` needs nothing new; `tool.Toucher` is how the file tools name what they touch; the glob matcher is now `internal/glob`).
 - **Next:** Phase 2 (`v0.4`).
-  [WP2.10](docs/plan/phase-2-memory-mcp.md#wp210--new-start-a-fresh-session) is written down: `/new` starts a fresh session from the TUI and the line REPL (`dev/wp2.10-new-session`).
+  Implement and review [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map), including its necessary workspace/catalog/scheduler foundations, as authorized by the owner on 2026-11-06 in the existing `dev/wp2.2-repo-map` branch under [#93](https://github.com/mrYush/hint/issues/93).
+  The phase file records the scope exception and package boundaries; tentative WP2.11/WP2.12 proposals do not represent separately delivered foundations.
+  The owner accepted the WP2.2 remediation on 2026-11-07, subject to the final FIFO-test and documentation corrections now recorded in the [remediation record](docs/plan/evidence/wp2.2-remediation-20261107/README.md), together with verification evidence and the v0.4.0 release gate.
+  The lost unspecified P0 was explicitly withdrawn by the owner on 2026-11-07, not reproduced or fixed.
+  Earlier [corpus/catalog measurements](docs/plan/evidence/wp2.2-mac-20261106/README.md) remain historical evidence; the manual workspace/code-map smoke and the owner's Pi 4/local-model evaluation moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+  Multiple roots, document/notes indexing and the on-demand code map all target v0.4 (confirmed 2026-11-06); the old 8–10-week estimate excludes this scope and is withdrawn pending decomposition and measurements.
+  [WP2.10](docs/plan/phase-2-memory-mcp.md#wp210--new-start-a-fresh-session) records the completed `/new` checklist for the TUI and line REPL; it is independent of these foundations.
   `v0.2.0-alpha`, `v0.2.0`, `v0.3.0`, `v0.3.1` and `v0.3.2` are tagged; `v0.3.2` is the latest GitHub Release, the Homebrew cask in `mrYush/homebrew-tap`, the Scoop manifest in `mrYush/scoop-bucket`, and the package in the apt repository.
   WP0.1–WP0.12 have landed.
   [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) shipped with `v0.3.1`.
@@ -115,12 +130,38 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   B3, M1 and M2 stay known issues and are backlog (decided 2026-10-11); they did not block `v0.2.0` or `v0.3.0`.
   The Raspberry Pi 5 smoke is done (2026-11-02).
   The measured linux/arm64 log is the Pi 4 bench [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
+- **After `v0.4.0`:** Phase 2R — the [post-v0.4 review](docs/plan/phase-2r-review.md) runs before Phase 3.
+  It audits code, architecture and efficiency; re-researches the product landscape and change dynamics; rewrites the roadmap; and settles the [Adaptive Tuning Effect](docs/plan/adaptive-tuning.md) (Q12).
+  It tags `v0.4.1` only when the review accepts fixes.
 - Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare `hint` opens an interactive session, `hint -p` answers once, and both are JSON-RPC clients of a core served in the same process over a `net.Pipe` — the same bytes `hint serve` speaks, so `hint --connect` points the same shell at a core running in another terminal.
   The core runs the agent loop with every built-in tool registered behind the permission gate (it explores the project itself and can edit it and run commands with confirmation), reads the global and the project's `HINT.md`, and records every conversation as a session that `-c`, `-r` or `--session` continues; independent reads in one tool batch run in parallel, and instruction files that outgrow the budget arrive as outlines the `instructions` tool expands, or split into rules that load when the conversation reaches their paths.
   CI and the release pipeline are in place.
   `v0.2.0` and `v0.3.0` shipped while the audit fixes and the Pi 5 smoke were still backlog (2026-10-11); criterion 5 for those tags is the Pi 4 bench cited above.
   The Pi 5 smoke is done (2026-11-02).
   B1, B2 and S20 ship in `v0.3.2`; B3, M1 and M2 stay backlog.
+
+## Deferred WP2.2 review follow-ups
+
+Recorded on 2026-11-06 for [WP2.2](docs/plan/phase-2-memory-mcp.md#wp22--repo-map) and [issue #93](https://github.com/mrYush/hint/issues/93).
+These are documentation/review findings with explicit dispositions; remaining publication work stays open.
+R1–R5 below identify this review's findings, not the cross-cutting risk register.
+At each checkpoint, either apply the correction or explicitly dismiss the item with a dated rationale; retain the disposition here and reflect any contract/scope decision in the phase file.
+Revisit every remaining item at v0.4 release readiness rather than silently carrying it forward.
+
+- ✅ **R1 — Discovery contract; corrected 2026-11-06.**
+  The [consumed shared-index contract](docs/plan/repo-map-contract.md#consumed-shared-index-contract) now specifies catalog/frontier persistence, bounded `File.ReadDir(n)`, keyset pages, idempotent restart and the prohibitions on resident all-files allowlists/full-directory sorting.
+- ✅ **R2 — Coverage example; corrected 2026-11-06.**
+  The example accounts for 120 files as 80 indexed, 37 pending and 3 omitted, with omission buckets; directory/boundary metadata is excluded from code-file counts.
+- ✅ **R3 — Ordering names; corrected 2026-11-06.**
+  The contract defines `path` and `name` labels with canonical key tuples, and the phase plan uses those same names.
+- ✅ **R4 — Goal and deferred-ranking wording; corrected 2026-11-06.**
+  The Phase 2 Goal now includes multi-root workspace/index scope and the residual ranking reference explicitly names deferred graph work.
+- ✅ **R5a — Review evidence; recorded 2026-11-06.**
+  The [integration review](docs/plan/evidence/wp2.2-mac-20261106/integration-review.md) and [workspace review](docs/plan/evidence/wp2.2-mac-20261106/workspace-review.md) identify reviewer scope, findings, dispositions, regression evidence and limitations.
+  These are cross-component agent reviews, not independent human approval or completed Pi/model acceptance.
+- [ ] **R5b — Publication; after the owner publishes the documents.**
+  Make the repository contract canonical and replace the full copy in issue #93 with a link and concise summary.
+  Commits, pushes and a PR still require separate explicit user authorization; recording this follow-up grants none.
 
 ## Compatibility decision
 
@@ -173,6 +214,8 @@ Implemented by WP0.9 (2026-09-07); the alias prints a one-line note pointing at 
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
 20. ~~`v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction summary survives a prefix refresh, the usage baseline is reset after a reactive compaction — and the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41).~~ Done (2026-11-02), tagged `v0.3.2`; the cask, the Scoop manifest and the apt index name `0.3.2`.
     Then Phase 2 (`v0.4`).
+21. Phase 2R, immediately after `v0.4.0` (decided 2026-11-07): the global code/architecture/efficiency audit, the product and market research, the quality scorecard, the roadmap reset and the Adaptive Tuning Effect design (Q12).
+    It tags `v0.4.1` only for fixes the review accepts, and Phase 3 starts from the updated plan.
 
 ## Open questions
 
@@ -189,6 +232,7 @@ Implemented by WP0.9 (2026-09-07); the alias prints a one-line note pointing at 
 | Q10 | A2A: which side first — `hint` as an A2A client that delegates to remote agents, or `hint serve` as an A2A server other agents call — and which Go implementation to build on (the A2A project's Go SDK, or a thin client over the JSON-RPC spec) | Phase 2 (WP2.6) | Spike at the start of WP2.6: read the current spec, run the reference samples against `hint serve`, decide; recorded in [phase-2](docs/plan/phase-2-memory-mcp.md#wp26--a2a-hint-among-other-agents) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
 | Q11 | A local *conductor*: may `hint` run another harness — a second `hint` in a git worktree, a foreign coding CLI, an A2A agent — as a delegated subtask, and on which seam: a `Runner` beside `Tool`, or A2A only? A delegated harness owns its own loop, so the permission ceiling, the secret boundary of WP1.7 and the event model are the constraints, not details. | Phase 2 (WP2.6 fixes the seam); adapters come later | **Spike:** [`delegation.md`](docs/plan/delegation.md). No code before a spike, in this order: the `bash` sandbox layer ([architecture](docs/plan/architecture.md#implications-noted-for-the-plan)), then `hint`-in-`hint` over `-p --output json` in a worktree, then A2A (WP2.6), then a subprocess adapter for a foreign CLI. The hosted multi-tenant runner is a non-goal ([why-hint](docs/plan/why-hint.md#non-goals-stated-first)); only the local conductor is in scope. |
+| Q12 | How can `hint` make each user feel it is being fine-tuned to them — fewer repeated corrections over time — without training on their data or hiding a profile? | Phase 2R (design); implementation after `v0.5` at the earliest | **Spike:** [`adaptive-tuning.md`](docs/plan/adaptive-tuning.md) — the Adaptive Tuning Effect (ATE) with local in-context adaptation: preference memory, evidence, confidence, decay, a prompt budget, explicit approval for rules, and correction-rate and regression metrics. No code before Phase 2R accepts the design and the roadmap names a work package. |
 
 ## How this plan is maintained
 

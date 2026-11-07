@@ -76,7 +76,9 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 	fmt.Fprintf(&b, "%s%c\n", rel, filepath.Separator)
 	entries := 0
 	truncated := false
-	walkErr := t.root.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
+	walkErr := t.root.WalkDirBatch(abs, func(parent string, entries []fs.DirEntry) error {
+		return project.PrepareIgnore(ig, relSlash(abs, parent), entries)
+	}, func(path string, d fs.DirEntry, err error) error {
 		if path == abs {
 			return err
 		}
@@ -108,6 +110,9 @@ func (t *listDir) Run(ctx context.Context, callID string, args json.RawMessage) 
 		fmt.Fprintf(&b, "%s%s\n", indentFor(abs, path), name)
 		return nil
 	})
+	if walkErr == nil {
+		walkErr = project.IgnoreError(ig)
+	}
 	if walkErr != nil {
 		if errors.Is(walkErr, ctx.Err()) && ctx.Err() != nil {
 			return agentapi.ToolResult{}, walkErr
