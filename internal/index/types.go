@@ -13,10 +13,13 @@ import (
 
 // Errors distinguish resource admission, stale reservations and absent entries.
 var (
-	ErrTooLarge = errors.New("index: record or operation exceeds its finite budget")
-	ErrCapacity = errors.New("index: storage or reservation capacity reached")
-	ErrStale    = errors.New("index: snapshot expired or was released")
-	ErrNotFound = errors.New("index: entry not found")
+	ErrBusy           = errors.New("index: catalog is busy; retry later")
+	ErrInitialization = errors.New("index: catalog initialization failed")
+	ErrConfigConflict = errors.New("index: shared catalog resource limits conflict")
+	ErrTooLarge       = errors.New("index: record or operation exceeds its finite budget")
+	ErrCapacity       = errors.New("index: storage or reservation capacity reached")
+	ErrStale          = errors.New("index: snapshot expired or was released")
+	ErrNotFound       = errors.New("index: entry not found")
 )
 
 // Options bounds storage, SQLite cache and individual operations. Zero uses defaults.

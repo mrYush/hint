@@ -320,9 +320,17 @@ Slice 1 implementation and local verification are complete; final owner review r
 
 ##### Slice 4 — SQLite initialization, contention and recovery
 
-- [ ] Bound the complete catalog initialization path, including connection setup and PRAGMA work, and distinguish BUSY, capacity and permanent initialization failures.
-- [ ] Define supported ownership of the shared cache across Hint processes: concurrent access with tested recovery, or an explicit owner restriction that leaves ordinary Hint operation available.
-- [ ] Test simultaneous initialization and writes using separate Store instances/processes, including conflicting storage allowances; a concurrent test on one connection is insufficient.
+- ✅ Bound catalog initialization contention, including connection setup/PRAGMA waits, and distinguish BUSY, capacity, conflicting limits and permanent initialization failures (2026-11-07).
+  `OpenContext` applies one caller/operation deadline and 10 ms retries; SQLite internal BUSY waiting is zero on every connection, including reconnects.
+  Arbitrary filesystem/device syscalls remain non-preemptible, as documented.
+- ✅ Support concurrent Store instances/processes with identical persisted disk/pin allowances; reject conflicting allowances rather than letting another writer bypass the quota (2026-11-07).
+  Schema upgrades require stopping older binaries; changing the shared allowances requires a fresh derived cache.
+  Initialization acquires write ownership before reading the schema version, preventing duplicate migrations.
+- ✅ Test simultaneous initialization/migration and writes using two independent subprocesses, plus separate Store connections with conflicting storage/pin allowances (2026-11-07).
+  `TestOpenContentionIsBoundedAndRecovers` checks a 30 ms open budget against an exclusive lock and subsequent open/write recovery.
+  Cancellation before disk access and corrupt-database classification also have regressions.
+  Self-review checked reconnection limits, transaction rollback, persisted allowance consistency and the distinction between lock waiting and uninterruptible filesystem I/O.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; results are local in `.tmp/wp22-sqlite-contention-checks.json`.
 - [ ] Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status.
 - [ ] Verify bounded retries and recovery after contention ends or capacity becomes available; quota-induced busy loops or inability to recover remain #93 defects.
 - [ ] Pass targeted storage/recovery regressions and hand this slice to the owner for review.

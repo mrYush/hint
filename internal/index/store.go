@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS omission_counts (
  root TEXT NOT NULL, reason TEXT NOT NULL, count INTEGER NOT NULL CHECK(count>=0),
  PRIMARY KEY(root,reason)
 ) WITHOUT ROWID;
-PRAGMA user_version=4;
+PRAGMA user_version=5;
 `
 
 // Open creates or reopens a private catalog with finite cache and disk limits.
@@ -99,10 +99,44 @@ PRAGMA user_version=4;
 // one third minus fixed slack is admitted as database pages. DELETE journaling
 // avoids accumulating WAL between requests. Queries never require temp sorts.
 func Open(path string, options Options) (*Store, error) {
+	return OpenContext(context.Background(), path, options)
+}
+
+// OpenContext bounds initialization and contention retries by OperationTimeout
+// and the caller deadline. Filesystem syscalls themselves are not preemptible.
+func OpenContext(parent context.Context, path string, options Options) (*Store, error) {
 	options, err := normalizeOptions(options)
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(parent, options.OperationTimeout)
+	defer cancel()
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		store, err := openCatalog(ctx, path, options)
+		if err == nil {
+			return store, nil
+		}
+		if !errors.Is(err, ErrBusy) {
+			if errors.Is(err, ErrCapacity) || errors.Is(err, ErrConfigConflict) || ctx.Err() != nil {
+				return nil, errors.Join(err, ctx.Err())
+			}
+			return nil, errors.Join(ErrInitialization, err)
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, errors.Join(err, ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func openCatalog(ctx context.Context, path string, options Options) (*Store, error) {
+	var err error
 	if path == "" || path == ":memory:" {
 		return nil, fmt.Errorf("index: a durable database path is required")
 	}
@@ -128,9 +162,12 @@ func Open(path string, options Options) (*Store, error) {
 	}
 	pages := (options.MaxBytes - 64*1024) / (3 * pageBytes)
 	q := url.Values{}
+	// The driver applies DSN pragmas before its first context-aware query.
+	// Disable SQLite's internal waits even there; OpenContext owns retries.
+	// Keep per-connection limits in the DSN so replacement connections retain them.
 	for _, pragma := range []string{
 		"page_size(4096)", "journal_mode(DELETE)", "synchronous(FULL)", "temp_store(MEMORY)", "mmap_size(0)",
-		"busy_timeout(1000)", fmt.Sprintf("cache_size(-%d)", options.CacheKiB),
+		"busy_timeout(0)", fmt.Sprintf("cache_size(-%d)", options.CacheKiB),
 		fmt.Sprintf("max_page_count(%d)", pages),
 	} {
 		q.Add("_pragma", pragma)
@@ -143,12 +180,7 @@ func Open(path string, options Options) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	s := &Store{db: db, options: options}
-	ctx, cancel := s.context(context.Background())
-	defer cancel()
-	var version, actualPages, actualPageBytes int64
-	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err == nil && version != 0 && version != 2 && version != 3 && version != 4 {
-		err = fmt.Errorf("index: unsupported catalog schema version %d", version)
-	}
+	var actualPages, actualPageBytes int64
 	if err == nil {
 		err = db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&actualPageBytes)
 		if err == nil && actualPageBytes != pageBytes {
@@ -162,10 +194,13 @@ func Open(path string, options Options) (*Store, error) {
 		}
 	}
 	if err == nil {
-		err = s.initializeSchema(ctx, version)
+		err = s.initializeSchema(ctx)
 	}
 	if err == nil {
 		err = os.Chmod(path, 0o600)
+	}
+	if err == nil {
+		err = ctx.Err()
 	}
 	if err != nil {
 		return nil, errors.Join(storeError("initialize catalog", err), db.Close())
@@ -173,12 +208,34 @@ func Open(path string, options Options) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) initializeSchema(ctx context.Context, version int64) (err error) {
+func (s *Store) initializeSchema(ctx context.Context) (err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer rollbackTransaction(tx, &err)
+	// Acquire the writer lock before reading the schema version. Competing
+	// migrations cannot both observe v2 and attempt its ALTER TABLE.
+	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS catalog_limits (
+ id INTEGER PRIMARY KEY CHECK(id=1), max_bytes INTEGER NOT NULL, max_pins INTEGER NOT NULL);
+ INSERT OR IGNORE INTO catalog_limits VALUES(1,?,?)`, s.options.MaxBytes, s.options.MaxPins); err != nil {
+		return err
+	}
+	var maxBytes int64
+	var maxPins int
+	if err = tx.QueryRowContext(ctx, "SELECT max_bytes,max_pins FROM catalog_limits WHERE id=1").Scan(&maxBytes, &maxPins); err != nil {
+		return err
+	}
+	if maxBytes != s.options.MaxBytes || maxPins != s.options.MaxPins {
+		return fmt.Errorf("%w: catalog requires MaxBytes=%d, MaxPins=%d", ErrConfigConflict, maxBytes, maxPins)
+	}
+	var version int64
+	if err = tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version != 0 && version != 2 && version != 3 && version != 4 && version != 5 {
+		return fmt.Errorf("index: unsupported catalog schema version %d", version)
+	}
 	if version == 2 {
 		if _, err = tx.ExecContext(ctx, "ALTER TABLE frontier ADD COLUMN not_before INTEGER NOT NULL DEFAULT 0"); err != nil {
 			return err
@@ -235,8 +292,13 @@ func (s *Store) context(ctx context.Context) (context.Context, context.CancelFun
 
 func storeError(operation string, err error) error {
 	var sqliteError *sqlite.Error
-	if errors.As(err, &sqliteError) && sqliteError.Code()&0xff == 13 {
-		err = errors.Join(ErrCapacity, err)
+	if errors.As(err, &sqliteError) {
+		switch sqliteError.Code() & 0xff {
+		case 13:
+			err = errors.Join(ErrCapacity, err)
+		case 5, 6:
+			err = errors.Join(ErrBusy, err)
+		}
 	}
 	return fmt.Errorf("index: %s: %w", operation, err)
 }

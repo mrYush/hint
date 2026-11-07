@@ -46,7 +46,13 @@ An illustrative response, shown expanded for readability:
 File records deduplicate paths, hashes and freshness metadata shared by several declarations.
 Example handles are shortened for readability; implementation handles encode the complete SHA-256 digest with base64url and a root/file/symbol prefix.
 Source-version displays preserve the same complete digest.
-The local schema-v4 catalog migrates v2/v3 catalogs transactionally, retaining source observations, queued work and pins; the incompatible experimental v1 schema remains rejected.
+The local schema-v5 catalog migrates v2/v3/v4 catalogs transactionally, retaining source observations, queued work and pins; the incompatible experimental v1 schema remains rejected.
+Concurrent Store instances and Hint processes may share the catalog with the same persisted `MaxBytes` and `MaxPins`; conflicting allowances are rejected explicitly.
+Changing those shared allowances requires a fresh derived cache after all users close it; per-operation extraction limits may differ.
+Stop older binaries before a schema upgrade; mixed-version live writers are unsupported.
+SQLite connection setup uses zero internal BUSY wait, including its DSN pragmas; initialization retries every 10 ms within the caller deadline and `OperationTimeout`.
+Runtime BUSY/LOCKED, storage capacity, conflicting allowances and permanent initialization failures are distinct errors; no transaction is retained for an application-level retry.
+Context deadlines do not preempt arbitrary blocked filesystem or device syscalls.
 Declaration IDs are stable within a source/extractor version, not a promise of identity across arbitrary edits.
 Declaration ranges are zero-based UTF-8 byte intervals `[start_byte,end_byte)` in the observed source version, with one-based line coordinates.
 The range may cover the declaration body for locating a later read, but the returned signature never contains that body.

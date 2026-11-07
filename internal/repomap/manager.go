@@ -110,7 +110,7 @@ func New(parent context.Context, options Options) (*Manager, error) {
 	if options.Profile == (ResourceProfile{}) {
 		options.Profile = ExperimentalResourceProfile()
 	}
-	store, err := index.Open(options.Path, options.Store)
+	store, err := index.OpenContext(parent, options.Path, options.Store)
 	if err != nil {
 		return nil, err
 	}
