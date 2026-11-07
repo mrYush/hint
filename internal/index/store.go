@@ -72,11 +72,12 @@ CREATE INDEX IF NOT EXISTS pins_root ON pins(root,generation,expires);
 CREATE INDEX IF NOT EXISTS pins_expiry ON pins(expires);
 CREATE TABLE IF NOT EXISTS frontier (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT, root TEXT NOT NULL, path BLOB NOT NULL,
- revision INTEGER NOT NULL DEFAULT 1,
+ revision INTEGER NOT NULL DEFAULT 1, not_before INTEGER NOT NULL DEFAULT 0,
  UNIQUE(root,path)
 );
 CREATE INDEX IF NOT EXISTS frontier_root ON frontier(root,sequence);
-PRAGMA user_version=2;
+CREATE INDEX IF NOT EXISTS frontier_ready ON frontier(root,not_before,sequence);
+PRAGMA user_version=3;
 `
 
 // Open creates or reopens a private catalog with finite cache and disk limits.
@@ -131,7 +132,7 @@ func Open(path string, options Options) (*Store, error) {
 	ctx, cancel := s.context(context.Background())
 	defer cancel()
 	var version, actualPages, actualPageBytes int64
-	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err == nil && version != 0 && version != 2 {
+	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err == nil && version != 0 && version != 2 && version != 3 {
 		err = fmt.Errorf("index: unsupported catalog schema version %d", version)
 	}
 	if err == nil {
@@ -147,7 +148,7 @@ func Open(path string, options Options) (*Store, error) {
 		}
 	}
 	if err == nil {
-		_, err = db.ExecContext(ctx, schema)
+		err = s.initializeSchema(ctx, version)
 	}
 	if err == nil {
 		err = os.Chmod(path, 0o600)
@@ -156,6 +157,23 @@ func Open(path string, options Options) (*Store, error) {
 		return nil, errors.Join(storeError("initialize catalog", err), db.Close())
 	}
 	return s, nil
+}
+
+func (s *Store) initializeSchema(ctx context.Context, version int64) (err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer rollbackTransaction(tx, &err)
+	if version == 2 {
+		if _, err = tx.ExecContext(ctx, "ALTER TABLE frontier ADD COLUMN not_before INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, schema); err != nil {
+		return err
+	}
+	return commitTransaction(tx)
 }
 
 func normalizeOptions(o Options) (Options, error) {

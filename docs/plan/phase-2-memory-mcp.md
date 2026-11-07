@@ -266,9 +266,14 @@ Slice 1 implementation and local verification are complete; final owner review r
 
 ##### Slice 2 — Discovery completion and stable policy revisions
 
-- [ ] Give frontier work explicit outcomes: completed observation/omission, delayed retry for temporary unavailability, and cancellation that preserves unfinished work.
-- [ ] Retire or defer already queued items that become denied, unreadable or nested ownership boundaries instead of continuously rotating them in the hot queue.
-- [ ] Preserve partial coverage for unreadable/offline directories; neither a failed scan nor a canceled scan proves emptiness or deletion.
+- ✅ Give frontier work explicit outcomes: completed observation/omission, delayed retry for temporary unavailability, and cancellation that preserves unfinished work (2026-11-07).
+- ✅ Retire or defer already queued items that become denied, unreadable or nested ownership boundaries instead of continuously rotating them in the hot queue (2026-11-07).
+- ✅ Preserve partial coverage for unreadable/offline directories; neither a failed scan nor a canceled scan proves emptiness or deletion (2026-11-07).
+  `TestFrontierTerminalAndRetryOutcomes` first reproduced all three hot-queue failures; it now covers terminal drain, delayed recovery, offline-root reconciliation, retained-stream cleanup and cancellation without false deletion.
+  `TestFrontierDelaySurvivesRestartAndNewInvalidation`, `TestFrontierV2MigrationPreservesWork` and `TestFrontierRetryUsesBoundedSeek` cover durable scheduling, revision races, migration/pin preservation and indexed ordering without a temporary sort.
+  Self-review added clearing stale directory omissions after successful enumeration and retrying failed root reconciliation; publication, retained descriptor ownership, cancellation and newer invalidations were rechecked.
+  Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the additional retained-stream regression passed under race checks.
+  Command results are local in `.tmp/wp22-frontier-outcomes-checks.json`.
 - [ ] Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch.
 - [ ] Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries.
 - [ ] Pass targeted discovery/policy regressions and hand this slice to the owner for review.

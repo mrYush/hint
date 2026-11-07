@@ -45,7 +45,8 @@ An illustrative response, shown expanded for readability:
 
 File records deduplicate paths, hashes and freshness metadata shared by several declarations.
 Example handles are shortened for readability; implementation handles encode the complete SHA-256 digest with base64url and a root/file/symbol prefix.
-Source-version displays preserve the same complete digest, and the local schema-v2 catalog rejects the earlier experimental schema rather than mixing identity formats.
+Source-version displays preserve the same complete digest.
+The local schema-v3 catalog migrates v2 retry scheduling transactionally, retaining source observations, queued work and pins; the incompatible experimental v1 schema remains rejected.
 Declaration IDs are stable within a source/extractor version, not a promise of identity across arbitrary edits.
 Declaration ranges are zero-based UTF-8 byte intervals `[start_byte,end_byte)` in the observed source version, with one-based line coordinates.
 The range may cover the declaration body for locating a later read, but the returned signature never contains that body.
@@ -188,6 +189,9 @@ The following are foundation obligations, verified by WP2.2 with fake services a
 Discovery persists its catalog and unfinished frontier on disk.
 Enumerate with positive-count `File.ReadDir(n)` batches and a bounded pool of open directory streams; retain an unfinished batch until every admitted entry has a durable outcome or retry task.
 Rotate unfinished directories fairly so processing one wide directory cannot prevent already discovered files from being indexed.
+Complete queued exclusions and nested boundaries with durable omission records; retain temporarily unreadable/offline work with a persisted five-second retry delay.
+Seek eligible work by retry time and sequence without sorting or scanning all delayed tasks, and let a newer invalidation reset an older delay.
+An empty eligible page with delayed tasks is `partial` / `retry_wait`, never completed discovery; cancellation preserves the task without recording a failed observation.
 Restart unfinished enumeration idempotently after interruption and serve navigation/query pages with indexed keyset seeks.
 Never materialize an all-files allowlist, sort a complete directory in memory, or hide an unbounded scan behind an output `LIMIT`.
 Incomplete, canceled or failed enumeration does not establish that unseen children were deleted.

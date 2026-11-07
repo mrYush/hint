@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // QueueItem is a durable discovery or reindex task. Revision makes Ack safe
@@ -28,7 +29,7 @@ func (s *Store) Enqueue(ctx context.Context, rootID string, path []byte) error {
 	}
 	ctx, cancel := s.context(ctx)
 	defer cancel()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO frontier(root,path) VALUES (?,?) ON CONFLICT(root,path) DO UPDATE SET revision=revision+1`, rootID, path); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO frontier(root,path) VALUES (?,?) ON CONFLICT(root,path) DO UPDATE SET revision=revision+1,not_before=0`, rootID, path); err != nil {
 		return storeError("enqueue discovery", err)
 	}
 	return nil
@@ -37,6 +38,12 @@ func (s *Store) Enqueue(ctx context.Context, rootID string, path []byte) error {
 // Take returns a bounded durable queue prefix without removing it. A caller
 // admits one worker per root; a crash before Ack leaves work available again.
 func (s *Store) Take(ctx context.Context, rootID string, limit int) ([]QueueItem, error) {
+	return s.TakeReady(ctx, rootID, limit, time.Now())
+}
+
+// TakeReady seeks eligible work in retry-time/sequence order without scanning
+// delayed rows. It retains every item until an explicit Ack or Defer.
+func (s *Store) TakeReady(ctx context.Context, rootID string, limit int, now time.Time) ([]QueueItem, error) {
 	if limit < 1 || limit > maxScanRecords {
 		return nil, ErrTooLarge
 	}
@@ -44,7 +51,7 @@ func (s *Store) Take(ctx context.Context, rootID string, limit int) ([]QueueItem
 	limit = min(limit, max(1, s.options.MaxSourceBytes/(s.options.MaxRecordBytes+maxIDBytes+24)))
 	ctx, cancel := s.context(ctx)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, "SELECT sequence,root,path,revision FROM frontier WHERE root=? ORDER BY sequence LIMIT ?", rootID, limit)
+	rows, err := s.db.QueryContext(ctx, "SELECT sequence,root,path,revision FROM frontier INDEXED BY frontier_ready WHERE root=? AND not_before<=? ORDER BY not_before,sequence LIMIT ?", rootID, now.UnixMilli(), limit)
 	if err != nil {
 		return nil, storeError("read frontier", err)
 	}
@@ -60,6 +67,36 @@ func (s *Store) Take(ctx context.Context, rootID string, limit int) ([]QueueItem
 		return nil, storeError("read frontier", err)
 	}
 	return items, nil
+}
+
+// HasPendingWork includes delayed tasks, so an empty ready page cannot claim
+// completed discovery while unreadable directories still await a retry.
+func (s *Store) HasPendingWork(ctx context.Context, rootID string) (bool, error) {
+	ctx, cancel := s.context(ctx)
+	defer cancel()
+	var exists int
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM frontier WHERE root=? LIMIT 1", rootID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, storeError("inspect unfinished frontier", err)
+	}
+	return true, nil
+}
+
+// Defer retains an unfinished task until a bounded retry time. A newer Enqueue
+// revision is never delayed by a failed older observation.
+func (s *Store) Defer(ctx context.Context, item QueueItem, until time.Time) error {
+	if until.UnixMilli() <= 0 {
+		return fmt.Errorf("index: invalid frontier retry time")
+	}
+	ctx, cancel := s.context(ctx)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, "UPDATE frontier SET not_before=? WHERE sequence=? AND root=? AND revision=?", until.UnixMilli(), item.Sequence, item.RootID, item.Revision); err != nil {
+		return storeError("defer frontier retry", err)
+	}
+	return nil
 }
 
 // QueueLookup seeks the current task by its unique root/path key. Retained
@@ -107,7 +144,8 @@ func (s *Store) Rotate(ctx context.Context, item QueueItem) (err error) {
 	}
 	defer rollbackTransaction(tx, &err)
 	var path []byte
-	err = tx.QueryRowContext(ctx, "SELECT path FROM frontier WHERE sequence=? AND root=? AND revision=?", item.Sequence, item.RootID, item.Revision).Scan(&path)
+	var notBefore int64
+	err = tx.QueryRowContext(ctx, "SELECT path,not_before FROM frontier WHERE sequence=? AND root=? AND revision=?", item.Sequence, item.RootID, item.Revision).Scan(&path, &notBefore)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -117,7 +155,7 @@ func (s *Store) Rotate(ctx context.Context, item QueueItem) (err error) {
 	if _, err = tx.ExecContext(ctx, "DELETE FROM frontier WHERE sequence=? AND root=? AND revision=?", item.Sequence, item.RootID, item.Revision); err != nil {
 		return storeError("remove rotating task", err)
 	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO frontier(root,path,revision) VALUES (?,?,?)", item.RootID, path, item.Revision); err != nil {
+	if _, err = tx.ExecContext(ctx, "INSERT INTO frontier(root,path,revision,not_before) VALUES (?,?,?,?)", item.RootID, path, item.Revision, notBefore); err != nil {
 		return storeError("append rotating task", err)
 	}
 	return commitTransaction(tx)

@@ -119,8 +119,14 @@ func testDirectoryFIFOChild(t *testing.T, base string) {
 	}
 	err = m.step(t.Context(), work)
 	m.release()
-	if !replaced || !errors.Is(err, workspace.ErrNotDirectory) || len(m.streams) != 0 {
+	if !replaced || err != nil || len(m.streams) != 0 {
 		t.Fatalf("directory replacement: replaced=%v err=%v streams=%d checks=%d trigger=%d", replaced, err, len(m.streams), checks, trigger)
+	}
+	if ready, err := m.store.TakeReady(t.Context(), id, 1, m.now()); err != nil || len(ready) != 0 {
+		t.Fatalf("failed directory remained hot: %v %v", ready, err)
+	}
+	if pending, err := m.store.HasPendingWork(t.Context(), id); err != nil || !pending {
+		t.Fatalf("failed directory task lost: %v %v", pending, err)
 	}
 	if err := m.Close(); err != nil {
 		t.Fatal(err)

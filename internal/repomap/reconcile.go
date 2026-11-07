@@ -60,6 +60,8 @@ func (m *Manager) reconcileSlice(ctx context.Context, work rootWork) error {
 			reason = "nested_root"
 		case errors.Is(err, tool.ErrDenied):
 			reason = "excluded"
+		case sourceAccessFailure(err):
+			reason = "unavailable"
 		case err != nil:
 			return err
 		default:
@@ -98,21 +100,6 @@ func (m *Manager) reconcileSlice(ctx context.Context, work rootWork) error {
 		m.mu.Unlock()
 	}
 	return nil
-}
-
-func (m *Manager) omitMissing(ctx context.Context, work rootWork, lease workspace.Lease, path []byte) error {
-	file, err := m.store.EntryLookup(ctx, work.info.ID, index.EntryID(work.info.ID, string(path)))
-	if errors.Is(err, index.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if file.State == index.StateOmitted && file.Reason == "deleted" {
-		return nil
-	}
-	file.State, file.Reason, file.Hash, file.ObservedAt = index.StateOmitted, "deleted", "", m.now()
-	return lease.Publish(func() error { _, err := m.store.PutSource(ctx, file, nil); return err })
 }
 
 func (m *Manager) observePolicy(ctx context.Context, work rootWork, directory string) error {

@@ -338,13 +338,24 @@ func (m *Manager) run() {
 
 func (m *Manager) step(ctx context.Context, work rootWork) error {
 	if err := m.reconcileSlice(ctx, work); err != nil {
+		if sourceAccessFailure(err) {
+			return m.deferReconciliation(ctx, work, err)
+		}
 		return err
 	}
-	items, err := m.store.Take(ctx, work.info.ID, 1)
+	items, err := m.store.TakeReady(ctx, work.info.ID, 1, m.now())
 	if err != nil {
 		return err
 	}
 	if len(items) == 0 {
+		pending, err := m.store.HasPendingWork(ctx, work.info.ID)
+		if err != nil {
+			return err
+		}
+		if pending {
+			m.setStatus(work.info.ID, Status{State: "partial", Reason: "retry_wait"})
+			return nil
+		}
 		m.setStatus(work.info.ID, Status{State: "ready"})
 		// Reconcile at finite intervals; a live directory is never a watcher-only
 		// source of truth. The frontier and streams bound each subsequent slice.
@@ -378,20 +389,17 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 	}()
 	lease, err := work.space.Resolve(work.info.ID, string(item.Path))
 	if err != nil {
-		return err
+		return m.sourceFailure(ctx, work, item, err)
 	}
 	info, err := lease.Stat()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) && string(item.Path) != "." {
-			if err := m.omitMissing(ctx, work, lease, item.Path); err != nil {
-				return err
-			}
-			return m.store.Ack(ctx, item)
-		}
-		return err
+		return m.sourceFailure(ctx, work, item, err)
 	}
 	if !info.IsDir() {
 		if err := m.refreshHeld(ctx, lease); err != nil {
+			if sourceAccessFailure(err) {
+				return m.sourceFailure(ctx, work, item, err)
+			}
 			return err
 		}
 		return m.store.Ack(ctx, item)
@@ -436,14 +444,14 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 		}
 		f, err := lease.OpenDirectory()
 		if err != nil {
-			return err
+			return m.sourceFailure(ctx, work, item, err)
 		}
 		stream = &directoryStream{item: item, lease: lease, file: f}
 		m.streams[key] = stream
 	}
 	stream.item = item
 	if err := m.observePolicy(ctx, work, lease.RelativePath); err != nil {
-		return err
+		return m.retrySource(ctx, work, item, err)
 	}
 	if len(stream.pending) == 0 && stream.readErr == nil {
 		stream.pending, stream.readErr = stream.file.ReadDir(32)
@@ -463,7 +471,7 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 		}
 		stream.ignored, err = m.gitIgnored(ctx, lease, paths, directories...)
 		if err != nil {
-			return err
+			return m.retrySource(ctx, work, item, err)
 		}
 	}
 	for len(stream.pending) > 0 {
@@ -533,14 +541,34 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 	}
 	if errors.Is(stream.readErr, io.EOF) {
 		delete(m.streams, key)
-		if err := stream.file.Close(); err != nil {
-			return err
+		observed, statErr := stream.file.Stat()
+		if err := errors.Join(statErr, stream.file.Close()); err != nil {
+			return m.retrySource(ctx, work, item, err)
+		}
+		current, err := lease.Stat()
+		if err != nil {
+			return m.sourceFailure(ctx, work, item, err)
+		}
+		if !os.SameFile(observed, current) {
+			return workspace.ErrChanged
+		}
+		if lease.RelativePath != "." {
+			file := index.File{RootID: lease.RootID, Path: item.Path, Kind: index.KindDirectory,
+				State: index.StateIndexed, Size: current.Size(), ModTime: current.ModTime(), ObservedAt: m.now()}
+			old, err := m.store.EntryLookup(ctx, item.RootID, index.EntryID(item.RootID, string(item.Path)))
+			if err != nil && !errors.Is(err, index.ErrNotFound) {
+				return err
+			}
+			if err != nil || old.Kind != file.Kind || old.State != file.State || old.Size != file.Size || !old.ModTime.Equal(file.ModTime) {
+				if err := lease.Publish(func() error { _, err := m.store.PutSource(ctx, file, nil); return err }); err != nil {
+					return err
+				}
+			}
 		}
 		return m.store.Ack(ctx, stream.item)
 	}
 	if stream.readErr != nil {
-		delete(m.streams, key)
-		return errors.Join(stream.readErr, stream.file.Close())
+		return m.retrySource(ctx, work, item, stream.readErr)
 	}
 	return nil
 }
