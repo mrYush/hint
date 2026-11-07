@@ -44,16 +44,17 @@ type Options struct {
 }
 
 type rootWork struct {
-	space       *workspace.Session
-	info        workspace.RootInfo
-	status      Status
-	members     map[string]*workspace.Session
-	gitRoot     bool
-	reconcileAt time.Time
-	policyEpoch uint64
-	sweepAfter  []byte
-	sweepAt     time.Time
-	gcAt        time.Time
+	space          *workspace.Session
+	info           workspace.RootInfo
+	status         Status
+	members        map[string]*workspace.Session
+	gitRoot        bool
+	reconcileAt    time.Time
+	policyEpoch    uint64
+	sweepAfter     []byte
+	sweepAt        time.Time
+	gcAt           time.Time
+	storageRetryAt time.Time
 }
 
 type directoryStream struct {
@@ -325,37 +326,63 @@ func (m *Manager) run() {
 		m.mu.Unlock()
 		err := m.acquire(ctx)
 		if err == nil {
-			err = m.maintenance(ctx, work)
-			if err == nil {
-				err = m.step(ctx, work)
-			}
+			err = m.backgroundSlice(ctx, work)
 			m.release()
 		}
 		cancel()
 		m.mu.Lock()
 		m.backgroundCancel = nil
 		m.mu.Unlock()
-		if err != nil && m.ctx.Err() == nil {
-			reason := "index_work_failed"
-			switch {
-			case errors.Is(err, index.ErrCapacity):
-				reason = "storage_capacity"
-				m.mu.Lock()
-				if current := m.roots[root]; current != nil {
-					current.gcAt = time.Time{}
-				}
-				m.mu.Unlock()
-			case errors.Is(err, context.DeadlineExceeded):
-				reason = "job_deadline"
-			case errors.Is(err, context.Canceled):
-				reason = "scheduler_pause"
-			}
-			m.setStatus(root, Status{State: "paused", Reason: reason})
+		if err != nil {
+			m.recordWorkFailure(root, err)
 		}
 	}
 }
 
-func (m *Manager) step(ctx context.Context, work rootWork) error {
+// backgroundSlice observes storage cooldown before touching SQLite; foreground
+// queries remain available and may retry independently after contention ends.
+func (m *Manager) backgroundSlice(ctx context.Context, work rootWork) error {
+	m.mu.Lock()
+	current := m.roots[work.info.ID]
+	delayed := current == nil || m.now().Before(current.storageRetryAt)
+	m.mu.Unlock()
+	if delayed {
+		return nil
+	}
+	if err := m.maintenance(ctx, work); err != nil {
+		return err
+	}
+	return m.step(ctx, work)
+}
+
+func (m *Manager) recordWorkFailure(root string, err error) {
+	if m.ctx.Err() != nil {
+		return
+	}
+	reason := "index_work_failed"
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current := m.roots[root]
+	if current == nil {
+		return
+	}
+	switch {
+	case errors.Is(err, index.ErrCapacity):
+		reason = "storage_capacity"
+		current.gcAt = time.Time{}
+		current.storageRetryAt = m.now().Add(5 * time.Second)
+	case errors.Is(err, index.ErrBusy):
+		reason = "storage_busy"
+		current.storageRetryAt = m.now().Add(time.Second)
+	case errors.Is(err, context.DeadlineExceeded):
+		reason = "job_deadline"
+	case errors.Is(err, context.Canceled):
+		reason = "scheduler_pause"
+	}
+	current.status = Status{State: "paused", Reason: reason}
+}
+
+func (m *Manager) step(ctx context.Context, work rootWork) (resultErr error) {
 	if err := m.reconcileSlice(ctx, work); err != nil {
 		if sourceAccessFailure(err) {
 			return m.deferReconciliation(ctx, work, err)
@@ -402,9 +429,7 @@ func (m *Manager) step(ctx context.Context, work rootWork) error {
 			rotateErr = m.store.Rotate(rotateCtx, *blocked)
 		}
 		rotateErr = errors.Join(rotateErr, m.store.Rotate(rotateCtx, item))
-		if rotateErr != nil && m.ctx.Err() == nil {
-			m.setStatus(work.info.ID, Status{State: "paused", Reason: "storage_unavailable"})
-		}
+		resultErr = errors.Join(resultErr, rotateErr)
 	}()
 	lease, err := work.space.Resolve(work.info.ID, string(item.Path))
 	if err != nil {

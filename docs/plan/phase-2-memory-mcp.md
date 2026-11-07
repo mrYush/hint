@@ -331,9 +331,13 @@ Slice 1 implementation and local verification are complete; final owner review r
   Cancellation before disk access and corrupt-database classification also have regressions.
   Self-review checked reconnection limits, transaction rollback, persisted allowance consistency and the distinction between lock waiting and uninterruptible filesystem I/O.
   Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; results are local in `.tmp/wp22-sqlite-contention-checks.json`.
-- [ ] Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status.
-- [ ] Verify bounded retries and recovery after contention ends or capacity becomes available; quota-induced busy loops or inability to recover remain #93 defects.
-- [ ] Pass targeted storage/recovery regressions and hand this slice to the owner for review.
+- ✅ Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status (2026-11-07).
+- ✅ Verify bounded retries and recovery after contention ends or capacity becomes available (2026-11-07).
+  `TestDiscoveryQuotaPreservesWorkAndCursorThenRecovers` uses a separate SQLite connection holding an exclusive lock, fills the shared 512 KiB allowance with frontier tasks, then frees completed tasks and verifies resumed file processing.
+  It checks preserved queued work, a usable preexisting cursor, truthful `storage_busy`/`storage_capacity` status and twenty attempted background slices that perform no retry work during cooldown.
+  Self-review added 1 s BUSY and 5 s capacity cooldowns and propagated failed frontier rotation instead of masking it as a successful slice.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; results are local in `.tmp/wp22-storage-recovery-checks.json`.
+- ✅ Pass targeted storage/recovery regressions and retain this slice for final owner review (2026-11-07).
 
 ##### Slice 5 — Integrated acceptance and review handoff
 

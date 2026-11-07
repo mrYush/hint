@@ -72,6 +72,10 @@ func (t *mapTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 		switch {
 		case errors.Is(err, errRetentionCapacity):
 			reason = "retention_capacity"
+		case errors.Is(err, index.ErrBusy):
+			reason = "storage_busy"
+		case errors.Is(err, index.ErrCapacity):
+			reason = "storage_capacity"
 		case errors.Is(err, workspace.ErrUnknownRoot):
 			code = "unknown_root"
 		case errors.Is(err, index.ErrStale):

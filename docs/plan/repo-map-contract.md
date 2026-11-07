@@ -52,6 +52,7 @@ Changing those shared allowances requires a fresh derived cache after all users 
 Stop older binaries before a schema upgrade; mixed-version live writers are unsupported.
 SQLite connection setup uses zero internal BUSY wait, including its DSN pragmas; initialization retries every 10 ms within the caller deadline and `OperationTimeout`.
 Runtime BUSY/LOCKED, storage capacity, conflicting allowances and permanent initialization failures are distinct errors; no transaction is retained for an application-level retry.
+Background retries wait at least 1 s after contention and 5 s after capacity exhaustion; queued tasks and live pins remain retained while ordinary bounded queries stay available.
 Context deadlines do not preempt arbitrary blocked filesystem or device syscalls.
 Declaration IDs are stable within a source/extractor version, not a promise of identity across arbitrary edits.
 Declaration ranges are zero-based UTF-8 byte intervals `[start_byte,end_byte)` in the observed source version, with one-based line coordinates.
