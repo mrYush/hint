@@ -312,8 +312,11 @@ Slice 1 implementation and local verification are complete; final owner review r
   `TestRootListingFinalBudgetBoundary` covers 1023/1024/1025/2048-byte limits, escaped paths and complete pagination without duplicates or loss.
   Self-review found no existing overflow; the final assertion is defensive hardening.
   Targeted race checks, vet, pinned lint and formatting passed; whole gates are repeated at the final source state.
-- [ ] Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches; do not suppress cleanup errors without an explicit contract decision.
-- [ ] Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers, then hand this slice to the owner for review.
+- ✅ Specify and test `fswalk` behavior for `Close` failure after `SkipAll` and for empty EOF batches (2026-11-07).
+  `BeforeBatch` runs only for nonempty batches; `TestBeforeBatchSkipsEmptyEOF` covers empty, single-entry and full batches.
+  `SkipAll` stops visitation but deliberately preserves cleanup failures, matching the repository rule not to discard errors; `TestSkipAllPreservesCloseFailure` also checks joined callback errors.
+  Targeted race checks for fswalk/project, vet, pinned lint and formatting passed; self-review checked the early-return/deferred-close paths.
+- ✅ Test post-Pin error/cancellation paths, repeated failed requests, oversized omissions, coverage buckets and low-budget behavior through the real wrappers; retain this reviewed slice for final owner review (2026-11-07).
 
 ##### Slice 4 — SQLite initialization, contention and recovery
 

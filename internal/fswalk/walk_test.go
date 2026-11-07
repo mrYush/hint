@@ -138,3 +138,79 @@ func TestErrorCallbacksHonorSkipControls(t *testing.T) {
 		}
 	}
 }
+
+type lifecycleFS struct {
+	batch    []fs.DirEntry
+	closeErr error
+	closed   int
+}
+
+func (*lifecycleFS) Stat(string) (fs.FileInfo, error) { return fakeInfo{name: ".", dir: true}, nil }
+func (f *lifecycleFS) Open(string) (fs.File, error)   { return &lifecycleDir{owner: f}, nil }
+
+type lifecycleDir struct {
+	owner *lifecycleFS
+	read  bool
+}
+
+func (*lifecycleDir) Stat() (fs.FileInfo, error) { return fakeInfo{name: ".", dir: true}, nil }
+func (*lifecycleDir) Read([]byte) (int, error)   { return 0, io.EOF }
+func (d *lifecycleDir) Close() error             { d.owner.closed++; return d.owner.closeErr }
+func (d *lifecycleDir) ReadDir(int) ([]fs.DirEntry, error) {
+	if d.read || len(d.owner.batch) == 0 {
+		return nil, io.EOF
+	}
+	d.read = true
+	return d.owner.batch, nil
+}
+
+func TestBeforeBatchSkipsEmptyEOF(t *testing.T) {
+	for _, count := range []int{0, 1, 32} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			filesystem := &lifecycleFS{}
+			for i := range count {
+				filesystem.batch = append(filesystem.batch, fs.FileInfoToDirEntry(fakeInfo{name: fmt.Sprint(i)}))
+			}
+			calls := 0
+			err := WalkDir(filesystem, ".", Limits{BeforeBatch: func(_ string, entries []fs.DirEntry) error {
+				calls++
+				if len(entries) != count || len(entries) == 0 {
+					t.Fatalf("unexpected batch: %d", len(entries))
+				}
+				return nil
+			}}, func(string, fs.DirEntry, error) error { return nil })
+			want := 0
+			if count > 0 {
+				want = 1
+			}
+			if err != nil || calls != want || filesystem.closed != 1 {
+				t.Fatalf("calls=%d closed=%d err=%v", calls, filesystem.closed, err)
+			}
+		})
+	}
+}
+
+func TestSkipAllPreservesCloseFailure(t *testing.T) {
+	closeErr := errors.New("close failure")
+	callbackErr := errors.New("visit failure")
+	for _, visitErr := range []error{fs.SkipAll, callbackErr} {
+		filesystem := &lifecycleFS{batch: []fs.DirEntry{fs.FileInfoToDirEntry(fakeInfo{name: "a"}), fs.FileInfoToDirEntry(fakeInfo{name: "b"})}, closeErr: closeErr}
+		visits := 0
+		err := WalkDir(filesystem, ".", Limits{}, func(name string, _ fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if name != "." {
+				visits++
+				return visitErr
+			}
+			return nil
+		})
+		if !errors.Is(err, closeErr) || errors.Is(err, fs.SkipAll) || visits != 1 || filesystem.closed != 1 {
+			t.Fatalf("visits=%d closed=%d err=%v", visits, filesystem.closed, err)
+		}
+		if errors.Is(visitErr, callbackErr) && !errors.Is(err, callbackErr) {
+			t.Fatalf("lost callback error: %v", err)
+		}
+	}
+}
