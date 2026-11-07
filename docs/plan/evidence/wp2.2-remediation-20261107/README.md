@@ -11,11 +11,11 @@ The [phase checklist](../../phase-2-memory-mcp.md#review-consolidation) remains 
 
 - ✅ Implement and locally verify the supplied, concrete findings listed below.
 - ✅ Preserve the owner's FIFO policy-read fix `5f60d93` and add subsequent fixes as separate commits.
-- [ ] Obtain the full concluding `repomap` review and the concrete scenario behind the summary's unspecified P0; requested in this conversation but not supplied.
-- [ ] Final owner review of the combined branch.
-- [ ] Owner's Pi 4/local-model 8k/32k evaluation under the [saved methodology](../../repo-map-evaluation.md).
+- ✅ Obtain the full concluding `repomap` review and the concrete scenario behind the summary's unspecified P0 (owner's concluding review passed on 2026-11-07; no further findings or P0 scenario were supplied).
+- ✅ Final owner review of the combined branch (owner's concluding review passed on 2026-11-07).
+- ✅ Owner's Pi 4/local-model 8k/32k evaluation moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) by the owner on 2026-11-07; not measured here.
 
-The missing review input prevents claiming that every blocker is resolved or that #93 is ready to close.
+With the concluding review passed and the Pi 4/local-model evaluation moved to the v0.4.0 release gate, #93 has no remaining review or measurement input; it stays open until the branch is merged.
 Unvalidated `auto` remains paused; these fixes do not expand its acceptance boundary.
 
 ## Findings and dispositions

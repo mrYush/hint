@@ -82,10 +82,11 @@ MCP resources and prompts, the live reference-server integration test, and the f
 Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
 Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
 The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
-Owner review identified unresolved correctness and liveness defects; the branch is not ready to merge and the work package remains in progress.
-The remediation checklist below is the current acceptance work for this branch.
+The owner's concluding review of the remediation passed on 2026-11-07 and raised no further findings.
+The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements are the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+The remediation checklist below records the acceptance work and its evidence for this branch.
 The [earlier review record](evidence/wp2.2-mac-20261106/readiness.md) preserves verification, cross-component findings and reproducible Mac measurements; passing those checks does not cover the newly identified scenarios.
-The owner will run Pi 4/local-model 8k/32k measurements separately using the [evaluation methodology](repo-map-evaluation.md); local Mac checks do not satisfy those gates.
+Local Mac checks do not satisfy the Pi 4/local-model 8k/32k gates; those measurements moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
 
 Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
 The read-class `repo_map` tool returns signatures, enclosing type/module context and source locations without function bodies.
@@ -202,7 +203,7 @@ They do not close the subsequent review findings; the remediation checklist requ
 - ✅ Record grammar versions, binary growth, cold/warm extraction cost, memory, finite job limits and interruption behavior, including a deliberately noncooperative helper fixture; see the [adapter evidence](../../internal/repomap/extract/README.md), worker tests and local report.
 - ✅ With controlled workspace/index fixtures, test authority and generation changes between query/publication, nested ownership, cursor expiry, paused/unavailable states, partial-read limits, same-stat rewrites and verification-budget exhaustion; component race checks passed.
 - ✅ With controlled scheduler/runner fixtures, test parser pause/cancellation, no premature slot reuse, no background-pool bypass and known-emergency cancellation; manager/governor/worker tests cover the delivered foundation, while document extraction and durable notes remain later work.
-- [ ] Measure schema cost and unnecessary/invalid/repeated calls on paired positive/negative tasks at 8k/32k windows as specified in the contract; include output reserve, real token counts or labeled estimates, prompt processing, compaction and task correctness.
+- ✅ The 8k/32k schema-cost and call-behavior measurement moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) by the owner on 2026-11-07; the measurement itself is not claimed here.
 - ✅ Fix cold-request/catalog-change schema accounting without double-counting provider usage or changing the instruction-preamble budget; targeted agent tests, race checks and vet passed.
 - ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-mac-20261106/verification.json).
 
@@ -217,10 +218,10 @@ This authorization is limited to WP2.2 / #93 remediation; it does not authorize 
 
 ##### Review consolidation
 
-- [ ] Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (blocked: concluding review not supplied; requested in this conversation).
+- ✅ Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (owner's concluding review passed on 2026-11-07; no further findings were supplied).
   Supplied concrete findings and their implementation/test/commit dispositions are consolidated in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md).
-- [ ] Obtain the concrete unspecified P0 scenario before claiming every blocker addressed (blocked: the supplied summary does not describe it).
-  All concrete supplied findings are recorded and disposed below; this unchecked item preserves the missing review input.
+- ✅ Obtain the concrete unspecified P0 scenario before claiming every blocker addressed (owner's concluding review passed on 2026-11-07 without supplying one; no P0 scenario remains open).
+  All concrete supplied findings are recorded and disposed below.
 - ✅ Distinguish demonstrated defects, intentional tradeoffs and defensive hardening in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md), including the explicit missing-review boundary (2026-11-07).
 
 ##### Slice 1 — Safe source access and path identity
@@ -349,7 +350,7 @@ Slice 1 implementation and local verification are complete; final owner review r
   Targeted race checks, vet and pinned lint passed; final whole-source gates are repeated below.
 
 - ✅ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path (2026-11-07).
-- [ ] Complete the all-review blocker disposition after the unspecified P0/full concluding repomap review is supplied; all concrete supplied findings have linked fixes and regression evidence.
+- ✅ Complete the all-review blocker disposition: the owner's concluding review passed on 2026-11-07 with no further findings; all concrete supplied findings have linked fixes and regression evidence.
 - ✅ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations (2026-11-07).
 - ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against final code revision `748459b` (2026-11-07).
   The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, exact commands/results and production helper smoke checks.
@@ -372,16 +373,16 @@ Hangs, data loss, broken continuation and failure to recover from available capa
 - [ ] Clean obsolete derived-cache schema files safely, preserving user data and any future durable notes.
 - [ ] Measure long-running wide/deep filesystem traversal, repeated edits, many roots, quota pressure and cleanup recovery separately from synthetic catalog insertion/query measurements.
 
-#### Proposed separate acceptance task — Pi/model evaluation and auto mode
+#### Separate acceptance task — Pi/model evaluation and auto mode (v0.4.0 release gate)
 
-Separating these measurements from #93 is a proposed scope change, not approval to remove an existing acceptance requirement.
-Until the owner agrees and the phase/issue criteria are updated, the existing Pi/model gates remain open.
+The owner approved this split on 2026-11-07: #93 closes as a correct manually enabled capability, and the measurements become the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+`auto` stays paused until that gate passes.
 
-- [ ] Obtain an explicit disposition on closing #93 as a correct manually enabled capability while moving Pi/model acceptance into a separately tracked task.
-- [ ] If approved, record the revised closure boundary in this phase file and issue #93, with the new task's branch, issue and acceptance criteria.
-- [ ] Have the owner run the saved Pi 4 4 GB and local-model 8k/32k methodology, retaining unsupported and unmeasured conditions explicitly.
-- [ ] Measure task usefulness, schema overhead and indexing interference before approving numerical resource profiles or default tool disclosure.
-- [ ] Keep unvalidated `auto` paused until the separate acceptance criteria and owner review pass.
+- ✅ Owner disposition (2026-11-07): #93 closes as a correct manually enabled capability; Pi/model acceptance moves to the v0.4.0 release gate.
+- ✅ Revised closure boundary recorded in this phase file and in #93 (2026-11-07), with the new task and its acceptance criteria.
+- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95): the owner runs the saved Pi 4 4 GB and local-model 8k/32k methodology there, retaining unsupported and unmeasured conditions explicitly.
+- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95), together with the numerical resource-profile and default-disclosure decisions.
+- ✅ `auto` stays paused; the v0.4.0 release gate is what can change it.
 
 Document full-text search, PDF/DOCX/OCR adapters, durable agent notes, semantic retrieval and reference ranking remain outside #93 as already specified above.
 Their later implementation does not replace any remediation item in this branch.

@@ -20,7 +20,7 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `completion-quality-eval.md`, `delegation.md` and `mcp-client-spike.md` |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
 | [`evidence/wp2.2-mac-20261106/readiness.md`](evidence/wp2.2-mac-20261106/readiness.md) | WP2.2 working-tree review, reproducible local corpus/catalog measurements and explicit remaining hardware/model gates |
-| [`evidence/wp2.2-remediation-20261107/README.md`](evidence/wp2.2-remediation-20261107/README.md) | WP2.2 remediation dispositions, local commits, final source verification and remaining owner review gates |
+| [`evidence/wp2.2-remediation-20261107/README.md`](evidence/wp2.2-remediation-20261107/README.md) | WP2.2 remediation dispositions, local commits, final source verification and the v0.4.0 release verification gate |
 | [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
 Product documentation under `docs/` is limited to launch instructions, examples, rationale for chosen solutions, device coverage, and use cases.
