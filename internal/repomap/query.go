@@ -70,6 +70,8 @@ func (t *mapTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 		}
 		code, reason := "index_unavailable", ""
 		switch {
+		case errors.Is(err, index.ErrStale):
+			code = "stale_cursor"
 		case errors.Is(err, errRetentionCapacity):
 			reason = "retention_capacity"
 		case errors.Is(err, index.ErrBusy):
@@ -78,8 +80,6 @@ func (t *mapTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 			reason = "storage_capacity"
 		case errors.Is(err, workspace.ErrUnknownRoot):
 			code = "unknown_root"
-		case errors.Is(err, index.ErrStale):
-			code = "stale_cursor"
 		case errors.Is(err, workspace.ErrRootUnavailable):
 			code = "root_unavailable"
 		case errors.Is(err, workspace.ErrChanged):
@@ -191,6 +191,12 @@ func (m *Manager) query(parent context.Context, space *workspace.Session, in Req
 	}
 	defer func() {
 		if q != nil && resultErr != nil && (in.Cursor == "" || invalidReservation(resultErr)) {
+			// Definitive invalidation can occur after resume's initial check.
+			// A released continuation must never invite retrying that token,
+			// even if its physical cause or cleanup error is otherwise retryable.
+			if in.Cursor != "" {
+				resultErr = errors.Join(index.ErrStale, resultErr)
+			}
 			resultErr = errors.Join(resultErr, m.releaseQuery(q, true))
 			payload = nil
 		}

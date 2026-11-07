@@ -341,11 +341,16 @@ Slice 1 implementation and local verification are complete; final owner review r
 
 ##### Slice 5 — Integrated acceptance and review handoff
 
-- [ ] Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path.
+- ✅ Fix the additional self-review finding where root replacement after cursor resume returned retryable `root_unavailable` despite releasing the cursor (2026-11-07).
+  `TestRootReplacementAfterCursorResumeIsStale` reproduced the incorrect response, then passed with explicit `stale_cursor` and verified pin release.
+  Definitive continuation invalidation takes precedence over physical-root and cleanup errors; transient continuation tests still retain their reservation.
+  Targeted race checks, vet and pinned lint passed; final whole-source gates are repeated below.
+
+- ⏳ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path.
 - [ ] Resolve all confirmed blockers from every review pass and retain reproduction, fix and verification evidence for each disposition.
-- [ ] Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations.
-- [ ] Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against the final source state.
-- [ ] Repeat only measurements affected by the fixes; synthetic million-record metadata results do not substitute for filesystem failure or traversal tests.
+- ⏳ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations.
+- ⏳ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against the final source state.
+- ⏳ Repeat only measurements affected by the fixes; synthetic million-record metadata results do not substitute for filesystem failure or traversal tests.
 - [ ] Summarize the reviewed remediation commits and invite final owner review without pushing or closing #93.
 
 #### Proposed follow-up — Catalog quotas and cleanup
