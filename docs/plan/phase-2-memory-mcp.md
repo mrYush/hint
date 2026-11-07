@@ -224,7 +224,7 @@ This authorization is limited to WP2.2 / #93 remediation; it does not authorize 
 ##### Slice 1 — Safe source access and path identity
 
 The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
-Extraction and freshness-validation source opens are the next remediation step.
+Extraction and freshness-validation source opens also admit only regular files; directory-stream opening is the next special-file race to address.
 
 - ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
 - ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
@@ -238,9 +238,14 @@ Extraction and freshness-validation source opens are the next remediation step.
   `TestLeaseStatFIFO`, `TestLeaseStatMetadata` and `TestLeaseStatRechecks` retain the regressions; command results are local in `.tmp/wp22-stat-checks.json`.
   Runtime verification was on macOS; Linux/Windows cross-builds establish compilation only.
 
-- [ ] Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation.
-- [ ] Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient.
-- [ ] Verify cancellation and manager shutdown after refused or interrupted source access without abandoning work that still owns the shared slot.
+- ✅ Use regular-file admission for extraction, post-parse rehash and cached-candidate validation; existing FIFOs and replacement before opening/after parsing no longer wait for a writer (2026-11-07).
+  `TestSourceFIFO` reproduced all four hangs before the fix and now checks durable omissions, suppressed stale declarations, ordinary-file recovery, cancellation, reusable admission and shutdown.
+  Self-review checked both source opens, type-change invalidation, omission publication authority and error-path descriptor ownership.
+  Whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-source-fifo-checks.json`.
+
+- ⏳ Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation.
+- ⏳ Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient.
+- ⏳ Verify cancellation and manager shutdown after refused or interrupted source access without abandoning work that still owns the shared slot.
 - [ ] Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy.
 - [ ] Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes.
 - [ ] Pass targeted access/path regressions and relevant portability checks, then hand this slice to the owner for review.

@@ -631,7 +631,10 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	f, err := lease.Open()
+	f, err := lease.OpenRegular()
+	if errors.Is(err, workspace.ErrNotRegular) {
+		return m.omitNonRegular(ctx, lease)
+	}
 	if err != nil {
 		return err
 	}
@@ -639,9 +642,6 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 	info, err := f.Stat()
 	if err != nil {
 		return err
-	}
-	if !info.Mode().IsRegular() {
-		return nil
 	}
 	if err := m.excluded(ctx, lease, false); err != nil {
 		return err
@@ -697,7 +697,10 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 		}
 		// Rehash the authorized current path, not only the old open descriptor:
 		// replacement and same-size/restored-mtime edits during parsing invalidate it.
-		verify, err := lease.Open()
+		verify, err := lease.OpenRegular()
+		if errors.Is(err, workspace.ErrNotRegular) {
+			return errors.Join(workspace.ErrChanged, err)
+		}
 		if err != nil {
 			return err
 		}
@@ -734,6 +737,29 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 	// Store writes are bounded by its operation timeout; hold publication authority
 	// through that write so revocation cannot race a successful publication.
 	return lease.Publish(func() error { _, err := m.store.PutSource(ctx, file, symbols); return err })
+}
+
+func (m *Manager) omitNonRegular(ctx context.Context, lease workspace.Lease) error {
+	info, err := lease.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Mode().IsRegular() {
+		return workspace.ErrChanged
+	}
+	if err := m.excluded(ctx, lease, info.IsDir()); err != nil {
+		return err
+	}
+	file := index.File{RootID: lease.RootID, Path: []byte(filepath.ToSlash(lease.RelativePath)),
+		Kind: index.KindFile, State: index.StateOmitted, Reason: "non_regular", Size: info.Size(),
+		ModTime: info.ModTime(), ObservedAt: m.now()}
+	if info.IsDir() {
+		file.Kind = index.KindDirectory
+	}
+	if err := lease.Verify(); err != nil {
+		return err
+	}
+	return lease.Publish(func() error { _, err := m.store.PutSource(ctx, file, nil); return err })
 }
 
 func (m *Manager) deferUnavailable(ctx context.Context, work rootWork, parent workspace.Lease, path string, directory bool) error {

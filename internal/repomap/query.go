@@ -376,7 +376,10 @@ func (m *Manager) validate(ctx context.Context, space *workspace.Session, source
 		}
 		return validation{}, err
 	}
-	f, err := lease.Open()
+	f, err := lease.OpenRegular()
+	if errors.Is(err, workspace.ErrNotRegular) {
+		return invalidate("source_changed")
+	}
 	if err != nil {
 		if definitiveAccess(err) {
 			return invalidate(accessReason(err))
@@ -448,7 +451,7 @@ func (m *Manager) validate(ctx context.Context, space *workspace.Session, source
 	if ctx.Err() != nil {
 		return validation{}, ctx.Err()
 	}
-	// Reopen/stat the authorized name as well as checking the original
+	// Stat the authorized name as well as checking the original
 	// descriptor: a rename replacement must not inherit the old AST.
 	current, err := lease.Stat()
 	if err != nil {
