@@ -69,7 +69,7 @@ Linux and macOS have local resource samplers; unsupported Windows background tel
 Indexing does not emit unsolicited progress messages; `/repos index` reports its effective state and reason.
 
 The experimental resource envelope is a configuration for evaluation, not a measured performance guarantee.
-The user's Pi 4/local-model measurements and 8k/32k usefulness evaluation remain pending under the [manual methodology](plan/repo-map-evaluation.md).
+The user's manual smoke, Pi 4/local-model measurements and 8k/32k usefulness evaluation remain pending in the [v0.4.0 release gate #95](https://github.com/mrYush/hint/issues/95), under the [manual methodology](plan/repo-map-evaluation.md).
 An automatically paused run is not an indexing-on benchmark.
 
 The catalog is local, outside source roots, under the operating system's user cache directory at `hint/index/code-v2.sqlite`.

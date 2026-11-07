@@ -65,14 +65,11 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {
 		t.Fatal(err)
 	}
 	path = filepath.Join(root.Dir(), ".gitignore")
-	armed, checks, replaced := false, 0, false
+	checks, trigger, replaced := 0, 0, false
 	root = root.WithAccessCheck(func(abs string) error {
-		if armed && abs == path {
+		if abs == path {
 			checks++
-			// Lease.Verify resolves the path, then Open stats it, then the
-			// rooted open checks access. Swap only at that final boundary.
-			if checks == 3 {
-				armed = false
+			if trigger > 0 && checks == trigger {
 				if err := os.Remove(path); err != nil {
 					return err
 				}
@@ -102,7 +99,16 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	armed = mode == "replacement"
+	if mode == "replacement" {
+		checks = 0
+		if err := lease.Verify(); err != nil {
+			t.Fatal(err)
+		}
+		// Verify includes nested-boundary checks. Count them before adding
+		// the pre-open Stat and Root.OpenFile access checks, so the swap
+		// happens after regular-file admission and immediately before open.
+		trigger, checks = checks+2, 0
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	_, err = func() (string, error) {

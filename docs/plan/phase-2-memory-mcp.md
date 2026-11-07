@@ -82,10 +82,10 @@ MCP resources and prompts, the live reference-server integration test, and the f
 Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
 Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
 The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
-The owner's concluding review of the remediation passed on 2026-11-07 and raised no further findings.
+The owner accepted the remediation on 2026-11-07, subject to correcting the FIFO-test coverage and synchronizing the documents.
 The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements are the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
 The remediation checklist below records the acceptance work and its evidence for this branch.
-The [earlier review record](evidence/wp2.2-mac-20261106/readiness.md) preserves verification, cross-component findings and reproducible Mac measurements; passing those checks does not cover the newly identified scenarios.
+The [remediation record](evidence/wp2.2-remediation-20261107/README.md) is the current review handoff; the [original corpus measurements](evidence/wp2.2-mac-20261106/README.md) and [catalog scaling evidence](evidence/wp2.2-mac-20261106/metadata.md) remain historical measurements.
 Local Mac checks do not satisfy the Pi 4/local-model 8k/32k gates; those measurements moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
 
 Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
@@ -196,7 +196,7 @@ Public research has not established a universal backend winner or verified this 
 The completed checks below record the earlier implementation evidence.
 They do not close the subsequent review findings; the remediation checklist requires new regression evidence and a final verification pass.
 
-- ✅ Record the owner-authorized scope exception and prerequisite package boundaries in this branch (2026-11-06); final code review remains pending.
+- ✅ Record the owner-authorized scope exception and prerequisite package boundaries in this branch (2026-11-06); the owner accepted the result for merge on 2026-11-07.
 - ✅ Test the request/result/error contract through actual limits/permission wrappers, including JSON escaping, small output caps, long entry handles, empty-but-advancing pages and deterministic pagination; `query_test.go`, `model_test.go` and structured-redaction fixtures pass.
 - ✅ Bound examined records and index-read bytes for rare prefixes and large excluded ranges; race regressions cover lossless continuation past 1,025 filtered candidates, 50 declarations in 50 files with a four-file hash budget, growth during bounded reading and concurrent generation/cursor admission.
 - ✅ Validate declarations, signatures, enclosing context and source ranges on adapter fixtures, malformed/incomplete/generated/minified sources and a pinned 248,811-line real polyglot corpus; the [local report](evidence/wp2.2-mac-20261106/README.md) retains three explicit TypeScript omissions rather than claiming full grammar coverage.
@@ -205,47 +205,60 @@ They do not close the subsequent review findings; the remediation checklist requ
 - ✅ With controlled scheduler/runner fixtures, test parser pause/cancellation, no premature slot reuse, no background-pool bypass and known-emergency cancellation; manager/governor/worker tests cover the delivered foundation, while document extraction and durable notes remain later work.
 - ✅ The 8k/32k schema-cost and call-behavior measurement moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) by the owner on 2026-11-07; the measurement itself is not claimed here.
 - ✅ Fix cold-request/catalog-change schema accounting without double-counting provider usage or changing the instruction-preamble budget; targeted agent tests, race checks and vet passed.
-- ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-mac-20261106/verification.json).
+- ✅ Pass formatting, whole tests, race checks, vet, pinned golangci-lint v2.13.2 and all six `CGO_ENABLED=0` builds, including linux/arm64; final source hashes, command results and production-helper smoke are recorded in the [verification artifact](evidence/wp2.2-remediation-20261107/verification.json).
+
+Scope note for the PR: this branch also contains the documentation-only Zed/ACP plan from `416ced3` in Phase 4.
+The owner accepted the rest of the PR scope on 2026-11-07; retain this small planning addition under the [documented branch-scope exception](README.md) instead of rewriting reviewed history.
+No Zed integration is implemented by WP2.2.
+
+- ✅ Disclose the inherited Zed/ACP planning-only change in this package and the PR scope note (2026-11-07).
 
 #### Review remediation checklist
 
 Recorded on 2026-11-06 after the owner's implementation-review feedback.
 Work through these slices sequentially in `dev/wp2.2-repo-map`.
-On 2026-11-07 the owner authorized each small remediation step to proceed through implementation, self-review, verification and a separate commit, with owner review of the combined result afterward.
+The owner explicitly requested this workflow in the conversation on 2026-11-07: implementation, self-review, verification and a separate local commit, followed by combined owner review.
+This records the conversation authorization required by AGENTS.md; the checklist itself grants no authority.
 Use `- [ ]` for work not started, `- ⏳` for work in progress and `- ✅` only when the stated checks pass.
 Every fix starts with a reproducing regression, followed by the implementation and targeted verification.
-This authorization is limited to WP2.2 / #93 remediation; it does not authorize pushing, PR creation or issue closure.
+That workflow authorization is limited to WP2.2 / #93 remediation and does not authorize pushing or closing issues.
+The subsequent owner request authorizes preparing the PR after the remaining FIFO-test and documentation corrections; publication is separate from drafting its text.
 
 ##### Review consolidation
 
-- ✅ Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (owner's concluding review passed on 2026-11-07; no further findings were supplied).
+- ✅ Collect the remaining `repomap` review and consolidate duplicate findings by mechanism, with source locations and reproduction conditions (review received; the remaining FIFO-test/documentation findings are recorded below).
   Supplied concrete findings and their implementation/test/commit dispositions are consolidated in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md).
-- ✅ Obtain the concrete unspecified P0 scenario before claiming every blocker addressed (owner's concluding review passed on 2026-11-07 without supplying one; no P0 scenario remains open).
+- ✅ Withdraw the unspecified P0 requirement by explicit owner decision on 2026-11-07: its description was lost and the owner instructed that it need not be fixed.
+  No P0 scenario was recovered, reproduced or fixed; this is an owner dismissal, not technical verification.
   All concrete supplied findings are recorded and disposed below.
-- ✅ Distinguish demonstrated defects, intentional tradeoffs and defensive hardening in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md), including the explicit missing-review boundary (2026-11-07).
+- ✅ Distinguish demonstrated defects, intentional tradeoffs and defensive hardening in the [remediation handoff](evidence/wp2.2-remediation-20261107/README.md), including the explicit owner dismissal of the lost P0 (2026-11-07).
 
 ##### Slice 1 — Safe source access and path identity
 
 The FIFO `.gitignore` policy-read and metadata-only `Lease.Stat()` fixes are complete (2026-11-07).
 Extraction and freshness-validation opens admit only regular files, and discovery opens admit only directories.
-Slice 1 implementation and local verification are complete; final owner review remains part of the combined handoff.
+Slice 1 implementation and local verification are complete; owner review passed, with the final policy-test coverage correction recorded below.
 
-- ✅ Reproduce the FIFO policy-read hang in a subprocess with an external deadline, then implement regular-file admission that also handles replacement immediately before opening; both regressions failed by timeout before the fix and pass afterward (2026-11-07).
+- ✅ Reproduce the existing FIFO policy-read hang in a subprocess with an external deadline and implement regular-file admission (2026-11-07).
+  The original replacement trigger ran during boundary verification before pre-stat; that test did not establish an open-time replacement race.
+  The corrected trigger counts all Verify checks, then the pre-stat and Root.OpenFile checks; two mutation tests now establish the intended coverage.
 - ✅ Verify policy-read rejection, shared-slot release, cancellation/shutdown and unchanged regular `.gitignore` fingerprints; targeted and whole race/tests, vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
-  `TestPolicyFIFO` covers an existing FIFO and deterministic replacement immediately before the rooted open, with a parent-process timeout protecting the test itself.
+  `TestPolicyFIFO` now covers an existing FIFO and deterministic replacement immediately before the rooted open, with a parent-process timeout protecting the test itself.
+  Removing O_NONBLOCK makes the replacement subtest time out; removing the opened-descriptor type check makes it reject with the wrong error.
+  [Mutation evidence](evidence/wp2.2-remediation-20261107/fifo-validation.json) records both detected regressions; production source was unchanged by the build overlays.
   `TestPolicyFingerprintRegularAdmission` covers absent/directory/canceled policy reads; runtime verification was on macOS, while Linux/Windows builds establish compilation only.
-  Command results are retained locally in `.tmp/wp22-policy-fifo-checks.json`; this narrow fix is ready for owner review and does not complete Slice 1.
+  Current whole-source checks are recorded in the [verification artifact](evidence/wp2.2-remediation-20261107/verification.json).
 
 - ✅ Replace `Lease.Stat()`'s content open with rooted metadata observations and authority/identity rechecks; the FIFO subprocess regression failed by timeout before the fix and passes afterward (2026-11-07).
 - ✅ Verify FIFO metadata, file replacement, access revocation, nested boundaries and root replacement; targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed (2026-11-07).
   Self-review checked that metadata reads never open contents, errors return no metadata, and final authority checks reject revoked roots and changed ownership even when inode identity matches.
-  `TestLeaseStatFIFO`, `TestLeaseStatMetadata` and `TestLeaseStatRechecks` retain the regressions; command results are local in `.tmp/wp22-stat-checks.json`.
+  `TestLeaseStatFIFO`, `TestLeaseStatMetadata` and `TestLeaseStatRechecks` retain the regressions; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
   Runtime verification was on macOS; Linux/Windows cross-builds establish compilation only.
 
 - ✅ Use regular-file admission for extraction, post-parse rehash and cached-candidate validation; existing FIFOs and replacement before opening/after parsing no longer wait for a writer (2026-11-07).
   `TestSourceFIFO` reproduced all four hangs before the fix and now checks durable omissions, suppressed stale declarations, ordinary-file recovery, cancellation, reusable admission and shutdown.
   Self-review checked both source opens, type-change invalidation, omission publication authority and error-path descriptor ownership.
-  Whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-source-fifo-checks.json`.
+  Whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 
 - ✅ Prevent blocking source opens on FIFO and other special files, including `.gitignore`, extraction and freshness validation (2026-11-07).
 - ✅ Cover replacement of a regular source with a special file between inspection and opening; a preliminary `Stat` alone is insufficient (2026-11-07).
@@ -253,18 +266,18 @@ Slice 1 implementation and local verification are complete; final owner review r
   `TestSourceFIFO/directory` additionally reproduced a directory-to-FIFO race by timeout before the fix and now verifies rejection with no retained stream and successful shutdown.
   `Lease.OpenDirectory()` shares pre/post-open type, identity and authority checks with regular-file admission; `TestLeaseTypedOpen` covers both accepted and rejected types.
   Self-review checked shared admission behavior and descriptor cleanup; arbitrary filesystem/device-driver latency remains outside the guarantee.
-  Targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-directory-fifo-checks.json`.
+  Targeted race checks, whole tests/race/vet, pinned lint, source formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Reject out-of-root inputs such as `..` at the ignore API boundary before filesystem or Git access, while preserving legitimate primary-root Git policy (2026-11-07).
   `TestIgnoreRejectsEscapingPathsBeforeAccess` reproduced uncached Git access and cached-path admission; it and `TestPrepareIgnoreRejectsEscapingParentBeforeGit` now pass.
   Self-review covered empty/root paths, cached decisions, batch preparation, NUL/absolute/traversal rejection and native Windows lexical forms without changing Git-root discovery or ancestor policy.
   This is a lexical API boundary; walkers remain responsible for symlinks and rooted authority.
-  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-ignore-boundary-checks.json`.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Define one path/entry-ID canonicalization contract across workspace and catalog, including Windows native separators and drive forms without rejecting valid Unix filename bytes (2026-11-07).
   `internal/pathkey` owns separator normalization and canonical catalog-path validation; workspace/catalog wrappers share its entry-ID calculation.
   `TestEntryIDMatchesWorkspaceNativePaths` retains fixed hash vectors and `TestCatalogPlatformPaths` checks source/frontier admission and lookup without losing raw bytes.
   The Windows mismatch is established by the former differing hash inputs; its regression tests compile for Windows but were not executed on this macOS host.
   Self-review checked byte preservation, root scope, root-marker separation, Windows drive/backslash rejection and the absence of case/whitespace normalization or new access grants.
-  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-path-identity-checks.json`.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Pass targeted access/path regressions and relevant portability checks, and retain the reviewed slice for final owner review (2026-11-07).
 
 ##### Slice 2 — Discovery completion and stable policy revisions
@@ -276,13 +289,13 @@ Slice 1 implementation and local verification are complete; final owner review r
   `TestFrontierDelaySurvivesRestartAndNewInvalidation`, `TestFrontierV2MigrationPreservesWork` and `TestFrontierRetryUsesBoundedSeek` cover durable scheduling, revision races, migration/pin preservation and indexed ordering without a temporary sort.
   Self-review added clearing stale directory omissions after successful enumeration and retrying failed root reconciliation; publication, retained descriptor ownership, cancellation and newer invalidations were rechecked.
   Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the additional retained-stream regression passed under race checks.
-  Command results are local in `.tmp/wp22-frontier-outcomes-checks.json`.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Make policy fingerprints durable independently of the bounded RAM cache, so revisiting an unchanged policy after 128 cached entries does not increment its epoch (2026-11-07).
   `TestPolicyRevisionBeyondCacheCapacityAndReattachment` reproduced an unchanged second pass advancing epoch 140 to 152; it now preserves the epoch, advances once for an edit beyond 128 entries and restores it on root reattachment.
   `TestPolicyObservationsAreDurableAndRootScoped` covers restart, absence/deletion/recreation, root separation and atomic rejection of canceled or oversized observations.
   Self-review removed the per-root path map, preserved monotonic publication across concurrent tracking/observation, retained discovery after a failed revision read, and avoided keeping absent-policy tombstones.
   Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded beyond-capacity edit case also passed under race checks.
-  Command results are local in `.tmp/wp22-policy-durable-checks.json`.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Test queue draining and truthful ready/partial states, retry recovery, ownership changes after enqueue, and policy-cache saturation at and beyond 128 entries (2026-11-07).
 - ✅ Pass targeted discovery/policy regressions and retain this reviewed slice for final owner review (2026-11-07).
 
@@ -295,22 +308,22 @@ Slice 1 implementation and local verification are complete; final owner review r
   Retention regressions now also cover repeated encoding failures, cancellation after Pin, failed focused admission, cross-session rejection, canceled continuation and shutdown racing post-Pin cleanup.
   Self-review added request-lifetime ownership before Pin, bounded retries for failed terminal cleanup and exact-ID batch release on shutdown; a canceled caller cannot prevent cleanup or delete another owner's reservation.
   Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded lifecycle regression suite also passed under race checks.
-  Command results are local in `.tmp/wp22-query-retention-checks.json`.
+  current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task (2026-11-07).
   `TestOversizedDeclarationBecomesDurableOmission` reproduced a 7,000-parameter Go declaration passing extraction but failing catalog admission; it now completes the task with `output_budget_exceeded` and reuses that observation until the source changes.
   Additional regressions cover source-byte/declaration-count limits and reopening the catalog with a larger record allowance, which must invalidate the old cached omission.
   Self-review accounted for catalog encoding overhead, all-or-nothing declaration publication and admission budgets in derived-source policy identity; a metadata record that itself cannot fit still reports the storage admission error.
-  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-admission-checks.json`.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions (2026-11-07).
   `TestCoverageReasonsFollowScopeAndRetainedGeneration` reproduced missing reason buckets; it now checks count equality, retained generations, subtree isolation and optional-field removal at 1024 bytes.
   Catalog regressions cover changing reasons/file kinds, root isolation and lazy v3-to-v4 classification without double-counting legacy contributions.
   Self-review kept the vocabulary finite, updated reasons atomically with source counters, preserved unknown legacy reasons explicitly, and avoided all-file scans or per-file RAM state.
-  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-coverage-checks.json`.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case (2026-11-07).
   `TestMapDistinguishesUnavailableRootFromMissingScope` covers missing/replaced roots, missing files and stale retained cursors through the output wrapper.
   `TestToolDisclosureUsesEffectiveOutputLimit` checks catalog construction, status and wrapped execution at 1/64/512/1023/1024/2048/unlimited bytes.
   Self-review preserved transient continuation reservations, explicit access denial and delayed discovery retries for unavailable roots; integrators must supply their combined limits when constructing the catalog.
-  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-root-disclosure-checks.json`.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Add an explicit final root-list budget check and boundary tests (2026-11-07).
   `TestRootListingFinalBudgetBoundary` covers 1023/1024/1025/2048-byte limits, escaped paths and complete pagination without duplicates or loss.
   Self-review found no existing overflow; the final assertion is defensive hardening.
@@ -333,13 +346,13 @@ Slice 1 implementation and local verification are complete; final owner review r
   `TestOpenContentionIsBoundedAndRecovers` checks a 30 ms open budget against an exclusive lock and subsequent open/write recovery.
   Cancellation before disk access and corrupt-database classification also have regressions.
   Self-review checked reconnection limits, transaction rollback, persisted allowance consistency and the distinction between lock waiting and uninterruptible filesystem I/O.
-  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; results are local in `.tmp/wp22-sqlite-contention-checks.json`.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Test exhaustion of the shared disk allowance by discovery work, preserving queued tasks, admitted cursors and truthful partial/capacity status (2026-11-07).
 - ✅ Verify bounded retries and recovery after contention ends or capacity becomes available (2026-11-07).
   `TestDiscoveryQuotaPreservesWorkAndCursorThenRecovers` uses a separate SQLite connection holding an exclusive lock, fills the shared 512 KiB allowance with frontier tasks, then frees completed tasks and verifies resumed file processing.
   It checks preserved queued work, a usable preexisting cursor, truthful `storage_busy`/`storage_capacity` status and twenty attempted background slices that perform no retry work during cooldown.
   Self-review added 1 s BUSY and 5 s capacity cooldowns and propagated failed frontier rotation instead of masking it as a successful slice.
-  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; results are local in `.tmp/wp22-storage-recovery-checks.json`.
+  Whole tests/race/vet, pinned lint and all six CGO-disabled builds passed; current verification is retained in the [final artifact](evidence/wp2.2-remediation-20261107/verification.json).
 - ✅ Pass targeted storage/recovery regressions and retain this slice for final owner review (2026-11-07).
 
 ##### Slice 5 — Integrated acceptance and review handoff
@@ -350,10 +363,10 @@ Slice 1 implementation and local verification are complete; final owner review r
   Targeted race checks, vet and pinned lint passed; final whole-source gates are repeated below.
 
 - ✅ Run the combined access, discovery, policy, reservation and storage failure scenarios through the integrated workspace/map path (2026-11-07).
-- ✅ Complete the all-review blocker disposition: the owner's concluding review passed on 2026-11-07 with no further findings; all concrete supplied findings have linked fixes and regression evidence.
+- ✅ Complete the all-review disposition: concrete findings have linked fixes and regression evidence, the lost P0 is explicitly withdrawn, and release acceptance is tracked in #95 (2026-11-07).
 - ✅ Synchronize the contract, phase plan, roadmap, user documentation and review record with the corrected behavior and remaining limitations (2026-11-07).
-- ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds against final code revision `748459b` (2026-11-07).
-  The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, exact commands/results and production helper smoke checks.
+- ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds after the FIFO-test correction (2026-11-07).
+  The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, before/after source diff and Git status, exact commands/results, lint version and production helper smoke checks.
 - ✅ Repeat the affected real-corpus cold/warm/query measurements and a 10k catalog smoke; retain historical 100k/1m measurements as historical only (2026-11-07).
   The [measurement report](evidence/wp2.2-remediation-20261107/measurements.md) records three successful corpus pairs and the rejected ignored-directory fixture attempt.
   Actual contention, frontier exhaustion and recovery are covered by regressions rather than inferred from metadata scaling.
@@ -379,7 +392,8 @@ The owner approved this split on 2026-11-07: #93 closes as a correct manually en
 `auto` stays paused until that gate passes.
 
 - ✅ Owner disposition (2026-11-07): #93 closes as a correct manually enabled capability; Pi/model acceptance moves to the v0.4.0 release gate.
-- ✅ Revised closure boundary recorded in this phase file and in #93 (2026-11-07), with the new task and its acceptance criteria.
+- ✅ Revised closure boundary recorded in this phase file and in #95 (2026-11-07), with the new task and its acceptance criteria.
+  The PR must explicitly supersede the old planning-only text in #93; that issue body is not evidence of the current implementation status.
 - ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95): the owner runs the saved Pi 4 4 GB and local-model 8k/32k methodology there, retaining unsupported and unmeasured conditions explicitly.
 - ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95), together with the numerical resource-profile and default-disclosure decisions.
 - ✅ `auto` stays paused; the v0.4.0 release gate is what can change it.

@@ -1,6 +1,6 @@
 {
   "platform": "macOS-26.7-arm64-arm-64bit",
-  "started_at_utc": "2026-11-07T02:25:02Z",
+  "started_at_utc": "2026-11-07T14:23:34Z",
   "commands": [
     {
       "command": [
@@ -11,7 +11,7 @@
       "environment": {},
       "exit_code": 0,
       "seconds": 0.007,
-      "stdout": "748459badcc8ece0dba1f71cbbf74006e0b171a4\n",
+      "stdout": "ff99f09e21bde0a6da6c20141834704d06b92e0f\n",
       "stderr": ""
     },
     {
@@ -22,7 +22,7 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.006,
+      "seconds": 0.007,
       "stdout": "dev/wp2.2-repo-map\n",
       "stderr": ""
     },
@@ -33,8 +33,47 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.004,
+      "seconds": 0.005,
       "stdout": "go version go1.26.10 darwin/arm64\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "status",
+        "--porcelain=v1"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "seconds": 0.009,
+      "stdout": " M .github/pull_request_template.md\n M CONTRIBUTING.md\n M PLAN.md\n M docs/plan/README.md\n D docs/plan/evidence/wp2.2-mac-20261106/readiness.md\n M docs/plan/evidence/wp2.2-remediation-20261107/README.md\n M docs/plan/evidence/wp2.2-remediation-20261107/verification.json\n M docs/plan/phase-2-memory-mcp.md\n M docs/workspaces.md\n M internal/repomap/policy_fifo_test.go\n?? docs/plan/evidence/wp2.2-remediation-20261107/fifo-validation.json\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "HEAD",
+        "--",
+        "*.go",
+        "go.mod",
+        "go.sum"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "seconds": 0.007,
+      "stdout": "diff --git a/internal/repomap/policy_fifo_test.go b/internal/repomap/policy_fifo_test.go\nindex a84e109..e15dbc0 100644\n--- a/internal/repomap/policy_fifo_test.go\n+++ b/internal/repomap/policy_fifo_test.go\n@@ -65,14 +65,11 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \t\tt.Fatal(err)\n \t}\n \tpath = filepath.Join(root.Dir(), \".gitignore\")\n-\tarmed, checks, replaced := false, 0, false\n+\tchecks, trigger, replaced := 0, 0, false\n \troot = root.WithAccessCheck(func(abs string) error {\n-\t\tif armed && abs == path {\n+\t\tif abs == path {\n \t\t\tchecks++\n-\t\t\t// Lease.Verify resolves the path, then Open stats it, then the\n-\t\t\t// rooted open checks access. Swap only at that final boundary.\n-\t\t\tif checks == 3 {\n-\t\t\t\tarmed = false\n+\t\t\tif trigger > 0 && checks == trigger {\n \t\t\t\tif err := os.Remove(path); err != nil {\n \t\t\t\t\treturn err\n \t\t\t\t}\n@@ -102,7 +99,16 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \tif err != nil {\n \t\tt.Fatal(err)\n \t}\n-\tarmed = mode == \"replacement\"\n+\tif mode == \"replacement\" {\n+\t\tchecks = 0\n+\t\tif err := lease.Verify(); err != nil {\n+\t\t\tt.Fatal(err)\n+\t\t}\n+\t\t// Verify includes nested-boundary checks. Count them before adding\n+\t\t// the pre-open Stat and Root.OpenFile access checks, so the swap\n+\t\t// happens after regular-file admission and immediately before open.\n+\t\ttrigger, checks = checks+2, 0\n+\t}\n \tctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)\n \tdefer cancel()\n \t_, err = func() (string, error) {\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/Users/mr_yush/go/bin/golangci-lint",
+        "version"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "seconds": 0.086,
+      "stdout": "golangci-lint has version 2.13.2 built with go1.26.10 from (unknown, modified: ?, mod sum: \"h1:bCyq3E4vo9qwzifjpzJqYndEt7Ncva80qkk8G2B4TXU=\") on (unknown)\n",
       "stderr": ""
     },
     {
@@ -48,8 +87,8 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.008,
-      "stdout": "444 tracked or nonignored untracked paths\n",
+      "seconds": 0.009,
+      "stdout": "446 tracked or nonignored untracked paths\n",
       "stderr": ""
     },
     {
@@ -398,7 +437,7 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.033,
+      "seconds": 0.041,
       "stdout": "",
       "stderr": ""
     },
@@ -410,7 +449,7 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.009,
+      "seconds": 0.01,
       "stdout": "",
       "stderr": ""
     },
@@ -422,8 +461,8 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 6.78,
-      "stdout": "ok  \tgithub.com/mrYush/hint/cmd/hint\t1.395s\nok  \tgithub.com/mrYush/hint/internal/agent\t(cached)\nok  \tgithub.com/mrYush/hint/internal/config\t(cached)\nok  \tgithub.com/mrYush/hint/internal/console\t(cached)\nok  \tgithub.com/mrYush/hint/internal/debuglog\t(cached)\nok  \tgithub.com/mrYush/hint/internal/diff\t(cached)\nok  \tgithub.com/mrYush/hint/internal/fswalk\t(cached)\nok  \tgithub.com/mrYush/hint/internal/glob\t(cached)\nok  \tgithub.com/mrYush/hint/internal/index\t(cached)\nok  \tgithub.com/mrYush/hint/internal/mcp\t(cached)\n?   \tgithub.com/mrYush/hint/internal/pathkey\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/permission\t(cached)\nok  \tgithub.com/mrYush/hint/internal/project\t(cached)\n?   \tgithub.com/mrYush/hint/internal/provider\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/provider/ollama\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/openai\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/router\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap\t3.268s\nok  \tgithub.com/mrYush/hint/internal/repomap/extract\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap/worker\t(cached)\nok  \tgithub.com/mrYush/hint/internal/rpc\t(cached)\nok  \tgithub.com/mrYush/hint/internal/session\t(cached)\nok  \tgithub.com/mrYush/hint/internal/shell\t(cached)\nok  \tgithub.com/mrYush/hint/internal/text\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool/builtin\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tui\t(cached)\nok  \tgithub.com/mrYush/hint/internal/workspace\t(cached)\nok  \tgithub.com/mrYush/hint/pkg/agentapi\t(cached)\n",
+      "seconds": 6.903,
+      "stdout": "ok  \tgithub.com/mrYush/hint/cmd/hint\t1.400s\nok  \tgithub.com/mrYush/hint/internal/agent\t(cached)\nok  \tgithub.com/mrYush/hint/internal/config\t(cached)\nok  \tgithub.com/mrYush/hint/internal/console\t(cached)\nok  \tgithub.com/mrYush/hint/internal/debuglog\t(cached)\nok  \tgithub.com/mrYush/hint/internal/diff\t(cached)\nok  \tgithub.com/mrYush/hint/internal/fswalk\t(cached)\nok  \tgithub.com/mrYush/hint/internal/glob\t(cached)\nok  \tgithub.com/mrYush/hint/internal/index\t(cached)\nok  \tgithub.com/mrYush/hint/internal/mcp\t(cached)\n?   \tgithub.com/mrYush/hint/internal/pathkey\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/permission\t(cached)\nok  \tgithub.com/mrYush/hint/internal/project\t(cached)\n?   \tgithub.com/mrYush/hint/internal/provider\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/provider/ollama\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/openai\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/router\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap\t2.984s\nok  \tgithub.com/mrYush/hint/internal/repomap/extract\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap/worker\t(cached)\nok  \tgithub.com/mrYush/hint/internal/rpc\t(cached)\nok  \tgithub.com/mrYush/hint/internal/session\t(cached)\nok  \tgithub.com/mrYush/hint/internal/shell\t(cached)\nok  \tgithub.com/mrYush/hint/internal/text\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool/builtin\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tui\t(cached)\nok  \tgithub.com/mrYush/hint/internal/workspace\t(cached)\nok  \tgithub.com/mrYush/hint/pkg/agentapi\t(cached)\n",
       "stderr": ""
     },
     {
@@ -435,8 +474,8 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 23.883,
-      "stdout": "ok  \tgithub.com/mrYush/hint/cmd/hint\t2.809s\nok  \tgithub.com/mrYush/hint/internal/agent\t(cached)\nok  \tgithub.com/mrYush/hint/internal/config\t(cached)\nok  \tgithub.com/mrYush/hint/internal/console\t(cached)\nok  \tgithub.com/mrYush/hint/internal/debuglog\t(cached)\nok  \tgithub.com/mrYush/hint/internal/diff\t(cached)\nok  \tgithub.com/mrYush/hint/internal/fswalk\t(cached)\nok  \tgithub.com/mrYush/hint/internal/glob\t(cached)\nok  \tgithub.com/mrYush/hint/internal/index\t(cached)\nok  \tgithub.com/mrYush/hint/internal/mcp\t(cached)\n?   \tgithub.com/mrYush/hint/internal/pathkey\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/permission\t(cached)\nok  \tgithub.com/mrYush/hint/internal/project\t(cached)\n?   \tgithub.com/mrYush/hint/internal/provider\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/provider/ollama\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/openai\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/router\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap\t19.684s\nok  \tgithub.com/mrYush/hint/internal/repomap/extract\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap/worker\t(cached)\nok  \tgithub.com/mrYush/hint/internal/rpc\t(cached)\nok  \tgithub.com/mrYush/hint/internal/session\t(cached)\nok  \tgithub.com/mrYush/hint/internal/shell\t(cached)\nok  \tgithub.com/mrYush/hint/internal/text\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool/builtin\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tui\t(cached)\nok  \tgithub.com/mrYush/hint/internal/workspace\t(cached)\nok  \tgithub.com/mrYush/hint/pkg/agentapi\t(cached)\n",
+      "seconds": 23.05,
+      "stdout": "ok  \tgithub.com/mrYush/hint/cmd/hint\t2.788s\nok  \tgithub.com/mrYush/hint/internal/agent\t(cached)\nok  \tgithub.com/mrYush/hint/internal/config\t(cached)\nok  \tgithub.com/mrYush/hint/internal/console\t(cached)\nok  \tgithub.com/mrYush/hint/internal/debuglog\t(cached)\nok  \tgithub.com/mrYush/hint/internal/diff\t(cached)\nok  \tgithub.com/mrYush/hint/internal/fswalk\t(cached)\nok  \tgithub.com/mrYush/hint/internal/glob\t(cached)\nok  \tgithub.com/mrYush/hint/internal/index\t(cached)\nok  \tgithub.com/mrYush/hint/internal/mcp\t(cached)\n?   \tgithub.com/mrYush/hint/internal/pathkey\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/permission\t(cached)\nok  \tgithub.com/mrYush/hint/internal/project\t(cached)\n?   \tgithub.com/mrYush/hint/internal/provider\t[no test files]\nok  \tgithub.com/mrYush/hint/internal/provider/ollama\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/openai\t(cached)\nok  \tgithub.com/mrYush/hint/internal/provider/router\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap\t19.104s\nok  \tgithub.com/mrYush/hint/internal/repomap/extract\t(cached)\nok  \tgithub.com/mrYush/hint/internal/repomap/worker\t(cached)\nok  \tgithub.com/mrYush/hint/internal/rpc\t(cached)\nok  \tgithub.com/mrYush/hint/internal/session\t(cached)\nok  \tgithub.com/mrYush/hint/internal/shell\t(cached)\nok  \tgithub.com/mrYush/hint/internal/text\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tool/builtin\t(cached)\nok  \tgithub.com/mrYush/hint/internal/tui\t(cached)\nok  \tgithub.com/mrYush/hint/internal/workspace\t(cached)\nok  \tgithub.com/mrYush/hint/pkg/agentapi\t(cached)\n",
       "stderr": ""
     },
     {
@@ -447,7 +486,7 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 0.328,
+      "seconds": 0.273,
       "stdout": "",
       "stderr": ""
     },
@@ -459,7 +498,7 @@
       ],
       "environment": {},
       "exit_code": 0,
-      "seconds": 1.306,
+      "seconds": 1.126,
       "stdout": "0 issues.\n",
       "stderr": ""
     },
@@ -475,7 +514,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.325,
+      "seconds": 1.582,
       "stdout": "",
       "stderr": ""
     },
@@ -491,7 +530,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.317,
+      "seconds": 1.464,
       "stdout": "",
       "stderr": ""
     },
@@ -507,7 +546,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.401,
+      "seconds": 1.614,
       "stdout": "",
       "stderr": ""
     },
@@ -523,7 +562,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.242,
+      "seconds": 1.473,
       "stdout": "",
       "stderr": ""
     },
@@ -539,7 +578,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.363,
+      "seconds": 1.518,
       "stdout": "",
       "stderr": ""
     },
@@ -555,7 +594,7 @@
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 1.394,
+      "seconds": 1.408,
       "stdout": "",
       "stderr": ""
     },
@@ -564,22 +603,53 @@
         "go",
         "build",
         "-o",
-        "/Users/mr_yush/repos/hint/.tmp/hint-wp22-review",
+        "/private/tmp/hint-wp22-final-review",
         "./cmd/hint"
       ],
       "environment": {
         "CGO_ENABLED": "0"
       },
       "exit_code": 0,
-      "seconds": 0.608,
+      "seconds": 0.599,
       "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "status",
+        "--porcelain=v1"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "seconds": 0.008,
+      "stdout": " M .github/pull_request_template.md\n M CONTRIBUTING.md\n M PLAN.md\n M docs/plan/README.md\n D docs/plan/evidence/wp2.2-mac-20261106/readiness.md\n M docs/plan/evidence/wp2.2-remediation-20261107/README.md\n M docs/plan/evidence/wp2.2-remediation-20261107/verification.json\n M docs/plan/phase-2-memory-mcp.md\n M docs/plan/repo-map-evaluation.md\n M docs/workspaces.md\n M internal/repomap/policy_fifo_test.go\n?? docs/plan/evidence/wp2.2-remediation-20261107/fifo-validation.json\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "HEAD",
+        "--",
+        "*.go",
+        "go.mod",
+        "go.sum"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "seconds": 0.008,
+      "stdout": "diff --git a/internal/repomap/policy_fifo_test.go b/internal/repomap/policy_fifo_test.go\nindex a84e109..e15dbc0 100644\n--- a/internal/repomap/policy_fifo_test.go\n+++ b/internal/repomap/policy_fifo_test.go\n@@ -65,14 +65,11 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \t\tt.Fatal(err)\n \t}\n \tpath = filepath.Join(root.Dir(), \".gitignore\")\n-\tarmed, checks, replaced := false, 0, false\n+\tchecks, trigger, replaced := 0, 0, false\n \troot = root.WithAccessCheck(func(abs string) error {\n-\t\tif armed && abs == path {\n+\t\tif abs == path {\n \t\t\tchecks++\n-\t\t\t// Lease.Verify resolves the path, then Open stats it, then the\n-\t\t\t// rooted open checks access. Swap only at that final boundary.\n-\t\t\tif checks == 3 {\n-\t\t\t\tarmed = false\n+\t\t\tif trigger > 0 && checks == trigger {\n \t\t\t\tif err := os.Remove(path); err != nil {\n \t\t\t\t\treturn err\n \t\t\t\t}\n@@ -102,7 +99,16 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \tif err != nil {\n \t\tt.Fatal(err)\n \t}\n-\tarmed = mode == \"replacement\"\n+\tif mode == \"replacement\" {\n+\t\tchecks = 0\n+\t\tif err := lease.Verify(); err != nil {\n+\t\t\tt.Fatal(err)\n+\t\t}\n+\t\t// Verify includes nested-boundary checks. Count them before adding\n+\t\t// the pre-open Stat and Root.OpenFile access checks, so the swap\n+\t\t// happens after regular-file admission and immediately before open.\n+\t\ttrigger, checks = checks+2, 0\n+\t}\n \tctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)\n \tdefer cancel()\n \t_, err = func() (string, error) {\n",
       "stderr": ""
     }
   ],
   "note": "Local final gates, not Pi/model or Windows runtime acceptance.",
-  "head": "748459badcc8ece0dba1f71cbbf74006e0b171a4",
+  "head": "ff99f09e21bde0a6da6c20141834704d06b92e0f",
   "branch": "dev/wp2.2-repo-map",
   "go_version": "go version go1.26.10 darwin/arm64",
+  "status_before": " M .github/pull_request_template.md\n M CONTRIBUTING.md\n M PLAN.md\n M docs/plan/README.md\n D docs/plan/evidence/wp2.2-mac-20261106/readiness.md\n M docs/plan/evidence/wp2.2-remediation-20261107/README.md\n M docs/plan/evidence/wp2.2-remediation-20261107/verification.json\n M docs/plan/phase-2-memory-mcp.md\n M docs/workspaces.md\n M internal/repomap/policy_fifo_test.go\n?? docs/plan/evidence/wp2.2-remediation-20261107/fifo-validation.json\n",
+  "source_diff_before": "diff --git a/internal/repomap/policy_fifo_test.go b/internal/repomap/policy_fifo_test.go\nindex a84e109..e15dbc0 100644\n--- a/internal/repomap/policy_fifo_test.go\n+++ b/internal/repomap/policy_fifo_test.go\n@@ -65,14 +65,11 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \t\tt.Fatal(err)\n \t}\n \tpath = filepath.Join(root.Dir(), \".gitignore\")\n-\tarmed, checks, replaced := false, 0, false\n+\tchecks, trigger, replaced := 0, 0, false\n \troot = root.WithAccessCheck(func(abs string) error {\n-\t\tif armed && abs == path {\n+\t\tif abs == path {\n \t\t\tchecks++\n-\t\t\t// Lease.Verify resolves the path, then Open stats it, then the\n-\t\t\t// rooted open checks access. Swap only at that final boundary.\n-\t\t\tif checks == 3 {\n-\t\t\t\tarmed = false\n+\t\t\tif trigger > 0 && checks == trigger {\n \t\t\t\tif err := os.Remove(path); err != nil {\n \t\t\t\t\treturn err\n \t\t\t\t}\n@@ -102,7 +99,16 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \tif err != nil {\n \t\tt.Fatal(err)\n \t}\n-\tarmed = mode == \"replacement\"\n+\tif mode == \"replacement\" {\n+\t\tchecks = 0\n+\t\tif err := lease.Verify(); err != nil {\n+\t\t\tt.Fatal(err)\n+\t\t}\n+\t\t// Verify includes nested-boundary checks. Count them before adding\n+\t\t// the pre-open Stat and Root.OpenFile access checks, so the swap\n+\t\t// happens after regular-file admission and immediately before open.\n+\t\ttrigger, checks = checks+2, 0\n+\t}\n \tctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)\n \tdefer cancel()\n \t_, err = func() (string, error) {\n",
+  "lint_version": "golangci-lint has version 2.13.2 built with go1.26.10 from (unknown, modified: ?, mod sum: \"h1:bCyq3E4vo9qwzifjpzJqYndEt7Ncva80qkk8G2B4TXU=\") on (unknown)",
   "source_sha256": {
     "cmd/hint/app.go": "9f9fe2d8c8cd25e80fd3f75cc3224b6442b1c56506b09c3c59462b0f3d8a00ef",
     "cmd/hint/commands.go": "6696f144c4eeb284450440898094f99c6a66d03b20b55aec054c68feb3e7858e",
@@ -776,7 +846,7 @@
     "internal/repomap/manager_test.go": "bff4cb3e55d46c97132e840328fd051c8da9904025c6fc5e0df41a050b095cba",
     "internal/repomap/model.go": "f4e83ba42c3b38b061d2924bfcb2e85514be25baa1c3ebb170c2753edffed887",
     "internal/repomap/model_test.go": "d2abfc69f69401016e8922814ffb1682ea50582013e0cc33b7accbd12319ef3b",
-    "internal/repomap/policy_fifo_test.go": "bd8f1dd6c8f68932df1c3f48115e4a618cbe08b3d8cc743ea6159dcb926ca03f",
+    "internal/repomap/policy_fifo_test.go": "47247332daa577aa07d55d5e48ccb0cc1e90bd07e23036b33c6f349c6c2885b0",
     "internal/repomap/query.go": "c010645e68a1b52c1600d8cec22d303e66d92407e0662ab356431d434c887682",
     "internal/repomap/query_retention.go": "51cf86d8e30a2da436c6f184c99a395e845666a7a13e886300644671d6585dbe",
     "internal/repomap/query_retention_test.go": "39429335670a7e3ea4a6a94f122018139cbade8734314a3289843ad7f0906954",
@@ -930,8 +1000,8 @@
     "pkg/agentapi/validate_test.go": "cfacab8c46409990b4100f4a0c67c5d2ce72fc9f8a6e69741bf7776505075ecd"
   },
   "binary_smoke": {
-    "binary_sha256": "13a46262afef21e37df5a6488499368f697daf602a900f683583bbe6d8dd3c28",
-    "seconds": 1.045,
+    "binary_sha256": "c93ae60d76680ce82c3ded1819cd94028656b2f036591e61dfd97f2a79589877",
+    "seconds": 0.934,
     "limits": {
       "max_input_bytes": 1048576,
       "max_output_bytes": 262144,
@@ -991,6 +1061,8 @@
     "hidden_helper": true,
     "quota_flag": true
   },
-  "finished_at_utc": "2026-11-07T02:25:44Z",
+  "status_after": " M .github/pull_request_template.md\n M CONTRIBUTING.md\n M PLAN.md\n M docs/plan/README.md\n D docs/plan/evidence/wp2.2-mac-20261106/readiness.md\n M docs/plan/evidence/wp2.2-remediation-20261107/README.md\n M docs/plan/evidence/wp2.2-remediation-20261107/verification.json\n M docs/plan/phase-2-memory-mcp.md\n M docs/plan/repo-map-evaluation.md\n M docs/workspaces.md\n M internal/repomap/policy_fifo_test.go\n?? docs/plan/evidence/wp2.2-remediation-20261107/fifo-validation.json\n",
+  "source_diff_after": "diff --git a/internal/repomap/policy_fifo_test.go b/internal/repomap/policy_fifo_test.go\nindex a84e109..e15dbc0 100644\n--- a/internal/repomap/policy_fifo_test.go\n+++ b/internal/repomap/policy_fifo_test.go\n@@ -65,14 +65,11 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \t\tt.Fatal(err)\n \t}\n \tpath = filepath.Join(root.Dir(), \".gitignore\")\n-\tarmed, checks, replaced := false, 0, false\n+\tchecks, trigger, replaced := 0, 0, false\n \troot = root.WithAccessCheck(func(abs string) error {\n-\t\tif armed && abs == path {\n+\t\tif abs == path {\n \t\t\tchecks++\n-\t\t\t// Lease.Verify resolves the path, then Open stats it, then the\n-\t\t\t// rooted open checks access. Swap only at that final boundary.\n-\t\t\tif checks == 3 {\n-\t\t\t\tarmed = false\n+\t\t\tif trigger > 0 && checks == trigger {\n \t\t\t\tif err := os.Remove(path); err != nil {\n \t\t\t\t\treturn err\n \t\t\t\t}\n@@ -102,7 +99,16 @@ func testPolicyFIFOChild(t *testing.T, mode, base string) {\n \tif err != nil {\n \t\tt.Fatal(err)\n \t}\n-\tarmed = mode == \"replacement\"\n+\tif mode == \"replacement\" {\n+\t\tchecks = 0\n+\t\tif err := lease.Verify(); err != nil {\n+\t\t\tt.Fatal(err)\n+\t\t}\n+\t\t// Verify includes nested-boundary checks. Count them before adding\n+\t\t// the pre-open Stat and Root.OpenFile access checks, so the swap\n+\t\t// happens after regular-file admission and immediately before open.\n+\t\ttrigger, checks = checks+2, 0\n+\t}\n \tctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)\n \tdefer cancel()\n \t_, err = func() (string, error) {\n",
+  "finished_at_utc": "2026-11-07T14:24:17Z",
   "passed": true
 }

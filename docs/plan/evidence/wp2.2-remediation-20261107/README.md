@@ -11,11 +11,13 @@ The [phase checklist](../../phase-2-memory-mcp.md#review-consolidation) remains 
 
 - ✅ Implement and locally verify the supplied, concrete findings listed below.
 - ✅ Preserve the owner's FIFO policy-read fix `5f60d93` and add subsequent fixes as separate commits.
-- ✅ Obtain the full concluding `repomap` review and the concrete scenario behind the summary's unspecified P0 (owner's concluding review passed on 2026-11-07; no further findings or P0 scenario were supplied).
+- ✅ Record the concluding review and explicitly withdraw the lost unspecified P0 on the owner's instruction (2026-11-07).
+  The P0 was neither recovered nor fixed; its acceptance requirement was dismissed by the owner.
 - ✅ Final owner review of the combined branch (owner's concluding review passed on 2026-11-07).
 - ✅ Owner's Pi 4/local-model 8k/32k evaluation moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) by the owner on 2026-11-07; not measured here.
 
-With the concluding review passed and the Pi 4/local-model evaluation moved to the v0.4.0 release gate, #93 has no remaining review or measurement input; it stays open until the branch is merged.
+The owner accepted the rest of the branch, requested the final FIFO-test/documentation correction, dismissed the lost P0 and moved manual/model acceptance to #95.
+Those unperformed release checks remain open in #95; #93 covers the implemented manually enabled capability and stays open until the branch is merged.
 Unvalidated `auto` remains paused; these fixes do not expand its acceptance boundary.
 
 ## Findings and dispositions
@@ -55,12 +57,23 @@ Schema upgrades require stopping older binaries first; mixed-version live writer
 Filesystem/device syscalls themselves are not preemptible by a Go context; the bounded-open evidence concerns FIFO admission and SQLite lock waiting.
 The [user guide](../../../workspaces.md) documents cache handling, status, retry and coverage behavior.
 
+## Final review corrections
+
+The original `TestPolicyFIFO/replacement` hook fired during nested-boundary verification, before regular-file pre-stat.
+It now measures Verify's checks before adding the pre-stat/open checks.
+The [mutation evidence](fifo-validation.json) demonstrates failure both without nonblocking open and without the post-open type check; the normal test passes.
+This strengthens test coverage without changing production code.
+
+The superseded working-tree readiness checklist and 146 temporary documents/reports were removed, including the Russian guide draft at the owner's request.
+Current contracts, evaluation instructions, attributed reviews and raw historical measurements remain because they support the PR and the open release gate.
+
 ## Final verification and measurement evidence
 
 The [verification artifact](verification.json) records the exact source SHA-256 inventory, commands, results, platform and built helper smoke cases.
-All final gates passed on source revision `748459b`, with a stable source inventory through testing: ordinary and race suites, vet, golangci-lint v2.13.2, formatting/diff checks and all six CGO-disabled builds.
+The original remediation gates passed on source revision `748459b`; the verification artifact is refreshed for the final FIFO test correction and records exact working-tree state, source hashes and lint version.
+The verified gates are: ordinary and race suites, vet, golangci-lint v2.13.2, formatting/diff checks and all six CGO-disabled builds.
 The built production helper passed Go/Python/JS/TS/TSX/Rust smoke cases.
-Subsequent handoff changes are documentation and evidence only.
+The final correction changes the test trigger and documentation, with no production-code changes.
 Tests needing local network listeners ran with sandbox escalation; Windows/Linux results are cross-build evidence, not runtime acceptance.
 The [measurement report](measurements.md) records affected local corpus/catalog reruns and preserves a failed fixture-location attempt explicitly.
 Historical million-record results remain [separate evidence](../wp2.2-mac-20261106/metadata.md), not a new million-file traversal or a new result for this source revision.

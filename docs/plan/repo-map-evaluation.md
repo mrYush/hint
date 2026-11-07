@@ -1,7 +1,8 @@
 # Manual repo-map evaluation on Raspberry Pi
 
 This is a reproducible acceptance protocol, not a report of completed Raspberry Pi or model experiments.
-The owner will run the Pi 4 and local-model checks manually after reviewing the implementation.
+The owner moved these checks, including the paired 8k/32k evaluation, into the [v0.4.0 release gate #95](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
+They are pending release acceptance, not a remaining WP2.2 merge gate.
 Mac parser measurements below are screening evidence and cannot satisfy this acceptance gate.
 The proposed 128 MiB additional indexing RSS and five-percent median inference-degradation targets remain proposals until measured and reviewed.
 An implementation that keeps automatic indexing disabled because its resource profile is unvalidated is not an accepted automatic profile.
