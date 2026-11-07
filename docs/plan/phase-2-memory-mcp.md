@@ -293,7 +293,11 @@ Slice 1 implementation and local verification are complete; final owner review r
   Self-review added request-lifetime ownership before Pin, bounded retries for failed terminal cleanup and exact-ID batch release on shutdown; a canceled caller cannot prevent cleanup or delete another owner's reservation.
   Whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; the expanded lifecycle regression suite also passed under race checks.
   Command results are local in `.tmp/wp22-query-retention-checks.json`.
-- [ ] Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task.
+- ✅ Align extractor and catalog admission limits; an oversized declaration or source result must produce a durable explicit omission rather than a permanently failing pending task (2026-11-07).
+  `TestOversizedDeclarationBecomesDurableOmission` reproduced a 7,000-parameter Go declaration passing extraction but failing catalog admission; it now completes the task with `output_budget_exceeded` and reuses that observation until the source changes.
+  Additional regressions cover source-byte/declaration-count limits and reopening the catalog with a larger record allowance, which must invalidate the old cached omission.
+  Self-review accounted for catalog encoding overhead, all-or-nothing declaration publication and admission budgets in derived-source policy identity; a metadata record that itself cannot fit still reports the storage admission error.
+  Targeted race checks, whole tests/race/vet, pinned lint, formatting and all six CGO-disabled builds passed; command results are local in `.tmp/wp22-admission-checks.json`.
 - [ ] Populate `coverage.omissions` consistently with aggregate counts, scope, generation and the permitted small-budget omissions.
 - [ ] Align unavailable-root errors and effective output-budget disclosure with the contract, including the below-1024-byte case.
 - [ ] Add an explicit final root-list budget check and boundary tests; treat the missing assertion as hardening unless an actual overflow is reproduced.

@@ -696,8 +696,8 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 		}
 	}()
 	language := extract.Language(lease.RelativePath)
-	file.Policy = extract.PolicyVersion(language)
-	limits := extract.DefaultLimits()
+	file.Policy = m.sourcePolicy(language)
+	limits := m.extractionLimits()
 	var symbols []index.Symbol
 	switch {
 	case language == "":
@@ -776,7 +776,29 @@ func (m *Manager) refreshHeld(ctx context.Context, lease workspace.Lease) (resul
 	}
 	// Store writes are bounded by its operation timeout; hold publication authority
 	// through that write so revocation cannot race a successful publication.
-	return lease.Publish(func() error { _, err := m.store.PutSource(ctx, file, symbols); return err })
+	return lease.Publish(func() error {
+		_, err := m.store.PutSource(ctx, file, symbols)
+		if errors.Is(err, index.ErrTooLarge) && len(symbols) > 0 {
+			// Catalog records repeat source metadata and encode differently
+			// from extractor results. Reject the whole declaration set rather
+			// than retrying a result that can never fit the current budgets.
+			file.State, file.Reason = index.StateOmitted, "output_budget_exceeded"
+			_, err = m.store.PutSource(ctx, file, nil)
+		}
+		return err
+	})
+}
+
+func (m *Manager) extractionLimits() extract.Limits {
+	limits, catalog := extract.DefaultLimits(), m.store.Options()
+	limits.MaxOutputBytes = min(limits.MaxOutputBytes, catalog.MaxSourceBytes)
+	limits.MaxDeclarations = min(limits.MaxDeclarations, catalog.MaxSourceSymbols)
+	return limits
+}
+
+func (m *Manager) sourcePolicy(language string) string {
+	catalog := m.store.Options()
+	return fmt.Sprintf("%s/catalog-v1:%d:%d:%d", extract.PolicyVersion(language), catalog.MaxRecordBytes, catalog.MaxSourceBytes, catalog.MaxSourceSymbols)
 }
 
 func (m *Manager) omitNonRegular(ctx context.Context, lease workspace.Lease) error {

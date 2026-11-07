@@ -57,6 +57,8 @@ Coverage describes the selected scope at the observed generation, including omit
 When all counts are present, `known_files = indexed_files + pending_files + omitted_files`; directories and ownership boundary markers are navigation entries rather than code-file counts.
 Use maintained aggregates or omit unavailable counts; calculating exact subtree counts must not trigger a complete scan on each query.
 Omission reasons include `unsupported`, `oversized`, `non_regular`, `parse_failed`, `paused`, `deadline_exceeded` and `work_budget_exceeded`.
+Extractor declaration/output limits are capped by catalog admission budgets; a declaration set that still exceeds catalog encoding limits becomes a durable `output_budget_exceeded` omission rather than a perpetually pending source.
+Derived-source policy identities include catalog record/source/count budgets so increasing an allowance can retry a previously cached omission.
 Special-file sources are observed through metadata only; extraction and candidate verification admit regular files without waiting for a FIFO writer.
 Unknown total counts are absent; never derive a percentage from an undiscovered denominator.
 `ready` does not imply zero omissions, and no next cursor means the known generation is exhausted, not that the live filesystem has no other matches.

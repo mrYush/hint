@@ -35,6 +35,11 @@ func managerFixture(t *testing.T, runner Extractor) (*Manager, *workspace.Sessio
 
 func managerFixtureAt(t *testing.T, runner Extractor, path string) (*Manager, *workspace.Session, string) {
 	t.Helper()
+	return managerFixtureWithStore(t, runner, path, index.Options{})
+}
+
+func managerFixtureWithStore(t *testing.T, runner Extractor, path string, store index.Options) (*Manager, *workspace.Session, string) {
+	t.Helper()
 	root, err := tool.NewRoot(path)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +48,7 @@ func managerFixtureAt(t *testing.T, runner Extractor, path string) (*Manager, *w
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := New(context.Background(), Options{Path: filepath.Join(t.TempDir(), "index.db"), Runner: runner})
+	m, err := New(context.Background(), Options{Path: filepath.Join(t.TempDir(), "index.db"), Runner: runner, Store: store})
 	if err != nil {
 		t.Fatal(err)
 	}

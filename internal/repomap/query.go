@@ -413,7 +413,7 @@ func (m *Manager) validate(ctx context.Context, space *workspace.Session, source
 	if !info.Mode().IsRegular() || info.Size() != source.Size || !info.ModTime().Equal(source.ModTime) {
 		return invalidate("source_changed")
 	}
-	if source.Policy != extract.PolicyVersion(extract.Language(string(source.Path))) {
+	if source.Policy != m.sourcePolicy(extract.Language(string(source.Path))) {
 		return invalidate("extractor_changed")
 	}
 	if err := m.excluded(ctx, lease, false); err != nil {
