@@ -33,6 +33,8 @@ hint/
 │   ├── mcp/                    # MCP client: servers, tool adapters, schema budget (WP2.1)
 │   ├── permission/             # modes, allow-list, prompting
 │   ├── diff/                   # line diff + unified rendering (permission previews, TUI)
+│   ├── attach/                 # attachment resolution, extraction and content-addressed store (WP3.5)
+│   ├── termimage/              # terminal graphics detection, encoders and half-block fallback (WP3.6)
 │   ├── session/                # JSONL store, resume, list (WP0.7)
 │   ├── console/                # the one stdin line reader: prompts, session picker, REPL
 │   ├── project/                # HINT.md, auto-context, gitignore

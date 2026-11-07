@@ -1,6 +1,6 @@
 # hint — Development Plan
 
-> Status: living document · Last updated: 2026-11-06
+> Status: living document · Last updated: 2026-11-07
 > Source of truth for the roadmap.
 > Detailed per-phase breakdowns live in [`docs/plan/`](docs/plan/).
 
@@ -57,7 +57,8 @@ Estimates assume one developer part-time; roughly halve them for full-time.
 | — | Install indexes: apt + Scoop, cask cleanup. Parallel with Phase 1; does not gate v0.3 | current final tag | — | [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) |
 | 1 | Core as a service + TUI | v0.3 | 4–6 wk | [phase-1-core-service-tui.md](docs/plan/phase-1-core-service-tui.md) |
 | 2 | Workspace/index, memory, MCP client, A2A, open integration surfaces, code maturity | v0.4 | Re-estimate after workspace/index decomposition and measurements | [phase-2-memory-mcp.md](docs/plan/phase-2-memory-mcp.md) |
-| 3 | Multimodality: VLM, STT, TTS | v0.5 | 6–8 wk | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
+| 2R | Post-v0.4 global review, product research and roadmap reset | v0.4.1 (conditional) | 2–3 wk | [phase-2r-review.md](docs/plan/phase-2r-review.md) |
+| 3 | Multimodality: VLM, attachments, terminal images, STT, TTS | v0.5 | 6–8 wk for WP3.1–WP3.4; WP3.5–WP3.6 re-estimated with the phase | [phase-3-multimodality.md](docs/plan/phase-3-multimodality.md) |
 | 4 | Desktop widgets and editor integration (Zed over ACP, macOS/Windows/Linux) | v0.6 | 6–10 wk for the widgets; WP4.5 is re-estimated with the phase | [phase-4-desktop-widgets.md](docs/plan/phase-4-desktop-widgets.md) |
 | 5 | Mobile: iPhone / iPad / Android | v0.7 | 10–16 wk | [phase-5-mobile.md](docs/plan/phase-5-mobile.md) |
 | 6 | Sensors and devices (parallel with 5) | v0.8 | 8–12 wk | [phase-6-sensors.md](docs/plan/phase-6-sensors.md) |
@@ -69,6 +70,14 @@ Pre-release tags carry a suffix (`v0.2.0-alpha`); every tag is full semver, as G
 [WP0.14](docs/plan/phase-0-mvp-cli.md#wp014--install-indexes-for-debian-and-windows) publishes the current CLI to the indexes a user installs from: the Homebrew cask (macOS and Linux, already shipped), an apt repository (Ubuntu, Debian and the other apt systems, including Raspberry Pi OS) and a Scoop bucket (Windows).
 It runs **in parallel with Phase 1**.
 `v0.3` does not wait for it, and a tag that only updates those indexes is not the Phase 1 release.
+
+Scope added 2026-11-07 for `v0.5`, after `v0.4.0`: [WP3.5](docs/plan/phase-3-multimodality.md#wp35--image-and-document-attachments) attaches images and arbitrary documents from paths, URLs and the clipboard, and [WP3.6](docs/plan/phase-3-multimodality.md#wp36--images-in-the-terminal) draws images inline in the terminal, at least in the TUI.
+They do not change Phase 2 or the `v0.4` release gate.
+Phase 2R runs first and may revise that scope in the updated plan.
+
+Phase 2R is inserted between Phase 2 and Phase 3 (decided 2026-11-07).
+It starts immediately after the `v0.4.0` tag, does not renumber the later phases, and ends with the next version of this plan.
+It tags `v0.4.1` only for fixes the review accepts; otherwise it records the decision to skip the tag and Phase 3 starts from the updated plan.
 
 Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
 
@@ -121,6 +130,9 @@ Cross-cutting risks and mitigations: [`docs/plan/risks.md`](docs/plan/risks.md).
   B3, M1 and M2 stay known issues and are backlog (decided 2026-10-11); they did not block `v0.2.0` or `v0.3.0`.
   The Raspberry Pi 5 smoke is done (2026-11-02).
   The measured linux/arm64 log is the Pi 4 bench [`docs/plan/evidence/pi-4-20261011-105151/`](docs/plan/evidence/pi-4-20261011-105151/summary.md).
+- **After `v0.4.0`:** Phase 2R — the [post-v0.4 review](docs/plan/phase-2r-review.md) runs before Phase 3.
+  It audits code, architecture and efficiency; re-researches the product landscape and change dynamics; rewrites the roadmap; and settles the [Adaptive Tuning Effect](docs/plan/adaptive-tuning.md) (Q12).
+  It tags `v0.4.1` only when the review accepts fixes.
 - Today's `hint` is the Phase 0 CLI surface served the Phase 1 way: bare `hint` opens an interactive session, `hint -p` answers once, and both are JSON-RPC clients of a core served in the same process over a `net.Pipe` — the same bytes `hint serve` speaks, so `hint --connect` points the same shell at a core running in another terminal.
   The core runs the agent loop with every built-in tool registered behind the permission gate (it explores the project itself and can edit it and run commands with confirmation), reads the global and the project's `HINT.md`, and records every conversation as a session that `-c`, `-r` or `--session` continues; independent reads in one tool batch run in parallel, and instruction files that outgrow the budget arrive as outlines the `instructions` tool expands, or split into rules that load when the conversation reaches their paths.
   CI and the release pipeline are in place.
@@ -202,6 +214,8 @@ Implemented by WP0.9 (2026-09-07); the alias prints a one-line note pointing at 
     The Scoop push uses its own secret, `SCOOP_BUCKET_TOKEN`; `HOMEBREW_TAP_TOKEN` was renewed on 2026-10-31 (fine-grained token `hint-homebrew-tap`, expires 2027-10-28, [#71](https://github.com/mrYush/hint/issues/71)).
 20. ~~`v0.3.2`, a patch before Phase 2 (decided 2026-11-02): the agent-loop fixes of [#32](https://github.com/mrYush/hint/issues/32) — the compaction summary survives a prefix refresh, the usage baseline is reset after a reactive compaction — and the UTF-8 truncation of [#41](https://github.com/mrYush/hint/issues/41).~~ Done (2026-11-02), tagged `v0.3.2`; the cask, the Scoop manifest and the apt index name `0.3.2`.
     Then Phase 2 (`v0.4`).
+21. Phase 2R, immediately after `v0.4.0` (decided 2026-11-07): the global code/architecture/efficiency audit, the product and market research, the quality scorecard, the roadmap reset and the Adaptive Tuning Effect design (Q12).
+    It tags `v0.4.1` only for fixes the review accepts, and Phase 3 starts from the updated plan.
 
 ## Open questions
 
@@ -218,6 +232,7 @@ Implemented by WP0.9 (2026-09-07); the alias prints a one-line note pointing at 
 | Q10 | A2A: which side first — `hint` as an A2A client that delegates to remote agents, or `hint serve` as an A2A server other agents call — and which Go implementation to build on (the A2A project's Go SDK, or a thin client over the JSON-RPC spec) | Phase 2 (WP2.6) | Spike at the start of WP2.6: read the current spec, run the reference samples against `hint serve`, decide; recorded in [phase-2](docs/plan/phase-2-memory-mcp.md#wp26--a2a-hint-among-other-agents) |
 | Q9 | If some models are ever offered **by subscription** rather than paid per token by the user, how is that credential made unusable for ordinary API calls? The client runs on hardware the user administers, its source is public, and it can be rebuilt — so hiding the token is not an option. | Phase 7 (WP7.6); the provider layer must not foreclose it earlier | **Spike written 2026-09-08**: [`docs/plan/subscription-access.md`](docs/plan/subscription-access.md) — do not protect the credential, narrow what it unlocks (gateway holds the provider keys; a task-shaped advisor endpoint instead of an OpenAI-compatible passthrough; short-lived sender-constrained tokens; the user's own key always a complete path). Decide the gateway shape and whether running a gateway is in scope at all (Q9a) only when there are users. Risk R9 in [risks.md](docs/plan/risks.md) |
 | Q11 | A local *conductor*: may `hint` run another harness — a second `hint` in a git worktree, a foreign coding CLI, an A2A agent — as a delegated subtask, and on which seam: a `Runner` beside `Tool`, or A2A only? A delegated harness owns its own loop, so the permission ceiling, the secret boundary of WP1.7 and the event model are the constraints, not details. | Phase 2 (WP2.6 fixes the seam); adapters come later | **Spike:** [`delegation.md`](docs/plan/delegation.md). No code before a spike, in this order: the `bash` sandbox layer ([architecture](docs/plan/architecture.md#implications-noted-for-the-plan)), then `hint`-in-`hint` over `-p --output json` in a worktree, then A2A (WP2.6), then a subprocess adapter for a foreign CLI. The hosted multi-tenant runner is a non-goal ([why-hint](docs/plan/why-hint.md#non-goals-stated-first)); only the local conductor is in scope. |
+| Q12 | How can `hint` make each user feel it is being fine-tuned to them — fewer repeated corrections over time — without training on their data or hiding a profile? | Phase 2R (design); implementation after `v0.5` at the earliest | **Spike:** [`adaptive-tuning.md`](docs/plan/adaptive-tuning.md) — the Adaptive Tuning Effect (ATE) with local in-context adaptation: preference memory, evidence, confidence, decay, a prompt budget, explicit approval for rules, and correction-rate and regression metrics. No code before Phase 2R accepts the design and the roadmap names a work package. |
 
 ## How this plan is maintained
 
