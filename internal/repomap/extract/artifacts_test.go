@@ -47,7 +47,7 @@ func TestMinifiedAndDecoratedSources(t *testing.T) {
 		{"x.rs", "#[derive(Debug)] pub struct S; impl S { fn get(&self) -> &str { r#\"BODY_SENTINEL\"# } }", 2},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			r, err := Extract(context.Background(), Source{tt.path, []byte(tt.text)}, DefaultLimits())
+			r, err := extractWithWarmEngine(t, Source{tt.path, []byte(tt.text)}, DefaultLimits())
 			if err != nil || !r.Complete || len(r.Declarations) != tt.count {
 				t.Fatalf("Extract = %+v, %v", r, err)
 			}
