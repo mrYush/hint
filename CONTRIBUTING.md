@@ -47,7 +47,7 @@ but breaks `GOOS=linux GOARCH=arm64 go build ./...`, it will not be merged.
 Today's code is small (`cmd/hint`, `internal/config`, `internal/provider`,
 `internal/agent`, `internal/tool`, `internal/permission`, `internal/diff`,
 `internal/session`, `internal/console`, `internal/project`,
-`internal/debuglog`, `internal/rpc`). `cmd/hint` is a client of
+`internal/debuglog`, `internal/rpc`, `internal/mcp`). `cmd/hint` is a client of
 `internal/rpc`: only the engine wiring (the `rpc*.go` files) may import the
 agent loop, and a test enforces it. The target layout is
 described in
@@ -278,8 +278,9 @@ after it is merged into `develop`/`main`.
 - Add a scope note when the branch carries work beyond its work package, per
   the exception in [docs/plan/README.md](docs/plan/README.md). Tick the
   phase-file checkboxes in the same PR.
-- A PR that targets `main` is a `release/*` or `hotfix/*` PR; it does not use
-  `Closes` for feature issues. A release closes its own issue, if it has one.
+- A PR that targets `main` is a `release/*` or `hotfix/*` PR.
+  Carry `Closes` for completed feature issues that are still open and the
+  completed release issue, if any; do not close pending release gates.
 
 ### Review comments
 

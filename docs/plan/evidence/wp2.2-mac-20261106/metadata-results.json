@@ -1,0 +1,86 @@
+{
+  "status": "complete",
+  "runs": [
+    {
+      "entries": 10000,
+      "raw": "metadata-10000-measured.txt",
+      "exit_code": 0,
+      "build_seconds_final_progress": 7.063,
+      "catalog_bytes": 22433792,
+      "peak_rss_bytes": 25313280,
+      "mean_query_ns_per_op": 37669,
+      "query_bytes_per_op": 9615,
+      "query_allocations_per_op": 170,
+      "query_iterations": 20,
+      "wall_seconds": 7.09,
+      "user_seconds": 1.36,
+      "system_seconds": 3.8,
+      "raw_benchmark_metrics": {
+        "ns/op": 37669.0,
+        "build-ns/entry": 706327.0,
+        "build-seconds": 7.063,
+        "db-bytes": 22433792.0,
+        "db-bytes/entry": 2243.0,
+        "entries": 10000.0,
+        "B/op": 9615.0,
+        "allocs/op": 170.0
+      }
+    },
+    {
+      "entries": 100000,
+      "raw": "metadata-100000.txt",
+      "exit_code": 0,
+      "build_seconds_final_progress": 67.716,
+      "catalog_bytes": 225292288,
+      "peak_rss_bytes": 26869760,
+      "mean_query_ns_per_op": 38831,
+      "query_bytes_per_op": 9626,
+      "query_allocations_per_op": 170,
+      "query_iterations": 20,
+      "wall_seconds": 67.73,
+      "user_seconds": 14.46,
+      "system_seconds": 39.05,
+      "raw_benchmark_metrics": {
+        "ns/op": 38831.0,
+        "build-ns/entry": 677160.0,
+        "build-seconds": 67.72,
+        "db-bytes": 225292288.0,
+        "db-bytes/entry": 2253.0,
+        "entries": 100000.0,
+        "B/op": 9626.0,
+        "allocs/op": 170.0
+      }
+    },
+    {
+      "entries": 1000000,
+      "raw": "metadata-1000000.txt",
+      "exit_code": 0,
+      "build_seconds_final_progress": 1223.109,
+      "catalog_bytes": 2250113024,
+      "peak_rss_bytes": 27394048,
+      "mean_query_ns_per_op": 40225,
+      "query_bytes_per_op": 9617,
+      "query_allocations_per_op": 170,
+      "query_iterations": 20,
+      "wall_seconds": 1223.27,
+      "user_seconds": 158.86,
+      "system_seconds": 419.96,
+      "raw_benchmark_metrics": {
+        "ns/op": 40225.0,
+        "build-ns/entry": 1223109.0,
+        "build-seconds": 1223.0,
+        "db-bytes": 2250113024.0,
+        "db-bytes/entry": 2250.0,
+        "entries": 1000000.0,
+        "B/op": 9617.0,
+        "allocs/op": 170.0
+      }
+    }
+  ],
+  "build_time_precision": "Final monotonic build progress timestamps rounded to milliseconds; Go custom metric formatting has fewer significant digits.",
+  "failed_probe": {
+    "raw": "metadata-10000.txt",
+    "exit_code": 1,
+    "reason": "Benchmark passed, but sandbox denied sysctl counters required by /usr/bin/time; no RSS result."
+  }
+}

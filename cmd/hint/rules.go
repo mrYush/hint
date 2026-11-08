@@ -25,23 +25,68 @@ import (
 type preamble struct {
 	pc         *project.Context
 	registry   *tool.Registry
+	lookup     func(string) (agentapi.Tool, bool)
 	activation *project.Activation
 	// notices is where a loaded rule and a layout warning are announced.
 	notices io.Writer
 	trace   func(format string, args ...any)
+	redact  func(string) string
 
-	mu     sync.Mutex
-	key    string // paths of the active rules the cached prompt was built for
-	prompt string
-	warned map[string]bool
+	mu       sync.Mutex
+	key      string // paths of the active rules the cached prompt was built for
+	prompt   string
+	warned   map[string]bool
+	revision uint64
 }
 
-func newPreamble(pc *project.Context, registry *tool.Registry, notices io.Writer, trace func(string, ...any)) *preamble {
-	p := &preamble{pc: pc, registry: registry, activation: project.NewActivation(pc.Rules), notices: notices, trace: trace, warned: map[string]bool{}}
+func newPreamble(pc *project.Context, registry *tool.Registry, notices io.Writer, trace func(string, ...any), redact func(string) string) *preamble {
+	snapshot := pc.Snapshot()
+	p := &preamble{pc: pc, registry: registry, activation: project.NewActivation(snapshot.Rules), notices: notices, trace: trace, redact: redact, warned: map[string]bool{}, revision: snapshot.Revision}
+	for _, warning := range snapshot.Warnings {
+		p.warned[warning] = true
+	}
 	// The prompt every turn opens with: the always-loaded files and the
 	// index of what a touch may still bring in.
-	p.prompt = systemPrompt(pc, pc.Instructions, p.activation.Pending())
+	p.prompt = systemPrompt(pc, snapshot.Instructions, p.activation.Pending())
 	return p
+}
+
+// refresh rebuilds the initial prompt only after configured MCP resources
+// join the project context during the first turn's lazy initialization.
+func (p *preamble) refresh(ctx context.Context) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	snapshot := p.pc.Snapshot()
+	if snapshot.Revision == p.revision {
+		return
+	}
+	// AddInstructionSources has already reported the no-rules warnings.
+	for _, warning := range snapshot.Warnings {
+		p.warned[warning] = true
+	}
+	active := p.activation.Active()
+	instructions := snapshot.Instructions
+	if len(active) > 0 {
+		var warnings []string
+		instructions, warnings = p.pc.Layout(ctx, active)
+		p.warn(warnings)
+	}
+	p.prompt = systemPrompt(p.pc, instructions, p.activation.Pending())
+	p.key = activeKey(active)
+	p.revision = snapshot.Revision
+}
+
+func (p *preamble) warn(warnings []string) {
+	for _, warning := range warnings {
+		if p.warned[warning] {
+			continue
+		}
+		p.warned[warning] = true
+		if p.redact != nil {
+			warning = p.redact(warning)
+		}
+		fmt.Fprintf(p.notices, "hint: warning: %s\n", warning)
+	}
 }
 
 // Prefix implements agent.Preamble.
@@ -52,7 +97,11 @@ func (p *preamble) Prefix(ctx context.Context, messages []agentapi.Message) ([]a
 			continue
 		}
 		for _, c := range m.ToolCalls {
-			t, ok := p.registry.Lookup(c.Name)
+			lookup := p.lookup
+			if lookup == nil {
+				lookup = p.registry.Lookup
+			}
+			t, ok := lookup(c.Name)
 			if !ok {
 				continue
 			}
@@ -69,12 +118,7 @@ func (p *preamble) Prefix(ctx context.Context, messages []agentapi.Message) ([]a
 	key := activeKey(active)
 	if key != p.key {
 		instructions, warnings := p.pc.Layout(ctx, active)
-		for _, w := range warnings {
-			if !p.warned[w] {
-				p.warned[w] = true
-				fmt.Fprintf(p.notices, "hint: warning: %s\n", w)
-			}
-		}
+		p.warn(warnings)
 		p.prompt = systemPrompt(p.pc, instructions, p.activation.Pending())
 		p.key = key
 		if p.trace != nil {

@@ -478,6 +478,13 @@ type fakeEngine struct {
 	cancelled     int
 	// modelsGate, when set, holds Models until it is closed.
 	modelsGate chan struct{}
+	// promptGate, when set, holds Prompts, ExpandPrompt and CompletePrompt
+	// until it is closed, so a test can show the connection still reads.
+	promptGate     chan struct{}
+	prompts        []PromptInfo
+	promptRequest  PromptRequest
+	promptComplete PromptCompleteRequest
+	promptHasMore  bool
 }
 
 // find resolves id the way session.Store.Find does: the exact id, or
@@ -552,6 +559,62 @@ func (e *fakeEngine) Models(ctx context.Context, profile string) ([]string, erro
 		return nil, fmt.Errorf("%w: unknown profile %q", ErrNotFound, profile)
 	}
 	return []string{"qwen", "llama"}, nil
+}
+
+func (e *fakeEngine) PromptServers(context.Context) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for _, prompt := range e.prompts {
+		if !seen[prompt.Server] {
+			seen[prompt.Server] = true
+			out = append(out, prompt.Server)
+		}
+	}
+	return out, nil
+}
+
+func (e *fakeEngine) waitPrompt(ctx context.Context) error {
+	if e.promptGate == nil {
+		return nil
+	}
+	select {
+	case <-e.promptGate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (e *fakeEngine) Prompts(ctx context.Context) ([]PromptInfo, error) {
+	if err := e.waitPrompt(ctx); err != nil {
+		return nil, err
+	}
+	return e.prompts, nil
+}
+
+func (e *fakeEngine) ExpandPrompt(ctx context.Context, req PromptRequest) (string, error) {
+	if err := e.waitPrompt(ctx); err != nil {
+		return "", err
+	}
+	e.promptRequest = req
+	if req.Server == "missing" || req.Name == "missing" {
+		return "", fmt.Errorf("%w: unknown prompt", ErrNotFound)
+	}
+	if len(req.Arguments) == 0 {
+		return "Review", nil
+	}
+	return "Review " + req.Arguments[0], nil
+}
+
+func (e *fakeEngine) CompletePrompt(ctx context.Context, req PromptCompleteRequest) ([]string, bool, error) {
+	if err := e.waitPrompt(ctx); err != nil {
+		return nil, false, err
+	}
+	e.promptComplete = req
+	if req.Server == "missing" || req.Prompt == "missing" {
+		return nil, false, fmt.Errorf("%w: unknown prompt", ErrNotFound)
+	}
+	return []string{"main.go", "model.go"}, e.promptHasMore, nil
 }
 
 func (e *fakeEngine) Fork(_ context.Context, opts ForkOptions) (Session, error) {

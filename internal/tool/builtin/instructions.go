@@ -17,9 +17,9 @@ import (
 
 const instructionsName = "instructions"
 
-const instructionsDescription = `Read the project's instruction files (HINT.md, AGENTS.md, CLAUDE.md and the global one) in full, one section at a time, or find where a rule comes from.
+const instructionsDescription = `Read the run's instruction documents (HINT.md, AGENTS.md, CLAUDE.md, the global one and configured MCP resources) in full, one section at a time, or find where a rule comes from.
 
-The system prompt shows these files under a budget: a section ending in [...] is only its heading and first sentence, a file marked summary="true" is a model-written summary. This tool returns the original text. With no arguments it lists the files and their headings. With path it returns the whole file; with path and section, that section (by heading, case-insensitive) with its subsections. With quote it finds the file and line an instruction came from. It reads only the instruction files of this run, wherever they are, and nothing else.`
+The system prompt shows these documents under a budget: a section ending in [...] is only its heading and first sentence, a document marked summary="true" is a model-written summary. This tool returns the original text. With no arguments it lists the documents and their headings. With path it returns the whole document; with path and section, that section (by heading, case-insensitive) with its subsections. With quote it finds the document and line an instruction came from. It reads only the instruction documents of this run and nothing else.`
 
 type instructionsArgs struct {
 	Path    string `json:"path,omitempty" jsonschema_description:"An instruction file, as named in the system prompt (absolute, or just its file name when unambiguous)"`
@@ -34,14 +34,30 @@ var instructionsSchema = tool.MustSchema(instructionsArgs{})
 // so a parent directory's HINT.md — outside tool.Root, which read_file
 // refuses — is readable, while an arbitrary path never is.
 type instructions struct {
-	paths []string
+	paths   []string
+	sources map[string]string
+	pc      *project.Context
 }
 
 // NewInstructions returns the instructions tool over paths, the
-// instruction files project.Load discovered for this run.
-func NewInstructions(paths []string, opts ...Option) agentapi.Tool {
-	o := buildOptions(opts)
-	return tool.WithLimits(&instructions{paths: append([]string(nil), paths...)}, o.limits)
+// instruction documents project.Load discovered for this run. Sources hold
+// configured in-memory documents; every other path is read from disk.
+func NewInstructions(paths []string, sources ...project.InstructionSource) agentapi.Tool {
+	contents := make(map[string]string, len(sources))
+	for _, source := range sources {
+		contents[source.Path] = source.Content
+	}
+	return tool.WithLimits(&instructions{paths: append([]string(nil), paths...), sources: contents}, tool.DefaultLimits())
+}
+
+// NewProjectInstructions follows a project context as configured MCP sources
+// are added during lazy initialization.
+func NewProjectInstructions(pc *project.Context) agentapi.Tool {
+	return tool.WithLimits(&instructions{pc: pc}, tool.DefaultLimits())
+}
+
+func (t *instructions) allPaths() []string {
+	return t.paths
 }
 
 func (*instructions) Name() string                 { return instructionsName }
@@ -51,6 +67,14 @@ func (*instructions) Class() agentapi.ActionClass  { return agentapi.ClassRead }
 
 // Run implements agentapi.Tool.
 func (t *instructions) Run(_ context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
+	if t.pc != nil {
+		snapshot := t.pc.Snapshot()
+		sources := make(map[string]string, len(snapshot.Sources))
+		for _, source := range snapshot.Sources {
+			sources[source.Path] = source.Content
+		}
+		t = &instructions{paths: snapshot.InstructionPaths, sources: sources}
+	}
 	var in instructionsArgs
 	if err := tool.DecodeArgs(args, &in); err != nil {
 		return tool.InvalidArgs(callID, instructionsName, err), nil
@@ -74,12 +98,12 @@ func (t *instructions) Run(_ context.Context, callID string, args json.RawMessag
 
 // index lists every instruction file with its size and headings.
 func (t *instructions) index(callID string) (agentapi.ToolResult, error) {
-	if len(t.paths) == 0 {
+	if len(t.allPaths()) == 0 {
 		return agentapi.TextResult(callID, instructionsName, "This run has no instruction files."), nil
 	}
 	var b strings.Builder
-	for _, p := range t.paths {
-		content, err := os.ReadFile(p)
+	for _, p := range t.allPaths() {
+		content, err := t.readContent(p)
 		if err != nil {
 			fmt.Fprintf(&b, "%s: %v\n", p, err)
 			continue
@@ -94,13 +118,21 @@ func (t *instructions) index(callID string) (agentapi.ToolResult, error) {
 	return agentapi.TextResult(callID, instructionsName, strings.TrimRight(b.String(), "\n")), nil
 }
 
-// read returns a file, or one section of it with its subsections.
+// readContent reads a discovered disk file or returns a configured source.
+func (t *instructions) readContent(path string) ([]byte, error) {
+	if content, ok := t.sources[path]; ok {
+		return []byte(content), nil
+	}
+	return os.ReadFile(path)
+}
+
+// read returns a document, or one section of it with its subsections.
 func (t *instructions) read(callID, path, section string) (agentapi.ToolResult, error) {
 	abs, err := t.resolve(path)
 	if err != nil {
 		return agentapi.ErrorResult(callID, instructionsName, err.Error()), nil
 	}
-	content, err := os.ReadFile(abs)
+	content, err := t.readContent(abs)
 	if err != nil {
 		return agentapi.ErrorResult(callID, instructionsName, err.Error()), nil
 	}
@@ -148,8 +180,8 @@ func (t *instructions) locate(callID, quote string) (agentapi.ToolResult, error)
 	const maxHits = 10
 	var b strings.Builder
 	hits := 0
-	for _, p := range t.paths {
-		content, err := os.ReadFile(p)
+	for _, p := range t.allPaths() {
+		content, err := t.readContent(p)
 		if err != nil {
 			continue
 		}
@@ -186,7 +218,7 @@ func (t *instructions) locate(callID, quote string) (agentapi.ToolResult, error)
 	}
 	if hits == 0 {
 		return agentapi.ErrorResult(callID, instructionsName,
-			fmt.Sprintf("no instruction file of this run contains %q (files: %s)", quote, strings.Join(t.paths, ", "))), nil
+			fmt.Sprintf("no instruction file of this run contains %q (files: %s)", quote, strings.Join(t.allPaths(), ", "))), nil
 	}
 	if hits >= maxHits {
 		b.WriteString("(more matches not shown)")
@@ -198,9 +230,14 @@ func (t *instructions) locate(callID, quote string) (agentapi.ToolResult, error)
 // path as shown in the prompt, or a suffix of it (its file name, or the
 // path relative to a parent) when that names exactly one file.
 func (t *instructions) resolve(path string) (string, error) {
+	for _, p := range t.allPaths() {
+		if p == path {
+			return p, nil
+		}
+	}
 	clean := filepath.Clean(path)
 	var matches []string
-	for _, p := range t.paths {
+	for _, p := range t.allPaths() {
 		if p == clean || strings.HasSuffix(p, string(filepath.Separator)+clean) {
 			matches = append(matches, p)
 		}
@@ -209,10 +246,10 @@ func (t *instructions) resolve(path string) (string, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
-		if len(t.paths) == 0 {
+		if len(t.allPaths()) == 0 {
 			return "", errors.New("this run has no instruction files")
 		}
-		return "", fmt.Errorf("%s is not an instruction file of this run; the files are: %s", path, strings.Join(t.paths, ", "))
+		return "", fmt.Errorf("%s is not an instruction file of this run; the files are: %s", path, strings.Join(t.allPaths(), ", "))
 	default:
 		sort.Strings(matches)
 		return "", fmt.Errorf("%s names several instruction files, use the full path: %s", path, strings.Join(matches, ", "))

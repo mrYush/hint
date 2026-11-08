@@ -2,9 +2,12 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
+
+	"github.com/mrYush/hint/internal/fswalk"
 )
 
 // Overview renders the shape of the working directory for the prompt.
@@ -42,6 +45,8 @@ func (t Tree) Render(ctx context.Context, fsys fs.FS, ig Ignorer) (string, error
 	if maxEntries <= 0 {
 		maxEntries = DefaultTreeMaxEntries
 	}
+	depth = min(depth, 64)
+	maxEntries = min(maxEntries, 4096)
 	if ig == nil {
 		ig = Basic
 	}
@@ -49,7 +54,7 @@ func (t Tree) Render(ctx context.Context, fsys fs.FS, ig Ignorer) (string, error
 	var b strings.Builder
 	entries := 0
 	truncated := false
-	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+	err := fswalk.WalkDir(fsys, ".", fswalk.Limits{MaxDepth: depth, MaxEntries: min(32768, max(1024, maxEntries*16)), BeforeBatch: func(parent string, entries []fs.DirEntry) error { return PrepareIgnore(ig, parent, entries) }}, func(p string, d fs.DirEntry, err error) error {
 		if p == "." {
 			return err
 		}
@@ -83,10 +88,14 @@ func (t Tree) Render(ctx context.Context, fsys fs.FS, ig Ignorer) (string, error
 		}
 		return nil
 	})
+	if errors.Is(err, fswalk.ErrLimit) {
+		truncated = true
+		err = nil
+	}
 	if err != nil {
 		return "", err
 	}
-	if entries == 0 {
+	if entries == 0 && !truncated {
 		return "(empty directory)", nil
 	}
 	if truncated {

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mrYush/hint/internal/fswalk"
 )
 
 // ErrOutsideRoot reports a path that resolves outside the working
@@ -38,7 +40,11 @@ type Root struct {
 	denied []string
 	// handle is the directory as os.Root opened it; nil for the zero
 	// value, which no method accepts.
-	handle *os.Root
+	handle      *os.Root
+	accessCheck func(string) error
+	exactPaths  bool
+	pathAlias   string
+	pathTarget  string
 }
 
 // NewRoot resolves dir to an absolute, symlink-free directory.
@@ -71,6 +77,11 @@ func NewRoot(dir string) (Root, error) {
 // rel turns an absolute path the Root resolved into the name os.Root
 // takes: relative to the directory, "." for the directory itself.
 func (r Root) rel(abs string) (string, error) {
+	if r.accessCheck != nil {
+		if err := r.accessCheck(abs); err != nil {
+			return "", err
+		}
+	}
 	if r.handle == nil {
 		return "", fmt.Errorf("tool: root is not initialised")
 	}
@@ -80,11 +91,26 @@ func (r Root) rel(abs string) (string, error) {
 	// pointed inside the root when it was looked at is what gets opened,
 	// and a component that becomes a link to the outside afterwards is
 	// still refused by os.Root.
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		if !r.contains(real) {
-			return "", fmt.Errorf("%w: %s", ErrOutsideRoot, abs)
+	existing := abs
+	for {
+		if real, err := filepath.EvalSymlinks(existing); err == nil {
+			if !r.contains(real) {
+				return "", fmt.Errorf("%w: %s", ErrOutsideRoot, abs)
+			}
+			tail, err := filepath.Rel(existing, abs)
+			if err != nil {
+				return "", err
+			}
+			abs = filepath.Join(real, tail)
+			break
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			break
 		}
-		abs = real
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			break
+		}
+		existing = parent
 	}
 	rel, err := filepath.Rel(r.dir, abs)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -177,25 +203,77 @@ func (r Root) CreateTemp(dir, prefix string) (*os.File, error) {
 	return nil, fmt.Errorf("tool: no free temporary name in %s", r.Rel(dir))
 }
 
-// WalkDir walks the tree under abs the way filepath.WalkDir does, with
+// WalkDir streams the tree under abs in bounded directory batches, with
 // absolute paths in the callback, reading directories through os.Root.
 // Symlinks are not followed, as filepath.WalkDir does not follow them.
+// Oversized explicit traversals return a limit error; use the repository index
+// for complete paginated discovery of arbitrarily large trees.
 func (r Root) WalkDir(abs string, fn fs.WalkDirFunc) error {
+	return r.WalkDirBatch(abs, nil, fn)
+}
+
+// WalkDirBatch additionally prepares bounded directory pages before callbacks.
+// The preparation callback receives absolute parent paths and at most 32 entries.
+func (r Root) WalkDirBatch(abs string, prepare func(string, []fs.DirEntry) error, fn fs.WalkDirFunc) error {
 	rel, err := r.rel(abs)
 	if err != nil {
 		return err
 	}
-	return fs.WalkDir(r.handle.FS(), filepath.ToSlash(rel), func(p string, d fs.DirEntry, err error) error {
+	limits := fswalk.Limits{}
+	if prepare != nil {
+		limits.BeforeBatch = func(parent string, entries []fs.DirEntry) error {
+			return prepare(filepath.Join(r.dir, filepath.FromSlash(parent)), entries)
+		}
+	}
+	return fswalk.WalkDir(r.handle.FS(), filepath.ToSlash(rel), limits, func(p string, d fs.DirEntry, err error) error {
 		full := abs
 		if p != "." && p != filepath.ToSlash(rel) {
 			full = filepath.Join(r.dir, filepath.FromSlash(p))
+		}
+		if r.accessCheck != nil && err == nil {
+			if checkErr := r.accessCheck(full); checkErr != nil {
+				if full == abs {
+					return checkErr
+				}
+				if d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 		}
 		return fn(full, d, err)
 	})
 }
 
+// WithAccessCheck returns a copy that rechecks dynamic authority before each
+// filesystem operation and hides unauthorized entries during walks. The check
+// must use an undecorated root to avoid recursion. It is not a shell sandbox.
+func (r Root) WithAccessCheck(check func(string) error) Root {
+	r.accessCheck = check
+	return r
+}
+
+// WithExactPaths preserves path bytes, including leading and trailing spaces.
+func (r Root) WithExactPaths() Root { r.exactPaths = true; return r }
+
+// WithPathAlias maps one synthetic relative path to an exact path before
+// authorization. It carries raw filesystem bytes through JSON tool arguments.
+func (r Root) WithPathAlias(alias, target string) Root {
+	r.pathAlias, r.pathTarget = alias, target
+	return r
+}
+
 // Dir returns the resolved root directory.
 func (r Root) Dir() string { return r.dir }
+
+// Close releases the shared directory handle. The owner must ensure that no
+// copies of this Root are in use; closing a copy closes every copy's handle.
+func (r Root) Close() error {
+	if r.handle == nil {
+		return nil
+	}
+	return r.handle.Close()
+}
 
 // Deny returns a copy of the root that refuses paths — files or
 // directories, each with everything below it. A path outside the root
@@ -257,10 +335,21 @@ func (r Root) DeniedUnder(dir string) []string {
 // its own path looks fine. The target itself need not exist: write_file
 // creates files, so only the existing prefix can be checked.
 func (r Root) Resolve(p string) (string, error) {
+	if r.exactPaths {
+		return r.ResolveExact(p)
+	}
+	return r.ResolveExact(strings.TrimSpace(p))
+}
+
+// ResolveExact applies Resolve's rooted checks without trimming path bytes.
+// This is for persisted filesystem entry names, not convenience user input.
+func (r Root) ResolveExact(p string) (string, error) {
+	if r.pathAlias != "" && p == r.pathAlias {
+		p = r.pathTarget
+	}
 	if r.dir == "" {
 		return "", fmt.Errorf("tool: root is not initialised")
 	}
-	p = strings.TrimSpace(p)
 	var abs string
 	switch {
 	case p == "":
@@ -279,6 +368,11 @@ func (r Root) Resolve(p string) (string, error) {
 
 	if err := r.checkReal(abs, 0); err != nil {
 		return "", err
+	}
+	if r.accessCheck != nil {
+		if err := r.accessCheck(abs); err != nil {
+			return "", err
+		}
 	}
 	return abs, nil
 }

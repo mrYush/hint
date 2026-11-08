@@ -30,6 +30,8 @@ const (
 	// default. Added by WP1.5 as an optional record: a reader that does
 	// not know it skips it and keeps the default.
 	KindProfile Kind = "profile"
+	// KindWorkspace records explicitly attached local roots.
+	KindWorkspace Kind = "workspace"
 )
 
 // Parent names the session a fork was taken from and the user turn it
@@ -79,6 +81,8 @@ type Record struct {
 	Compaction *agentapi.Compaction `json:"compaction,omitempty"`
 	// Profile is the payload of KindProfile.
 	Profile *ProfileRef `json:"profile,omitempty"`
+	// Workspace is the versioned membership snapshot.
+	Workspace *WorkspaceRef `json:"workspace,omitempty"`
 }
 
 // ErrUnknownKind reports a record kind this build does not define. A
@@ -115,6 +119,11 @@ func (r *Record) Validate() error {
 				return fmt.Errorf("session: compaction history[%d]: %w", i, err)
 			}
 		}
+	case KindWorkspace:
+		if r.Workspace == nil {
+			return fmt.Errorf("session: workspace record has no payload")
+		}
+		return r.Workspace.validate()
 	case KindProfile:
 		if r.Profile == nil || r.Profile.Name == "" {
 			return fmt.Errorf("session: profile record has no profile name")

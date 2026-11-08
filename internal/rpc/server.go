@@ -204,6 +204,8 @@ type conn struct {
 	// end them. cmu guards it.
 	cmu       sync.Mutex
 	completes map[string]context.CancelFunc
+	reposMu   sync.Mutex
+	repos     map[string]context.CancelFunc
 }
 
 func (c *conn) loop() error {
@@ -245,6 +247,10 @@ func (c *conn) dispatch(req request) {
 		c.sessionOpen(req)
 	case "session.attach":
 		c.sessionAttach(req)
+	case "session.repos.cancel":
+		c.cancelRepos(req)
+	case "session.repos":
+		c.sessionRepos(req)
 	case "session.profile":
 		c.sessionProfile(req)
 	case "session.fork":
@@ -253,6 +259,14 @@ func (c *conn) dispatch(req request) {
 		c.profileList(req)
 	case "profile.models":
 		c.profileModels(req)
+	case "prompt.servers":
+		c.promptServers(req)
+	case "prompt.list":
+		c.promptList(req)
+	case "prompt.get":
+		c.promptGet(req)
+	case "prompt.complete":
+		c.promptComplete(req)
 	case "complete":
 		c.complete(req)
 	case "complete.cancel":
@@ -508,6 +522,8 @@ func engineError(err error) *Error {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return errCode(CodeNotFound, "%v", err)
+	case errors.Is(err, ErrBusy):
+		return errCode(CodeBusy, "%v", err)
 	case errors.Is(err, ErrInvalid):
 		return errCode(CodeInvalidParams, "%v", err)
 	default:

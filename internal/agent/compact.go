@@ -78,12 +78,12 @@ func (a *Agent) overflowing(tokens int64) bool {
 // attempt per iteration" rule — both steps happen without going back to the
 // provider in between, so the caller only ever needs to retry the actual
 // [agentapi.ChatProvider.Stream] call once after this returns.
-func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out chan<- agentapi.Event) ([]agentapi.Message, error) {
-	before := a.estimator.Estimate(messages)
+func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, toolTokens int64, out chan<- agentapi.Event) ([]agentapi.Message, error) {
+	before := a.estimator.Estimate(messages) + toolTokens
 
 	stripped, dropped := dropThinking(messages)
 	if dropped > 0 {
-		after := a.estimator.Estimate(stripped)
+		after := a.estimator.Estimate(stripped) + toolTokens
 		if !a.overflowing(after) {
 			out <- agentapi.Event{Kind: agentapi.EventCompaction, Compaction: &agentapi.Compaction{
 				TokensBefore: int(before),
@@ -95,7 +95,13 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 		messages = stripped
 	}
 
-	prefix, body, tail := splitForCompaction(messages, a.estimator.Estimate, int64(a.limits.MaxContextTokens))
+	window := int64(a.limits.MaxContextTokens)
+	if window > 0 {
+		// Tools survive compaction. Reserve their cost when deciding how
+		// much of the current exchange can remain verbatim in the tail.
+		window = max(1, window-toolTokens)
+	}
+	prefix, body, tail := splitForCompaction(messages, a.estimator.Estimate, window)
 	if onlySummaries(body) {
 		// Nothing left to compact: dropping thinking did not save it, and
 		// the whole remaining history is either the leading system prompt,
@@ -118,7 +124,7 @@ func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, out ch
 	out <- agentapi.Event{Kind: agentapi.EventCompaction, Compaction: &agentapi.Compaction{
 		MessagesReplaced: len(body),
 		TokensBefore:     int(before),
-		TokensAfter:      int(a.estimator.Estimate(result)),
+		TokensAfter:      int(a.estimator.Estimate(result) + toolTokens),
 		Summary:          summary,
 		History:          result,
 	}}

@@ -1,0 +1,23 @@
+Command/result transcript from local tool execution on 2026-11-06.
+All commands used GOCACHE=/private/tmp/hint-wp22-code-cache GOPROXY=off.
+
+$ go test -race ./internal/index ./internal/repomap -run 'TestConcurrentGenerationAndPinAdmission|TestMapReportsExhaustedHashBudget|TestMapLargeExcludedRange' -count=1
+ok  github.com/mrYush/hint/internal/index 4.304s
+ok  github.com/mrYush/hint/internal/repomap 8.326s
+exit_code=0
+
+$ go test -race ./cmd/hint ./internal/rpc -run 'TestInferenceProvider|TestREPLInterrupt|TestClient_CancelEndsTurn|TestMapToolThroughEngineAndProvider|TestIndexModeChangesCatalogBetweenTurns|TestExtractionCommandRegisteredWithoutConfiguration' -count=1
+ok  github.com/mrYush/hint/cmd/hint 4.446s
+ok  github.com/mrYush/hint/internal/rpc 3.616s
+exit_code=0
+
+$ go test -race ./internal/index -count=1
+ok  github.com/mrYush/hint/internal/index 2.533s
+exit_code=0
+
+$ go vet ./internal/index ./internal/repomap
+exit_code=0
+
+$ GOLANGCI_LINT_CACHE=/private/tmp/hint-repomap-lint-cache /Users/mr_yush/go/bin/golangci-lint run ./internal/index/... ./internal/repomap/...
+0 issues.
+exit_code=0

@@ -41,12 +41,12 @@ func TestPreamble_LoadsRuleOnTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := toolRegistry(root, pc.InstructionPaths, nil, nil)
+	registry, err := toolRegistry(root, pc, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var notices bytes.Buffer
-	pre := newPreamble(pc, registry, &notices, nil)
+	pre := newPreamble(pc, registry, &notices, nil, nil)
 	rulePath := filepath.Join(dir, ".hint", "rules", "go.md")
 
 	// Before any touch: the rule is listed, not loaded.
@@ -86,5 +86,48 @@ func TestPreamble_LoadsRuleOnTouch(t *testing.T) {
 	again, _ := pre.Prefix(context.Background(), history)
 	if again[0].Text() != got || notices.Len() != 0 {
 		t.Errorf("a repeated prefix changed the prompt or spoke again: %q", notices.String())
+	}
+}
+
+type countingSummarizer struct {
+	calls int
+}
+
+func (s *countingSummarizer) Summarize(context.Context, string, string, int) (string, error) {
+	s.calls++
+	return "Short rules.", nil
+}
+
+func TestPreambleRefreshOnlyAfterSourcesChange(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "HINT.md"), []byte(strings.Repeat("Long rules.\n", 100)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	summarizer := &countingSummarizer{}
+	pc, err := project.Load(context.Background(), dir,
+		project.WithGit(""), project.WithOverview(project.None{}),
+		project.WithInstructionBudget(100), project.WithSummarizer(summarizer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notices bytes.Buffer
+	pre := newPreamble(pc, nil, &notices, nil, nil)
+	calls := summarizer.calls
+	pre.refresh(context.Background())
+	if summarizer.calls != calls || notices.Len() != 0 {
+		t.Fatalf("refresh without sources repeated layout or warnings: calls %d -> %d, notices %q", calls, summarizer.calls, notices.String())
+	}
+
+	pc.AddInstructionSources(context.Background(), []project.InstructionSource{{Path: "mcp://fake/?uri=rules", Content: "Remote rules."}})
+	calls = summarizer.calls
+	pre.refresh(context.Background())
+	if summarizer.calls != calls {
+		t.Errorf("refresh with no active rules recomputed the layout: calls %d -> %d", calls, summarizer.calls)
+	}
+	if !strings.Contains(pre.initial()[0].Text(), "Remote rules.") {
+		t.Error("refreshed prompt does not contain the added source")
+	}
+	if notices.Len() != 0 {
+		t.Errorf("refresh repeated reported warnings: %q", notices.String())
 	}
 }

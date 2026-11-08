@@ -3,6 +3,7 @@ package tool
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -14,7 +15,13 @@ import (
 // middle of a turn. Its Tools and Schemas accessors are sorted by name, so
 // the request sent to a provider is deterministic regardless of
 // registration order.
+//
+// The registry is safe for concurrent use. The MCP tools are registered
+// lazily on the first turn, while another session may already be running a
+// turn and looking a call up; the lock keeps that read from racing the
+// one-time write.
 type Registry struct {
+	mu    sync.RWMutex
 	tools map[string]agentapi.Tool
 }
 
@@ -43,6 +50,8 @@ func (r *Registry) Register(t agentapi.Tool) error {
 	if !t.Class().Valid() {
 		return fmt.Errorf("tool: register %q: unknown action class %q", t.Name(), t.Class())
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if _, dup := r.tools[t.Name()]; dup {
 		return fmt.Errorf("tool: register %q: name already registered", t.Name())
 	}
@@ -55,15 +64,23 @@ func (r *Registry) Register(t agentapi.Tool) error {
 
 // Lookup returns the tool registered under name.
 func (r *Registry) Lookup(name string) (agentapi.Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	t, ok := r.tools[name]
 	return t, ok
 }
 
 // Len returns the number of registered tools.
-func (r *Registry) Len() int { return len(r.tools) }
+func (r *Registry) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.tools)
+}
 
 // Names returns the registered names, sorted.
 func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	names := make([]string, 0, len(r.tools))
 	for name := range r.tools {
 		names = append(names, name)
@@ -75,7 +92,13 @@ func (r *Registry) Names() []string {
 // Tools returns the registered tools sorted by name — the slice to hand to
 // the agent loop's WithTools option.
 func (r *Registry) Tools() []agentapi.Tool {
-	names := r.Names()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	out := make([]agentapi.Tool, 0, len(names))
 	for _, name := range names {
 		out = append(out, r.tools[name])

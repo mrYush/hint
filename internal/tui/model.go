@@ -35,11 +35,13 @@ const help = "enter sends · shift+enter newline · ↑↓ pgup/pgdn scroll · e
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
 // (dialog, picker, renderer) are the state that outlives one Update.
 type model struct {
-	ctx           context.Context
-	cl            *rpc.Client
-	send          sender
-	sessionID     string
-	recorded      bool
+	ctx       context.Context
+	cl        *rpc.Client
+	send      sender
+	sessionID string
+	recorded  bool
+	// ephemeral is the run's --no-session. /new repeats it.
+	ephemeral     bool
 	profile       rpc.ProfileRef
 	serverVersion string
 	dark          bool
@@ -61,7 +63,7 @@ type model struct {
 	turns int
 	sel   int
 
-	// busy is a turn in flight; cancelTurn ends it.
+	// busy is a turn or prompt expansion in flight; cancelTurn ends it.
 	busy       bool
 	cancelTurn context.CancelFunc
 
@@ -78,6 +80,15 @@ type model struct {
 	// completion of a question by a model (WP1.6).
 	comp *completion
 	cmpl *completer
+	// MCP server names are read without connecting; prompts load only for a
+	// matching server prefix or an explicit prompt command.
+	promptServers        []string
+	promptServersLoaded  bool
+	promptServersLoading bool
+	prompts              []rpc.PromptInfo
+	promptsLoaded        bool
+	promptsLoading       bool
+	promptValuesLoading  bool
 	// mouse is the terminal's mouse reporting. Off, the terminal's own
 	// selection works and copying text out of the transcript is a drag;
 	// on, the wheel scrolls and a click copies the block under it.
@@ -126,6 +137,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		send:          send,
 		sessionID:     opts.SessionID,
 		recorded:      opts.Recorded,
+		ephemeral:     opts.Ephemeral,
 		profile:       opts.Profile,
 		serverVersion: opts.ServerVersion,
 		setup:         opts.Setup,
@@ -213,6 +225,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.sessionsLoaded(msg), nil
 	case attachedMsg:
 		return m.attached(msg), nil
+	case reposMsg:
+		return m.reposResult(msg)
 	case profilesMsg:
 		return m.profilesLoaded(msg), nil
 	case profileMsg:
@@ -227,6 +241,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.warnTick(msg), nil
 	case modelsMsg:
 		return m.modelsLoaded(msg), nil
+	case promptServersMsg:
+		return m.promptServersReady(msg)
+	case promptListMsg:
+		return m.promptListLoaded(msg)
+	case promptCompletionMsg:
+		return m.promptCompleted(msg), nil
+	case promptExpansionMsg:
+		return m.promptExpanded(msg)
 
 	case tea.PasteMsg:
 		// Bracketed paste: the terminal hands pasted text over as one
@@ -297,8 +319,10 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+c":
 		if m.busy {
-			m.cancelTurn()
-			m.status = "stopping the answer…"
+			if m.cancelTurn != nil {
+				m.cancelTurn()
+			}
+			m.status = "stopping the current operation…"
 			return m, nil
 		}
 		// A line being typed is cleared first; on an empty input the
@@ -337,9 +361,9 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// quit ends the shell; a running turn is cancelled on the way out.
+// quit ends the shell; a running turn or prompt expansion is cancelled on the way out.
 func (m model) quit() (model, tea.Cmd) {
-	if m.busy {
+	if m.busy && m.cancelTurn != nil {
 		m.cancelTurn()
 	}
 	m.quitting = true
@@ -356,6 +380,11 @@ func (m model) submit() (model, tea.Cmd) {
 		m.ta.Reset()
 		return m.runCommand(text)
 	}
+	return m.submitText(text)
+}
+
+// submitText sends a question or a user-invoked MCP prompt expansion.
+func (m model) submitText(text string) (model, tea.Cmd) {
 	if m.busy {
 		m.status = "an answer is being written; Ctrl-C stops it"
 		return m, nil
@@ -562,7 +591,14 @@ func (m model) statusLine() string {
 
 // runCommand executes a slash command from the table.
 func (m model) runCommand(line string) (model, tea.Cmd) {
-	fields := strings.Fields(line)
+	fields, err := shell.SplitWords(line)
+	if err != nil {
+		m.status = "invalid command: " + err.Error()
+		return m, nil
+	}
+	if len(fields) == 0 {
+		return m, nil
+	}
 	name, arg := fields[0], ""
 	if len(fields) > 1 {
 		arg = fields[1]
@@ -570,11 +606,15 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 	if name == "/quit" {
 		name = "/exit"
 	}
-	known := false
+	promptServer, promptName, isPrompt := rpc.ParsePromptCommand(name)
+	known := isPrompt
 	for _, c := range commands() {
 		known = known || c.name == name
 	}
-	enabled := false
+	enabled := isPrompt && !m.busy && m.sessionID != ""
+	if m.busy && m.sessionID != "" && name == "/repos" && len(fields) == 2 && arg == "index" {
+		enabled = true
+	}
 	for _, c := range m.available() {
 		enabled = enabled || c.name == name
 	}
@@ -585,6 +625,8 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 	case !enabled:
 		m.status = name + " is not available right now"
 		return m, nil
+	case isPrompt:
+		return m.expandPrompt(promptServer, promptName, fields[1:])
 	}
 	switch name {
 	case "/config":
@@ -595,8 +637,18 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		m.add(entry{kind: entryNotice, text: helpText(), done: true})
 	case "/sessions":
 		return m.openPicker()
+	case "/new":
+		if len(fields) > 1 {
+			m.status = "/new takes no argument"
+			return m, nil
+		}
+		return m.openFresh()
+	case "/prompts":
+		return m.loadPrompts(true, "")
 	case "/completion":
 		return m.completionCommand(arg)
+	case "/repos":
+		return m.reposCommand(fields[1:])
 	case "/profile":
 		if arg == "" {
 			return m.openProfiles()

@@ -90,12 +90,13 @@ const (
 
 // options are the choices of one invocation, as read from the flags.
 type options struct {
-	flags     config.Flags
-	mode      permission.Mode
-	session   sessionMode
-	sessionID string
-	debug     bool
-	output    outputFormat
+	flags         config.Flags
+	mode          permission.Mode
+	session       sessionMode
+	sessionID     string
+	debug         bool
+	output        outputFormat
+	indexMaxBytes int64
 	// connect names a running `hint serve` to use instead of an
 	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
 	// runs the core in this process.
@@ -114,6 +115,7 @@ func newRootCommand() *cobra.Command {
 	var continueLast, resume, noSession bool
 	var sessionID, prompt, output, rpcMode, connect string
 	var debug, tuiMode, plain bool
+	var indexMaxBytes int64
 
 	rootCmd := &cobra.Command{
 		Use:     "hint [flags] [-p \"question\"]",
@@ -138,6 +140,7 @@ keeps the line REPL.`,
   hint --session 3f2a                    # continue the session whose id starts with 3f2a
   hint sessions                          # list this directory's sessions
   hint models                            # list the models the profile serves
+  hint mcp status                        # connect to the configured MCP servers
   hint serve                             # JSON-RPC on a local socket
   hint --connect -c                      # join that server from another terminal
   hint --mode rpc                        # the same protocol on stdin/stdout`,
@@ -147,14 +150,18 @@ keeps the line REPL.`,
 			// reporting flag errors itself, since those never reach here.
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
+			if indexMaxBytes < 512<<10 {
+				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
+			}
 			opts := options{
-				flags:     flags,
-				mode:      runMode(ask, autoEdit, yolo),
-				session:   sessionModeOf(continueLast, resume, noSession, sessionID),
-				sessionID: sessionID,
-				debug:     debug,
-				connect:   connect,
-				tui:       useTUI(tuiMode, plain, os.Stdout),
+				indexMaxBytes: indexMaxBytes,
+				flags:         flags,
+				mode:          runMode(ask, autoEdit, yolo),
+				session:       sessionModeOf(continueLast, resume, noSession, sessionID),
+				sessionID:     sessionID,
+				debug:         debug,
+				connect:       connect,
+				tui:           useTUI(tuiMode, plain, os.Stdout),
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
 				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
@@ -234,6 +241,7 @@ keeps the line REPL.`,
 	// default would override values from config files (the pre-WP0.2
 	// --model=gpt-4 bug). Built-in defaults live in internal/config.
 	pf := rootCmd.PersistentFlags()
+	pf.Int64Var(&indexMaxBytes, "index-max-bytes", 128<<20, "Maximum local code-index storage allowance in bytes, including rollback-journal headroom")
 	pf.StringVar(&flags.Provider, "provider", "", "Provider profile to use for this run")
 	pf.StringVar(&flags.APIURL, "api-url", "", "Base URL of the provider API (overrides the selected profile)")
 	pf.StringVar(&flags.APIKey, "api-key", "", "API key (overrides the selected profile)")
@@ -249,7 +257,7 @@ keeps the line REPL.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags), newSetupCommand(&flags), newConfigCommand(&flags))
+	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags, &indexMaxBytes), newSetupCommand(&flags), newConfigCommand(&flags), newMCPCommand(&flags), extractionCommand())
 	return rootCmd
 }
 

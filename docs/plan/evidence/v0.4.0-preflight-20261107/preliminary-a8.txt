@@ -1,0 +1,34 @@
+/repos clone https://example.invalid/sample.git ./existing existing
+/repos clone https://fixture:placeholder@example.invalid/sample.git ./creds creds
+/repos clone https://example.invalid/sample.git?fixture=1 ./query query
+/repos clone https://example.invalid/sample.git#fixture ./fragment fragment
+/repos clone ../second-fixture ./local local
+/repos clone ssh://git@127.0.0.1:1/sample.git ./partial partial
+/repos
+/exit
+hint: warning: profile local keeps its API key in a config file; hint setup moves it into the OS secret store
+hint: interactive session; /help for commands, Ctrl-D or /exit to quit
+
+> hint: invalid: clone requires a new destination directory: mkdir /private/var/folders/rk/5zt33_w14tdgpjpvrr0sfrmr0000gn/T/hint95-fixtures.IGOwbv/primary/existing: file exists
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: git clone failed; incomplete destination retained; check URL, network and local authentication
+
+> Workspace revision 1 (1 roots)
+"primary" (primary) [r_qrLhwC0zDvwGqV2_I21PMHPkTYnpzyNR21hDbK8lYVc]
+  "/private/var/folders/rk/5zt33_w14tdgpjpvrr0sfrmr0000gn/T/hint95-fixtures.IGOwbv/primary"
+
+
+> existing exists
+creds absent
+query absent
+fragment absent
+local absent
+partial exists

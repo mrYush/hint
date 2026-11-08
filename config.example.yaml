@@ -99,3 +99,28 @@ secrets:
   #             with a warning | keyring: insist on the store | file: never use it
   #             (a server, a container, CI). `hint config show-key <profile>` is the
   #             one way to see a stored key again
+
+# MCP servers (Phase 2): external tools spoken to over the Model Context
+# Protocol. Their tools are offered to the model as `<server>.<tool>`, under
+# the `permission` class (read, write or execute; execute is the default).
+# Credentials belong in this global file. A project .hint/config.yaml may add
+# a server, but never env or headers, and the project's server does not start
+# until `hint mcp enable <name>` records the user's approval outside the repository.
+# Global resource URIs expand ${VAR}; project resource URIs stay literal.
+#
+# mcp_servers:
+#   filesystem:
+#     transport: stdio
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+#     permission: read
+#     timeout: 30s
+#     resources: ["file:///absolute/path/to/README.md"] # example; use a path this server may read
+#     tools:
+#       allow: ["read_text_file", "list_directory"]  # optional; deny is the other half
+#   github:
+#     transport: http
+#     url: https://api.githubcopilot.com/mcp/
+#     headers:
+#       Authorization: "Bearer ${GITHUB_TOKEN}"      # ${VAR} is expanded from the environment
+#     permission: execute

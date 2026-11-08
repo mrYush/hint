@@ -3,7 +3,9 @@ package tool_test
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mrYush/hint/internal/tool"
@@ -81,4 +83,31 @@ func TestRegistry_RejectsBadRegistrations(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+func TestRegistry_ConcurrentRegisterAndLookup(t *testing.T) {
+	r, err := tool.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workers = 16
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := r.Register(named("tool-" + strconv.Itoa(i))); err != nil {
+				t.Errorf("Register: %v", err)
+			}
+			for j := 0; j < 100; j++ {
+				r.Lookup("tool-" + strconv.Itoa(i))
+				r.Tools()
+				r.Schemas()
+			}
+		}(i)
+	}
+	wg.Wait()
+	if got := r.Len(); got != workers {
+		t.Fatalf("Len = %d, want %d", got, workers)
+	}
 }

@@ -34,11 +34,14 @@ Any other method before it is rejected.
 
 ## Sessions
 
-The server is bound to the working directory it was started in.
-Tools cannot leave that directory.
+The server's startup directory is its immutable primary root.
+File tools use that root by default and can select other roots explicitly attached to the session through workspace administration.
+Shell commands retain the existing execute policy and are not an operating-system filesystem sandbox.
 
 `session.open` creates a session.
 With `{"ephemeral":true}` it is not written to disk: it has an id for the life of the server and nothing else (`hint --no-session`).
+Both shells' `/new` is this method: a recorded session, or an ephemeral one when the run itself is `--no-session`.
+It answers with the default profile.
 `session.attach` with `{"id":"..."}` continues one that already exists (an id prefix is enough when it is unique).
 Both return the session:
 
@@ -49,6 +52,32 @@ Both return the session:
 `messages` is the conversation so far, as `pkg/agentapi` messages; `warnings` is what loading the file had to repair, usually absent.
 `profile` and `model` say what the session answers with (see below); `parent` is present on a fork: `{"id": "<source>", "turn": N}`.
 `session.list` returns `{id, cwd, messages, created, modified, first_prompt, parent}` rows, most recently modified first; `messages` there is a count and `parent` is set on forks, so a client can draw the tree.
+
+### Workspace roots
+
+`session.repos` administers an open session's explicitly attached roots and returns bounded text plus root metadata where applicable.
+It is an optional protocol-v1 extension; an older core returns `-32601 method not found`.
+
+```json
+{"jsonrpc":"2.0","id":20,"method":"session.repos","params":{"session_id":"<id>","operation_id":"repos-1","action":"add","path":"../library","alias":"library"}}
+```
+
+Actions are `list`, `add`, `remove`, `clone`, `tree` and `index`.
+`add` takes `path` and an optional `alias`; `clone` additionally requires `url` and an absent destination.
+`remove` takes `repo`, a root ID or alias.
+`tree` accepts `repo` and a root-relative `path`, or just a continuation `cursor`; `list` accepts its own continuation cursor.
+`index` reads diagnostics or changes `mode` to `off`, `auto` or `on` for the Hint process.
+Root membership mutations require an idle affected session; an index mode change requires all turns to be idle.
+The result carries `text` and, for root listings, `roots`, `revision` and an optional continuation cursor.
+Use the returned text for explicit partial/paused/capacity status rather than inferring completeness from an empty page.
+
+```json
+{"jsonrpc":"2.0","id":21,"method":"session.repos.cancel","params":{"operation_id":"repos-1"}}
+```
+
+Operations execute independently so cancellation and turn permissions remain responsive during a clone.
+Cancellation is scoped to that connection's operation ID.
+The [workspace guide](workspaces.md) describes the corresponding `/repos` commands, instruction preparation, experimental indexing and resource limits.
 
 ### Profiles
 
@@ -121,6 +150,32 @@ A cancelled completion is answered with an error.
 Like `complete`, it runs beside the connection's other requests, so its answer may come after those of requests sent later.
 
 `session.profile`, `session.fork`, `profile.list` (`v0.3`, WP1.5) and `complete`, `complete.cancel`, `complete.settings`, `profile.models` (WP1.6) were added without a protocol version bump: an older core answers them with `-32601 method not found`, which a client treats as "not supported".
+
+### MCP prompts
+
+`prompt.servers` returns `{"servers":["docs"]}` from the enabled configuration without connecting to those servers.
+The TUI uses it to decide whether a command prefix needs prompt discovery; an unknown slash-command prefix does not start MCP servers.
+
+`prompt.list` returns `{"prompts":[{"server":"docs","name":"review","description":"Review a file.","arguments":[{"name":"path","required":true}]}]}`.
+It connects to configured MCP servers on demand; a server without prompts contributes an empty list.
+
+`prompt.get` expands a prompt with positional string arguments in the order declared by `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"prompt.get","params":{"server":"docs","name":"review","arguments":["main.go"]}}
+```
+
+The result is `{"text":"..."}`.
+A shell sends that text as a user turn, never as system text or a recorded assistant answer.
+
+`prompt.complete` accepts `{"server":"docs","prompt":"review","argument":"path","value":"ma","arguments":{"repo":"hint"}}` and returns `{"values":["main.go", ...]}` from MCP `completion/complete`.
+The optional `arguments` object carries already resolved arguments as MCP completion context.
+A server without completion support returns an empty `values` list.
+`has_more` is true when the server had further values it did not return.
+Missing `server`, `name`, `prompt` or `argument` fields produce `-32602 invalid params`; an unknown server or prompt produces `-32005 not found`.
+`prompt.list`, `prompt.get` and `prompt.complete` run beside the connection's other requests, like `complete` and `profile.models`, so `permission.reply` and `turn.cancel` are not delayed by an MCP call.
+Stopping the client does not cancel `prompt.get` or `prompt.complete` on the core; that work ends when the connection closes or the MCP timeout fires.
+These four methods were added by WP2.9 without a protocol version bump; an older core answers `-32601 method not found`.
 
 A session has at most one turn in flight.
 The connection that called `turn.start` owns that turn: only it may `permission.reply` and `turn.cancel`.

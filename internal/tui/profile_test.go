@@ -17,6 +17,99 @@ func twoProfiles() []rpc.ProfileInfo {
 	}
 }
 
+func TestNewSessionLeavesTheCurrentOne(t *testing.T) {
+	eng := &fakeEngine{}
+	h := newHarness(t, eng, Options{Profile: rpc.ProfileRef{Profile: "cloud", Model: "gpt"}})
+	old := h.m.sessionID
+	eng.sessions[old].profile = rpc.ProfileRef{Profile: "cloud", Model: "gpt"}
+	h.m.entries = fromHistory([]agentapi.Message{agentapi.UserMessage("from before")})
+
+	h.run(h.submit("/new extra"))
+	if h.m.sessionID != old || !strings.Contains(h.m.status, "takes no argument") {
+		t.Fatalf("session %q, status %q; /new must reject an argument", h.m.sessionID, h.m.status)
+	}
+
+	h.run(h.submit("/new"))
+	if h.m.sessionID == old || h.m.sessionID == "" {
+		t.Fatalf("session = %q; want a new id", h.m.sessionID)
+	}
+	v := h.view()
+	for _, want := range []string{"left session " + short(old), "this is session " + short(h.m.sessionID), "session " + short(h.m.sessionID)} {
+		if !strings.Contains(v, want) {
+			t.Errorf("view lacks %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "from before") || strings.Contains(v, "cloud/gpt") {
+		t.Errorf("the fresh session kept the old transcript or profile:\n%s", v)
+	}
+	if got := eng.sessions[old].Profile(); got.Profile != "cloud" || got.Model != "gpt" {
+		t.Errorf("the session left behind answers as %+v", got)
+	}
+	infos, err := h.m.cl.ListSessions(h.m.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawOld, sawNew bool
+	for _, info := range infos {
+		sawOld = sawOld || info.ID == old
+		sawNew = sawNew || info.ID == h.m.sessionID
+	}
+	if !sawOld || !sawNew {
+		t.Errorf("listed sessions = %+v; want %s and %s", infos, old, h.m.sessionID)
+	}
+	if !strings.Contains(helpText(), "/new") {
+		t.Error("/help does not list /new")
+	}
+
+	h.submit("next question")
+	h.pump(until[turnDoneMsg])
+	if msgs := eng.sessions[h.m.sessionID].Messages(); len(msgs) != 1 || msgs[0].Text() != "next question" {
+		t.Errorf("new session messages = %+v", msgs)
+	}
+	if msgs := eng.sessions[old].Messages(); len(msgs) != 0 {
+		t.Errorf("the session left behind got the new question: %+v", msgs)
+	}
+}
+
+func TestNewSessionIsUnavailableDuringATurn(t *testing.T) {
+	h := newHarness(t, &fakeEngine{}, Options{})
+	old := h.m.sessionID
+	h.m.busy = true
+	for _, c := range h.m.complete("/") {
+		if c == "/new" {
+			t.Fatalf("/new offered during a turn: %v", h.m.complete("/"))
+		}
+	}
+	if cmd := h.submit("/new"); cmd != nil {
+		t.Fatal("/new started a command during a turn")
+	}
+	if h.m.sessionID != old || !strings.Contains(h.m.status, "not available") {
+		t.Fatalf("session %q, status %q", h.m.sessionID, h.m.status)
+	}
+}
+
+func TestNewSessionStaysEphemeral(t *testing.T) {
+	eng := &fakeEngine{}
+	eng.sessions = map[string]*fakeSession{"eph-1": {id: "eph-1", eng: eng, ephemeral: true}}
+	h := newHarness(t, eng, Options{SessionID: "eph-1", Ephemeral: true})
+	h.run(h.submit("/new"))
+	if !eng.lastOpen.Ephemeral {
+		t.Fatal("/new recorded a session in a --no-session run")
+	}
+	if h.m.recorded || !strings.Contains(h.view(), "not recorded") {
+		t.Errorf("recorded=%v\n%s", h.m.recorded, h.view())
+	}
+	infos, err := h.m.cl.ListSessions(h.m.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, info := range infos {
+		if info.ID == h.m.sessionID {
+			t.Fatalf("ephemeral session %s was listed", info.ID)
+		}
+	}
+}
+
 func TestProfileCommandSwitchesAndCompletes(t *testing.T) {
 	eng := &fakeEngine{profiles: twoProfiles()}
 	h := newHarness(t, eng, Options{Profile: rpc.ProfileRef{Profile: "local", Model: "qwen"}})

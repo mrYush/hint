@@ -1,0 +1,39 @@
+{
+  "head": "748459badcc8ece0dba1f71cbbf74006e0b171a4",
+  "platform": "macOS-26.7-arm64-arm-64bit",
+  "go_version": "go version go1.26.10 darwin/arm64",
+  "corpus_path": "/private/tmp/hint-wp22-remediation-corpus-yhbj9pst/corpus",
+  "corpus_manifest_sha256": "8250e7418027b1943a67ed627aeb46dc3d22c6282d024a22887453273dda6c2e",
+  "binaries": {
+    ".tmp/wp22-remediation-repomap.test": "9da5a6b851c27ca50b4021139540befbbab91f9ee19ef26ca1549cbe2c765529",
+    ".tmp/wp22-remediation-index.test": "07e1359032cc9ee0304d6d3996759669894e245cb54c049be0fa7a2c8b42d36c"
+  },
+  "commands": [
+    [
+      "python3",
+      "scripts/repo-map-measure.py",
+      "--binary",
+      ".tmp/wp22-remediation-repomap.test",
+      "--corpus",
+      "/private/tmp/hint-wp22-remediation-corpus-yhbj9pst/corpus",
+      "--output",
+      "docs/plan/evidence/wp2.2-remediation-20261107/corpus",
+      "--runs",
+      "3"
+    ],
+    [
+      "env",
+      "HINT_INDEX_BENCH_ENTRIES=10000",
+      "/usr/bin/time",
+      "-l",
+      ".tmp/wp22-remediation-index.test",
+      "-test.run",
+      "^$",
+      "-test.bench",
+      "^BenchmarkMetadata$",
+      "-test.benchtime=20x",
+      "-test.benchmem",
+      "-test.v"
+    ]
+  ]
+}

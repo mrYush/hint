@@ -30,8 +30,11 @@ hint/
 │   │   └── router/             # default/fallback routing
 │   ├── tool/                   # Tool registry, schema generation
 │   │   └── builtin/            # read,write,edit,ls,glob,grep,bash,todo
+│   ├── mcp/                    # MCP client: servers, tool adapters, schema budget (WP2.1)
 │   ├── permission/             # modes, allow-list, prompting
 │   ├── diff/                   # line diff + unified rendering (permission previews, TUI)
+│   ├── attach/                 # attachment resolution, extraction and content-addressed store (WP3.5)
+│   ├── termimage/              # terminal graphics detection, encoders and half-block fallback (WP3.6)
 │   ├── session/                # JSONL store, resume, list (WP0.7)
 │   ├── console/                # the one stdin line reader: prompts, session picker, REPL
 │   ├── project/                # HINT.md, auto-context, gitignore
@@ -52,6 +55,26 @@ implementations and wiring. That is what lets a provider or a tool be written
 outside this module. `ActionClass` lives in `pkg/agentapi` for the same
 reason — a third-party tool has to be able to declare its own class, which it
 could not do if the type stayed in `internal/permission`.
+
+### Workspace and indexing boundaries
+
+The [Phase 2 plan](phase-2-memory-mcp.md#wp22--repo-map) defines the following private package boundaries for v0.4.
+WP2.2 implements the workspace and code-catalog baseline in its owner-authorized scope exception; document/notes and semantic-search capabilities remain later work.
+The phase checklist distinguishes implemented baseline components from final acceptance and the remaining document/notes work.
+
+| Package boundary | Responsibility |
+|---|---|
+| `internal/workspace` | User-attached roots, stable root/entry identities, immutable primary root, session membership, nested ownership, instruction readiness and authorized navigation. |
+| `internal/index` | Shared disk catalog/frontier, observed generations, bounded scans, retention and source invalidation; later document/notes capabilities consume these identities without duplicating the catalog. |
+| `internal/repomap` | Code extraction and bounded deterministic declaration queries, plus the baseline shared manager admitting discovery, navigation, validation and maintenance; the read-class `repo_map` tool consumes that same admission path. |
+
+Workspace authorization precedes both live and cached access; derived data never grants access or enables a module.
+Keep durable user/agent notes and root configuration separate from rebuildable catalogs, postings and symbol caches, even if one local storage engine hosts both.
+Cache eviction/rebuild must not delete notes, and note validation/invalidation must not rewrite source files.
+One scheduler owns background resource admission across roots and adapters; `repo_map` consumes bounded leases rather than adding a worker pool.
+Storage-driver, parser and extractor selection remains gated by target builds, resource measurements and cancellation behavior; no database or helper is selected by this package diagram.
+The [WP2.2 contract](repo-map-contract.md) records consumed authority, freshness and scheduling invariants.
+User commands such as `/repos` remain RPC clients of the core; these private packages do not become shell imports or additional public SDK surface.
 
 ## Key interfaces (contract)
 

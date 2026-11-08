@@ -6,7 +6,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, release/v0.4.0]
   pull_request:
 
 permissions:

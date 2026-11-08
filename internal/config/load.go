@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -121,7 +122,7 @@ func LoadFrom(opts Options) (*Config, error) {
 		return nil, err
 	}
 
-	merged := mergeFiles(global, project)
+	merged := l.mergeFiles(global, project)
 	l.expand(&merged)
 
 	cfg := &Config{
@@ -150,6 +151,7 @@ func LoadFrom(opts Options) (*Config, error) {
 		}
 		cfg.Providers = append(cfg.Providers, prof)
 	}
+	cfg.MCPServers = buildMCPServers(merged.MCPServers)
 
 	l.applyEnvScalars(cfg)
 	if opts.Flags.Provider != "" {
@@ -184,6 +186,9 @@ type loader struct {
 	warnings []string
 	// keyEnv collects the ${VAR} names api_key values referred to.
 	keyEnv []string
+	// mcpSecrets collects the expanded MCP header and env values, and the
+	// values of the ${VAR} references inside them, for Config.Secrets.
+	mcpSecrets []string
 }
 
 func (l *loader) warnf(format string, args ...any) {
@@ -214,6 +219,7 @@ type fileConfig struct {
 	Overview     fileOverview     `yaml:"overview"`
 	Completion   fileCompletion   `yaml:"completion"`
 	Secrets      fileSecrets      `yaml:"secrets"`
+	MCPServers   fileMCPServers   `yaml:"mcp_servers"`
 
 	// Legacy flat schema (pre-WP0.2).
 	APIURL string `yaml:"api_url"`
@@ -260,6 +266,109 @@ type fileCompletion struct {
 	WarnAfter *time.Duration `yaml:"warn_after"`
 }
 
+// fileMCPServers is the `mcp_servers:` mapping. It is decoded from a
+// yaml.Node rather than a map so that its order survives: the schema
+// budget hides whole servers in config order, which must not depend on
+// Go's map iteration.
+type fileMCPServers []fileMCPServer
+
+// fileMCPServer mirrors one mcp_servers entry. Name is the mapping key,
+// so the field itself is not decoded.
+type fileMCPServer struct {
+	Name           string            `yaml:"-"`
+	Transport      string            `yaml:"transport"`
+	Command        string            `yaml:"command"`
+	Args           []string          `yaml:"args"`
+	Env            map[string]string `yaml:"env"`
+	URL            string            `yaml:"url"`
+	Headers        map[string]string `yaml:"headers"`
+	Permission     string            `yaml:"permission"`
+	Timeout        *time.Duration    `yaml:"timeout"`
+	Tools          *fileMCPTools     `yaml:"tools"`
+	Resources      []string          `yaml:"resources"`
+	DescriptionMax *int              `yaml:"description_max"`
+	Project        bool              `yaml:"-"`
+}
+
+type fileMCPTools struct {
+	Allow []string `yaml:"allow"`
+	Deny  []string `yaml:"deny"`
+}
+
+// buildMCPServers converts the file shape into the resolved shape, copying
+// the maps and slices so that a later edit of the raw file data cannot
+// change the loaded configuration.
+func buildMCPServers(in []fileMCPServer) []MCPServer {
+	out := make([]MCPServer, 0, len(in))
+	for _, s := range in {
+		srv := MCPServer{
+			Name:       s.Name,
+			Transport:  s.Transport,
+			Command:    s.Command,
+			Args:       append([]string(nil), s.Args...),
+			Env:        cloneStrings(s.Env),
+			URL:        s.URL,
+			Headers:    cloneStrings(s.Headers),
+			Permission: s.Permission,
+			Resources:  append([]string(nil), s.Resources...),
+			Project:    s.Project,
+		}
+		if s.Timeout != nil {
+			srv.Timeout = *s.Timeout
+		}
+		if s.Tools != nil {
+			srv.Tools.Allow = append([]string(nil), s.Tools.Allow...)
+			srv.Tools.Deny = append([]string(nil), s.Tools.Deny...)
+		}
+		if s.DescriptionMax != nil {
+			srv.DescriptionMax = *s.DescriptionMax
+		}
+		if srv.Permission == "" {
+			srv.Permission = "execute"
+		}
+		out = append(out, srv)
+	}
+	return out
+}
+
+func cloneStrings(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *fileMCPServers) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == 0 || (value.Kind == yaml.ScalarNode && value.Tag == "!!null") {
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("mcp_servers must be a mapping of server names")
+	}
+	seen := make(map[string]bool, len(value.Content)/2)
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		name := value.Content[i].Value
+		if name == "" {
+			return fmt.Errorf("mcp_servers: a server has no name")
+		}
+		if seen[name] {
+			return fmt.Errorf("mcp_servers: duplicate server %q", name)
+		}
+		seen[name] = true
+		var srv fileMCPServer
+		if err := value.Content[i+1].Decode(&srv); err != nil {
+			return fmt.Errorf("mcp_servers.%s: %w", name, err)
+		}
+		srv.Name = name
+		*s = append(*s, srv)
+	}
+	return nil
+}
+
 // GlobalDir returns the directory of the global configuration —
 // $XDG_CONFIG_HOME/hint when the variable is set, otherwise
 // ~/.config/hint — or "" when neither the home directory nor the variable
@@ -301,7 +410,16 @@ func (l *loader) readProject() (fileConfig, error) {
 	}
 	canonical := filepath.Join(l.opts.WorkingDir, ".hint", "config.yaml")
 	legacy := filepath.Join(l.opts.WorkingDir, "hint.yaml")
-	return l.readWithLegacy(canonical, legacy)
+	fc, err := l.readWithLegacy(canonical, legacy)
+	if err != nil {
+		return fileConfig{}, err
+	}
+	// The project may add MCP servers, but they start disabled until the
+	// user records consent outside the repository.
+	for i := range fc.MCPServers {
+		fc.MCPServers[i].Project = true
+	}
+	return fc, nil
 }
 
 func (l *loader) readWithLegacy(canonical, legacy string) (fileConfig, error) {
@@ -384,7 +502,12 @@ func (l *loader) migrate(fc *fileConfig, path string) {
 // by name — a non-empty project field wins, project-only profiles are
 // appended — so a project can override just api_key or model of a globally
 // defined profile. Scalars follow the same non-empty-wins rule.
-func mergeFiles(global, project fileConfig) fileConfig {
+//
+// MCP servers are different: the project may only add a server, never
+// replace or extend a global one, and a project server may not carry env
+// or headers. Both rules keep a cloned repository from redirecting a
+// developer's credential or handing the agent an unreviewed environment.
+func (l *loader) mergeFiles(global, project fileConfig) fileConfig {
 	out := global
 	for _, pp := range project.Providers {
 		merged := false
@@ -459,6 +582,21 @@ func mergeFiles(global, project fileConfig) fileConfig {
 	if project.Secrets.Store != "" {
 		out.Secrets.Store = project.Secrets.Store
 	}
+	existing := make(map[string]bool, len(out.MCPServers))
+	for _, s := range out.MCPServers {
+		existing[s.Name] = true
+	}
+	for _, s := range project.MCPServers {
+		if existing[s.Name] {
+			l.warnf("mcp_servers.%s: the project file may not override a global MCP server; ignored", s.Name)
+			continue
+		}
+		if len(s.Env) > 0 || len(s.Headers) > 0 {
+			l.warnf("mcp_servers.%s: a project MCP server may not set env or headers; ignored", s.Name)
+			continue
+		}
+		out.MCPServers = append(out.MCPServers, s)
+	}
 	return out
 }
 
@@ -474,6 +612,97 @@ func (l *loader) expand(fc *fileConfig) {
 	}
 	fc.DefaultProvider = expandValue(fc.DefaultProvider, l.opts.LookupEnv)
 	fc.FallbackProvider = expandValue(fc.FallbackProvider, l.opts.LookupEnv)
+	l.expandMCP(fc)
+}
+
+// expandMCP resolves ${VAR} in the MCP values and records both the
+// expanded credential and every referenced variable's value, so redaction
+// catches a header and the bare token inside it.
+func (l *loader) expandMCP(fc *fileConfig) {
+	out := fc.MCPServers[:0]
+	for _, s := range fc.MCPServers {
+		if s.Project && (len(s.Env) > 0 || len(s.Headers) > 0) {
+			// mergeFiles already drops these; the check stays for a
+			// future caller that builds fileConfig another way.
+			l.warnf("mcp_servers.%s: a project MCP server may not set env or headers; ignored", s.Name)
+			continue
+		}
+		if s.Project {
+			// A project file must not pull the developer's environment
+			// into a command it chose: a shell would expand the
+			// reference from the child's environment even though the
+			// file never set env. Leave it literal.
+			if envRefs.MatchString(s.Command) || envRefs.MatchString(s.URL) || anyMatches(s.Args) || anyMatches(s.Resources) {
+				l.warnf("mcp_servers.%s: a project server value is not expanded; ${VAR} stays literal", s.Name)
+			}
+			out = append(out, s)
+			continue
+		}
+		s.Command = expandValue(s.Command, l.opts.LookupEnv)
+		for i := range s.Args {
+			s.Args[i] = expandValue(s.Args[i], l.opts.LookupEnv)
+		}
+		s.URL = l.expandMCPRefs(s.Name, "url", s.URL)
+		for i := range s.Resources {
+			s.Resources[i] = l.expandMCPRefs(s.Name, fmt.Sprintf("resources.%d", i), s.Resources[i])
+		}
+		for _, k := range sortedKeys(s.Env) {
+			s.Env[k] = l.expandMCPValue(s.Name, "env."+k, s.Env[k])
+		}
+		for _, k := range sortedKeys(s.Headers) {
+			s.Headers[k] = l.expandMCPValue(s.Name, "headers."+k, s.Headers[k])
+		}
+		out = append(out, s)
+	}
+	fc.MCPServers = out
+}
+
+// anyMatches reports whether any value contains a $VAR or ${VAR} reference.
+func anyMatches(values []string) bool {
+	for _, v := range values {
+		if envRefs.MatchString(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// sortedKeys returns a map's keys in a stable order, so the collected
+// secret list does not depend on Go's map iteration.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// expandMCPRefs expands ${VAR} in a URL. The referenced values are
+// secrets: a token in a URL query must still be redacted, while the whole
+// URL is not one.
+func (l *loader) expandMCPRefs(server, field, value string) string {
+	for _, m := range envRefs.FindAllStringSubmatch(value, -1) {
+		name := m[1]
+		if v, ok := l.env(name); ok {
+			l.mcpSecrets = append(l.mcpSecrets, v)
+		} else {
+			l.warnf("mcp_servers.%s.%s: %s expands to nothing", server, field, name)
+		}
+	}
+	return expandValue(value, l.opts.LookupEnv)
+}
+
+// expandMCPValue expands one env or header value. The expanded value is a
+// secret in its own right (a literal header is a credential too), and so
+// is each referenced ${VAR} value: a header "Bearer ${TOKEN}" must leave
+// both "Bearer <token>" and "<token>" in Config.Secrets.
+func (l *loader) expandMCPValue(server, field, value string) string {
+	expanded := l.expandMCPRefs(server, field, value)
+	if expanded != "" {
+		l.mcpSecrets = append(l.mcpSecrets, expanded)
+	}
+	return expanded
 }
 
 // envRefs matches the $VAR and ${VAR} references os.Expand understands.
@@ -667,6 +896,7 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 		return err
 	}
 	cfg.keyEnv = append([]string(nil), l.keyEnv...)
+	cfg.mcpSecrets = append([]string(nil), l.mcpSecrets...)
 	cfg.SecretStore.Store = SecretStore(files.Secrets.Store)
 	switch cfg.SecretStore.Store {
 	case "":
@@ -834,6 +1064,11 @@ func (l *loader) validate(cfg *Config) error {
 		case "", FieldMaxTokens, FieldMaxCompletionTokens:
 		default:
 			return fmt.Errorf("config: profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
+		}
+	}
+	for _, s := range cfg.MCPServers {
+		if err := validateMCPServer(s); err != nil {
+			return fmt.Errorf("config: %w", err)
 		}
 	}
 	if cfg.DefaultProvider == "" {

@@ -142,9 +142,11 @@ Cyrillic layout too, in the TUI and at the line prompts: `н` is `y`.
 
 Tab completes `/commands` and their arguments; `/help` lists them:
 `/sessions` shows this directory's sessions as a tree and resumes one,
-`/profile` switches the provider profile, `/completion` shows or sets
-when a model continues what you type (see [Completion of what you
-type](#completion-of-what-you-type)), `/setup` and `/config` edit the
+`/new` starts a fresh session, `/profile` switches the provider profile,
+`/repos` manages explicitly attached repositories and folders (see [Working with multiple roots](docs/workspaces.md)),
+`/prompts` lists MCP prompts,
+`/completion` shows or sets when a model continues what you type (see
+[Completion of what you type](#completion-of-what-you-type)), `/setup` and `/config` edit the
 configuration, `/copy` and `ctrl+y` copy the last answer (or `question`,
 `code`, `all`), `/mouse` switches to a mode where the wheel scrolls and a
 click copies the block under it (off by default, so the terminal's own
@@ -166,7 +168,7 @@ hint: answering with local/qwen2.5:7b from now on
 > /exit
 ```
 
-Each line is one question; `/help`, `/profile` and `/exit` are its
+Each line is one question; `/help`, `/new`, `/profile` and `/exit` are its
 commands. Both shells are clients of the same protocol as `hint serve`.
 
 ### One question
@@ -247,6 +249,9 @@ hint --no-session -p "..."       # record nothing
 ```
 
 The session flags work for both the interactive session and `-p`.
+`/new`, in the TUI and in `hint --plain`, starts another session without leaving the shell; a fresh `hint` does the same from outside it.
+The session just left stays on disk and can be resumed, and the new one answers with the default profile rather than one `/profile` switched to.
+A run started with `--no-session` keeps the new session off disk too.
 
 A session can branch. In the TUI, `f` on a picked message forks the
 conversation after that message's turn, and `f` on a row of `/sessions`
@@ -612,6 +617,51 @@ the whole prompt, which on a Raspberry Pi takes minutes, so raise it for
 such profiles.
 
 `max_tokens_field: max_completion_tokens` is for OpenAI's reasoning models (o-series, gpt-5), which refuse `max_tokens`; the default `max_tokens` is what local servers understand.
+
+### MCP servers
+
+`mcp_servers:` in the global config connects hint to servers that speak the [Model Context Protocol](https://modelcontextprotocol.io); their tools are offered to the model as `<server>.<tool>` next to the built-ins, under the permission class the entry declares (`execute` by default):
+
+```yaml
+mcp_servers:
+  filesystem:
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    permission: read
+    timeout: 30s
+    resources: ["file:///absolute/path/to/README.md"] # example; use a path this server may read
+    tools:
+      allow: ["read_text_file", "list_directory"]
+  github:
+    transport: http
+    url: https://api.githubcopilot.com/mcp/
+    headers:
+      Authorization: "Bearer ${GITHUB_TOKEN}"
+    permission: execute
+```
+
+A stdio server runs with the variables its entry declares plus a base stripped of hint's API keys; a project-added server gets only a minimal base (`PATH`, `HOME`, the locale).
+HTTP headers support `${VAR}`, are sent only to the configured origin, and a redirect to another host is refused before a credential can follow it.
+The MCP schema budget is 48 KiB with a 20 KiB per-server cap; a server that does not fit is hidden as a whole and a warning names it, and `tools.allow` or `tools.deny` narrows a large server.
+A project `.hint/config.yaml` may add a server but may not set `env` or `headers`; it stays disabled until `hint mcp enable <name>` is run in that repository, and any change to `command`, `args`, `url`, `permission` or `resources` resets that approval.
+Resources named by `resources` load like instruction files, sharing their budget, outline and `instructions` tool.
+Global resource URIs expand `${VAR}` and redact the referenced values; project resource URIs stay literal.
+Duplicate URIs are rejected, and a configured resource may contain at most 1 MiB of decoded text or blob content.
+The model can read any URI on an enabled server with `resource_read` using `server` and `uri`; that result is untrusted tool data and never becomes an instruction.
+Neither `tools.allow`/`tools.deny` nor the instruction-only `resources` list restricts `resource_read`; a resource over 50,000 decoded bytes is rejected rather than truncated.
+Those size checks run after the SDK has buffered the inbound frame, which defaults to 16 MiB.
+Empty resources and non-text configured blobs produce warnings instead of silent instruction entries.
+`/prompts` lists server prompts in the TUI and plain REPL, and `/<server>:<prompt> [args]` expands one as a user turn with positional arguments.
+Quote or backslash-escape an argument containing spaces.
+Prompt user and assistant messages are flattened into that one user turn.
+Prompt names containing a colon or whitespace cannot be slash commands and are skipped with a warning.
+In the TUI, Tab completes prompt commands and asks the server for argument values through `completion/complete`, including already entered arguments as context.
+
+MCP servers start on the first turn or an explicit prompt operation, not when hint launches, so a run that never uses MCP starts no process.
+`hint mcp list` shows the configured servers and resource URIs without connecting.
+`hint mcp status` connects, lists tools under the budget, reports configured resource counts without reading their contents, and checks each server with an MCP `ping` (the handshake is the check on servers that removed `ping`).
+`hint mcp enable <name>` records the project-server approval.
 
 ### Environment variables
 

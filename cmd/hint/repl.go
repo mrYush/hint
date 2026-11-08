@@ -18,8 +18,12 @@ import (
 // replHelp is what /help prints.
 const replHelp = `Commands:
   /help                    show this help
+  /repos                   list roots; add/remove/tree/clone/next; index controls process-wide indexing
+  /new                     start a fresh session; the current one stays
   /profile                 list the provider profiles; the one in use is marked
   /profile <name> [model]  answer with that profile (and model) from now on
+  /prompts                 list MCP prompts
+  /<server>:<prompt> [args] expand an MCP prompt; quote arguments containing spaces
   /exit, /quit             leave (Ctrl-D does too)
 Anything else is a question for the assistant; each line is one question.
 Ctrl-C stops an answer that is being written and returns to the prompt.`
@@ -63,18 +67,53 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			continue
 		}
 		if strings.HasPrefix(line, "/") {
-			fields := strings.Fields(line)
+			fields, splitErr := shell.SplitWords(line)
+			if splitErr != nil {
+				fmt.Fprintln(a.io.err, "hint: invalid command:", splitErr)
+				continue
+			}
 			switch cmd := fields[0]; cmd {
 			case "/exit", "/quit":
 				return nil
 			case "/help":
 				fmt.Fprintln(a.io.err, replHelp)
+				continue
+			case "/new":
+				if len(fields) > 1 {
+					fmt.Fprintln(a.io.err, "hint: /new takes no argument")
+					continue
+				}
+				a.newSession(ctx)
+				continue
+			case "/repos":
+				a.reposCommand(ctx, sigs, fields[1:])
+				continue
 			case "/profile":
 				a.profileCommand(ctx, fields[1:])
+				continue
+			case "/prompts":
+				a.promptsCommand(ctx)
+				continue
 			default:
-				fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
+				if _, _, ok := rpc.ParsePromptCommand(cmd); !ok {
+					fmt.Fprintf(a.io.err, "hint: unknown command %s; /help lists them\n", cmd)
+					continue
+				}
+				expanded, err := a.expandPromptCancellable(ctx, sigs, cmd, fields[1:])
+				if err != nil {
+					if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+						fmt.Fprintln(a.io.err, "\nhint: prompt expansion stopped")
+						continue
+					}
+					fmt.Fprintln(a.io.err, "hint:", err)
+					continue
+				}
+				if strings.TrimSpace(expanded) == "" {
+					fmt.Fprintln(a.io.err, "hint: the MCP prompt returned no text")
+					continue
+				}
+				line = expanded
 			}
-			continue
 		}
 
 		turnCtx, cancel := context.WithCancel(ctx)
@@ -100,6 +139,21 @@ func (a *app) repl(ctx context.Context, sigs <-chan os.Signal) error {
 			}
 		}
 	}
+}
+
+// newSession is /new: session.open on the default profile, ephemeral
+// when this run records nothing. The session just left stays as it was.
+func (a *app) newSession(ctx context.Context) {
+	left := a.sessionID
+	view, err := a.client.OpenSession(ctx, rpc.OpenOptions{Ephemeral: !a.recorded})
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	a.sessionID = view.ID
+	a.history = nil
+	a.profile = rpc.ProfileRef{Profile: view.Profile, Model: view.Model}
+	fmt.Fprintf(a.io.err, "hint: left session %s; this is session %s\n", left, view.ID)
 }
 
 // profileCommand is /profile: alone it lists the profiles the core has,
@@ -152,6 +206,27 @@ func (a *app) useProfile(ctx context.Context, ref rpc.ProfileRef) {
 	fmt.Fprintf(a.io.err, "hint: answering with %s/%s from now on\n", got.Profile, got.Model)
 }
 
+// expandPromptCancellable expands a prompt until it returns or Ctrl-C
+// arrives. The signal cancels that call and is drained, so it does not
+// cancel the turn the expansion was going to start.
+func (a *app) expandPromptCancellable(ctx context.Context, sigs <-chan os.Signal, command string, args []string) (string, error) {
+	expandCtx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-sigs:
+			cancel()
+		case <-expandCtx.Done():
+		}
+	}()
+	text, err := a.expandPrompt(expandCtx, command, args)
+	cancel()
+	<-stopped
+	drain(sigs)
+	return text, err
+}
+
 // errPromptInterrupted reports Ctrl-C while the prompt was waiting.
 var errPromptInterrupted = errors.New("interrupted at the prompt")
 
@@ -191,4 +266,29 @@ func drain(sigs <-chan os.Signal) {
 			return
 		}
 	}
+}
+
+func (a *app) reposCommand(ctx context.Context, sigs <-chan os.Signal, args []string) {
+	ctx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-sigs:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	defer func() { cancel(); <-stopped; drain(sigs) }()
+	req, err := shell.ParseRepos(a.sessionID, args)
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	result, err := a.client.Repos(ctx, req)
+	if err != nil {
+		fmt.Fprintln(a.io.err, "hint:", err)
+		return
+	}
+	fmt.Fprintln(a.io.err, result.Text)
 }

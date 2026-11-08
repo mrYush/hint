@@ -85,6 +85,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	if err != nil {
 		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "config: "))
 	}
+	chat = e.observeInference(chat)
 	e.providers[ref] = chat
 	return chat, p, nil
 }
@@ -134,11 +135,21 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "session: "))
 	}
+	workspaceHistory, err := e.sourceWorkspace(opts.ID, opts.Turn)
+	if err != nil {
+		return nil, err
+	}
 	parent := session.Parent{ID: opts.ID, Turn: opts.Turn}
 	if !opts.Ephemeral {
 		sess, err := e.store.Fork(e.cwd, parent, cut, profile)
 		if err != nil {
 			return nil, err
+		}
+		for _, workspaceRef := range workspaceHistory {
+			if err := sess.AppendWorkspace(workspaceRef); err != nil {
+				_ = sess.Close()
+				return nil, err
+			}
 		}
 		return e.adopt(sess, sess.ID()), nil
 	}
@@ -149,6 +160,12 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 	live := e.adopt(nil, id)
 	live.rec.Seed(cut)
 	live.parent = &rpc.Parent{ID: parent.ID, Turn: parent.Turn}
+	live.repoHistory = workspaceHistory
+	live.reserveWorkspaceHistory(workspaceHistory)
+	live.repoTurns = session.Turns(cut)
+	if len(workspaceHistory) > 0 {
+		live.restoreWorkspaceRef(workspaceHistory[len(workspaceHistory)-1])
+	}
 	if profile.Name != "" {
 		if err := live.switchTo(rpc.ProfileRef{Profile: profile.Name, Model: profile.Model}, false); err != nil {
 			live.warnings = append(live.warnings, fmt.Sprintf("the source's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
@@ -214,13 +231,14 @@ func (s *rpcSession) switchTo(ref rpc.ProfileRef, reload bool) error {
 // the same with the model filled in.
 func (s *rpcSession) use(chat agentapi.ChatProvider, asked, effective rpc.ProfileRef, limits agent.Limits) {
 	ag := agent.New(chat,
-		agent.WithTools(s.eng.registry.Tools()...),
+		agent.WithTools(s.sessionTools()...),
 		agent.WithAuthorizer(s.gate),
 		agent.WithLimits(limits),
-		agent.WithPreamble(s.pre),
+		agent.WithPreamble(s.workspacePreamble()),
 	)
 	s.agMu.Lock()
 	s.ag, s.asked, s.profile = ag, asked, effective
+	s.agChat, s.agLimits = chat, limits
 	s.agMu.Unlock()
 }
 

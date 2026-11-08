@@ -1,0 +1,24 @@
+{
+  "base_head": "ff99f09e21bde0a6da6c20141834704d06b92e0f",
+  "test_source_sha256": "47247332daa577aa07d55d5e48ccb0cc1e90bd07e23036b33c6f349c6c2885b0",
+  "production_source_sha256": "21e84e5e16c3b51756b315a3c89a2c7646cc7208a76c4c66f2e1d28af01d419f",
+  "method": "Go build overlays; production source is never edited. The parent subprocess timeout bounds a FIFO hang.",
+  "mutations": [
+    {
+      "mutation": "without-nonblocking-open",
+      "original": "os.O_RDONLY|nonblockingOpenFlags",
+      "replacement": "os.O_RDONLY",
+      "exit_code": 1,
+      "expected_failure": "context deadline exceeded",
+      "output": "=== RUN   TestPolicyFIFO\n=== RUN   TestPolicyFIFO/replacement\n    policy_fifo_test.go:40: policy read or manager shutdown blocked: context deadline exceeded\n--- FAIL: TestPolicyFIFO (5.00s)\n    --- FAIL: TestPolicyFIFO/replacement (5.00s)\nFAIL\nFAIL\tgithub.com/mrYush/hint/internal/repomap\t5.385s\nFAIL\n"
+    },
+    {
+      "mutation": "without-descriptor-type-check",
+      "original": "err = kind.check(opened)",
+      "replacement": "err = nil",
+      "exit_code": 1,
+      "expected_failure": "FIFO policy must be rejected as non-regular",
+      "output": "=== RUN   TestPolicyFIFO\n=== RUN   TestPolicyFIFO/replacement\n    policy_fifo_test.go:43: policy subprocess: exit status 1\n        --- FAIL: TestPolicyFIFO (0.00s)\n            policy_fifo_test.go:23: FIFO policy must be rejected as non-regular: workspace: source or authority changed\n        FAIL\n--- FAIL: TestPolicyFIFO (0.01s)\n    --- FAIL: TestPolicyFIFO/replacement (0.01s)\nFAIL\nFAIL\tgithub.com/mrYush/hint/internal/repomap\t0.410s\nFAIL\n"
+    }
+  ]
+}

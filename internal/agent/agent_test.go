@@ -573,6 +573,7 @@ func TestRunTurn_SecondOverflowWithNothingLeftToCompactIsFatal(t *testing.T) {
 type messageCounter struct{}
 
 func (messageCounter) Estimate(messages []agentapi.Message) int64 { return int64(len(messages)) }
+func (messageCounter) EstimateTools([]agentapi.ToolSchema) int64  { return 0 }
 
 // TestRunTurn_ReactiveCompactionWithWindowDoesNotPanic is #32's B2: after a
 // reactive compaction the history is shorter than the baseline the last

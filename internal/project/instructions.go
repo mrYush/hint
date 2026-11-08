@@ -37,6 +37,8 @@ const (
 	// MaxInstructionFileSize bounds how much of one file is read at all;
 	// beyond it the rest is not even outlined.
 	MaxInstructionFileSize = 1 << 20
+	// MaxInstructionInputBytes caps aggregate disk input before prompt fitting.
+	MaxInstructionInputBytes = 4 << 20
 )
 
 // InstructionBudgetFor returns the default budget for a model whose
@@ -52,9 +54,9 @@ func InstructionBudgetFor(window int) int {
 	return max(min(DefaultInstructionBudget, scaled), MinInstructionBudget)
 }
 
-// Instruction is one instruction file as it goes into the prompt.
+// Instruction is one instruction document as it goes into the prompt.
 type Instruction struct {
-	// Path is the file's absolute path.
+	// Path is the file's absolute path or a configured source's stable identity.
 	Path string
 	// Content is what the prompt shows: the file, the file with some
 	// sections reduced to their heading and first sentence (Outlined), a
@@ -139,24 +141,42 @@ func ReadInstructions(dirs []string, names []string, budget int) ([]Instruction,
 // an error: instructions are a convenience, and a project with a broken
 // one still deserves an answer.
 func ReadInstructionFiles(ctx context.Context, paths []string, budget int, s Summarizer) ([]Instruction, []string) {
+	files, warnings := readInstructionFiles(ctx, paths)
+	out, fitWarnings := fitInstructions(ctx, files, budget, s)
+	return out, append(warnings, fitWarnings...)
+}
+
+// readInstructionFiles loads the raw documents that Layout shares with
+// configured in-memory sources before fitting them all under one budget.
+func readInstructionFiles(ctx context.Context, paths []string) ([]rawFile, []string) {
 	var files []rawFile
 	var warnings []string
-	for _, p := range paths {
-		content, more, err := readBounded(p, MaxInstructionFileSize)
+	remaining := MaxInstructionInputBytes
+	for i, p := range paths {
+		if err := ctx.Err(); err != nil {
+			warnings = append(warnings, fmt.Sprintf("instruction loading stopped: %v", err))
+			break
+		}
+		if remaining <= 0 || i >= 128 {
+			warnings = append(warnings, "instruction discovery input limit reached; use the instructions tool for remaining documents")
+			break
+		}
+		limit := min(MaxInstructionFileSize, remaining)
+		content, more, err := readBounded(p, limit)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s: %v", p, err))
 			continue
 		}
+		remaining -= len(content)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
 		if more {
-			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", p, MaxInstructionFileSize))
+			warnings = append(warnings, fmt.Sprintf("%s: larger than %d bytes; only that much of it is considered", p, limit))
 		}
 		files = append(files, newRawFile(p, content))
 	}
-	out, fitWarnings := fitInstructions(ctx, files, budget, s)
-	return out, append(warnings, fitWarnings...)
+	return files, warnings
 }
 
 // firstInstruction returns the path of the first name that is a regular

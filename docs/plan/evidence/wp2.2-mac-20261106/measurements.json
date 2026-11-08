@@ -1,0 +1,488 @@
+{
+  "date": "2026-11-06",
+  "head": "752954bad3903c7b12ec8e48a05b342a054d1148",
+  "working_tree": "uncommitted WP2.2 implementation",
+  "go": "go version go1.26.10 darwin/arm64",
+  "architecture": "arm64",
+  "test_binary_sha256": "68e7021e0ce0df50e3320dc8e1eb0733b37d2b88f7a81a0b2b177b6d24377edf",
+  "scope": "Developer Mac, focused serial extraction with actual supervised worker; no model, no Pi, no filesystem cache flush; concurrent development workload was not controlled.",
+  "final_worker_gc": {
+    "GOMEMLIMIT": "64MiB",
+    "GOGC": 50
+  },
+  "runs": [
+    {
+      "run": "screening-default-gc",
+      "baseline": {
+        "measurement": {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        },
+        "resources": {
+          "mode": "baseline",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 20578304,
+          "rss_samples": 24,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 2.828595083
+        }
+      },
+      "index": {
+        "measurement": {
+          "catalog_bytes": 30838784,
+          "cold_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 4675.265,
+            "extractor_calls": 162,
+            "failures": {}
+          },
+          "exact_query": {
+            "entries": 1,
+            "median_ms": 2.0025,
+            "p95_ms": 2.387,
+            "repetitions": 20,
+            "result_bytes": 982
+          },
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+          "warm_catalog": {
+            "counts": {
+              "Generation": 164,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 219.481,
+            "extractor_calls": 0,
+            "failures": {}
+          }
+        },
+        "resources": {
+          "mode": "index",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 164741120,
+          "rss_samples": 44,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 5.046740541
+        }
+      },
+      "additional_peak_rss_bytes": 144162816
+    },
+    {
+      "run": "worker64",
+      "baseline": {
+        "measurement": {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        },
+        "resources": {
+          "mode": "baseline",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 20545536,
+          "rss_samples": 22,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 2.810780834
+        }
+      },
+      "index": {
+        "measurement": {
+          "catalog_bytes": 30998528,
+          "cold_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 4641.927,
+            "extractor_calls": 162,
+            "failures": {}
+          },
+          "exact_query": {
+            "entries": 1,
+            "median_ms": 1.953,
+            "p95_ms": 2.146,
+            "repetitions": 20,
+            "result_bytes": 982
+          },
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+          "warm_catalog": {
+            "counts": {
+              "Generation": 164,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 216.754,
+            "extractor_calls": 0,
+            "failures": {}
+          }
+        },
+        "resources": {
+          "mode": "index",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 118833152,
+          "rss_samples": 44,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 5.026415500000001
+        }
+      },
+      "additional_peak_rss_bytes": 98287616
+    },
+    {
+      "run": "final1",
+      "baseline": {
+        "measurement": {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        },
+        "resources": {
+          "mode": "baseline",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 20594688,
+          "rss_samples": 27,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 3.549603291
+        }
+      },
+      "index": {
+        "measurement": {
+          "catalog_bytes": 31043584,
+          "cold_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 4595.242,
+            "extractor_calls": 162,
+            "failures": {}
+          },
+          "exact_query": {
+            "entries": 1,
+            "median_ms": 2.0140000000000002,
+            "p95_ms": 2.172,
+            "repetitions": 20,
+            "result_bytes": 982
+          },
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+          "warm_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 223.759,
+            "extractor_calls": 0,
+            "failures": {}
+          }
+        },
+        "resources": {
+          "mode": "index",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 119144448,
+          "rss_samples": 43,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 5.005962709
+        }
+      },
+      "additional_peak_rss_bytes": 98549760
+    },
+    {
+      "run": "final2",
+      "baseline": {
+        "measurement": {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        },
+        "resources": {
+          "mode": "baseline",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 20824064,
+          "rss_samples": 15,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 2.025526084
+        }
+      },
+      "index": {
+        "measurement": {
+          "catalog_bytes": 31006720,
+          "cold_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 4659.798,
+            "extractor_calls": 162,
+            "failures": {}
+          },
+          "exact_query": {
+            "entries": 1,
+            "median_ms": 1.9905,
+            "p95_ms": 2.255,
+            "repetitions": 20,
+            "result_bytes": 982
+          },
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+          "warm_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 220.173,
+            "extractor_calls": 0,
+            "failures": {}
+          }
+        },
+        "resources": {
+          "mode": "index",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 118358016,
+          "rss_samples": 43,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 5.020916333
+        }
+      },
+      "additional_peak_rss_bytes": 97533952
+    },
+    {
+      "run": "final3",
+      "baseline": {
+        "measurement": {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        },
+        "resources": {
+          "mode": "baseline",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 20987904,
+          "rss_samples": 16,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 2.064977333
+        }
+      },
+      "index": {
+        "measurement": {
+          "catalog_bytes": 31043584,
+          "cold_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 4628.407,
+            "extractor_calls": 162,
+            "failures": {}
+          },
+          "exact_query": {
+            "entries": 1,
+            "median_ms": 2.0170000000000003,
+            "p95_ms": 2.123,
+            "repetitions": 20,
+            "result_bytes": 982
+          },
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+          "warm_catalog": {
+            "counts": {
+              "Generation": 163,
+              "Files": 163,
+              "Pending": 0,
+              "Indexed": 160,
+              "Omitted": 3
+            },
+            "elapsed_ms": 220.673,
+            "extractor_calls": 0,
+            "failures": {}
+          }
+        },
+        "resources": {
+          "mode": "index",
+          "returncode": 0,
+          "peak_process_family_rss_bytes": 117489664,
+          "rss_samples": 43,
+          "sampling_interval_seconds": 0.1,
+          "elapsed_seconds": 5.017911125
+        }
+      },
+      "additional_peak_rss_bytes": 96501760
+    }
+  ],
+  "corpus_nonblank_lines": 226780,
+  "omission_audit": {
+    "catalog_bytes": 31105024,
+    "cold_catalog": {
+      "counts": {
+        "Generation": 163,
+        "Files": 163,
+        "Pending": 0,
+        "Indexed": 160,
+        "Omitted": 3
+      },
+      "elapsed_ms": 4601.172,
+      "extractor_calls": 162,
+      "failures": {}
+    },
+    "exact_query": {
+      "entries": 1,
+      "median_ms": 2.0004999999999997,
+      "p95_ms": 2.217,
+      "repetitions": 20,
+      "result_bytes": 982
+    },
+    "files": 163,
+    "languages": {
+      "go": 38,
+      "javascript": 11,
+      "python": 18,
+      "rust": 19,
+      "typescript": 77
+    },
+    "lines": 248811,
+    "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped.",
+    "omissions": {
+      "typescript/src/compiler/checker.ts": "oversized",
+      "typescript/src/compiler/transformers/utilities.ts": "parse_failed",
+      "typescript/src/compiler/types.ts": "parse_failed"
+    },
+    "warm_catalog": {
+      "counts": {
+        "Generation": 163,
+        "Files": 163,
+        "Pending": 0,
+        "Indexed": 160,
+        "Omitted": 3
+      },
+      "elapsed_ms": 219.169,
+      "extractor_calls": 0,
+      "failures": {}
+    }
+  },
+  "reproduction_script_verification": {
+    "corpus_files_verified": 163,
+    "benchmark_report": {
+      "run": 1,
+      "mode": "index",
+      "returncode": 0,
+      "peak_process_family_rss_bytes": 119373824,
+      "rss_samples": 42,
+      "sampling_interval_seconds": 0.1,
+      "elapsed_seconds": 4.918943791999999,
+      "test_binary_sha256": "6cf0a9778fbf34973cd4888be1a07195ede6766dd89f9b74e0d79cab2eb4ab5b"
+    }
+  },
+  "hardware": {
+    "model": "Mac17,3",
+    "cpu": "Apple M5",
+    "physical_memory_bytes": 17179869184
+  }
+}

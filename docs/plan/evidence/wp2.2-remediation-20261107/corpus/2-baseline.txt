@@ -1,0 +1,16 @@
+=== RUN   TestCorpusEvaluation
+    evaluation_test.go:187: {
+          "baseline": true,
+          "files": 163,
+          "languages": {
+            "go": 38,
+            "javascript": 11,
+            "python": 18,
+            "rust": 19,
+            "typescript": 77
+          },
+          "lines": 248811,
+          "note": "Manual focused indexing; background auto profile remains unvalidated; filesystem cache is not dropped."
+        }
+--- PASS: TestCorpusEvaluation (2.01s)
+PASS

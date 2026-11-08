@@ -1,0 +1,4 @@
+=== RUN   TestCorpusEvaluation
+    evaluation_test.go:142: path is hint's own configuration or session data, which the tools do not read
+--- FAIL: TestCorpusEvaluation (2.37s)
+FAIL

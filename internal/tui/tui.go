@@ -28,6 +28,9 @@ type Options struct {
 	// Recorded says whether SessionID is written to disk; the header
 	// shows it and the exit note depends on it.
 	Recorded bool
+	// Ephemeral is the run's --no-session. /new repeats it, so a fresh
+	// session stays off disk for the whole run.
+	Ephemeral bool
 	// History is the conversation so far, shown before the first prompt.
 	History []agentapi.Message
 	// Profile is what the session answers with, for the header.

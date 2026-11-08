@@ -1,0 +1,35 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/mrYush/hint/internal/index
+cpu: Apple M5
+BenchmarkMetadata
+    benchmark_test.go:44: catalog build: 10000/100000 entries in 6.932s
+    benchmark_test.go:44: catalog build: 20000/100000 entries in 13.518s
+    benchmark_test.go:44: catalog build: 30000/100000 entries in 19.934s
+    benchmark_test.go:44: catalog build: 40000/100000 entries in 26.558s
+    benchmark_test.go:44: catalog build: 50000/100000 entries in 34.189s
+    benchmark_test.go:44: catalog build: 60000/100000 entries in 41.126s
+    benchmark_test.go:44: catalog build: 70000/100000 entries in 47.628s
+    benchmark_test.go:44: catalog build: 80000/100000 entries in 54.164s
+    benchmark_test.go:44: catalog build: 90000/100000 entries in 1m0.898s
+    benchmark_test.go:44: catalog build: 100000/100000 entries in 1m7.716s
+BenchmarkMetadata-10    	      20	     38831 ns/op	    677160 build-ns/entry	        67.72 build-seconds	 225292288 db-bytes	      2253 db-bytes/entry	    100000 entries	    9626 B/op	     170 allocs/op
+PASS
+       67.73 real        14.46 user        39.05 sys
+            26869760  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                1851  page reclaims
+                  17  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                4332  signals received
+             1905988  voluntary context switches
+             2952029  involuntary context switches
+        707193223095  instructions retired
+        222953884456  cycles elapsed
+            20267512  peak memory footprint
