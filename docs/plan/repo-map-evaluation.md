@@ -2,7 +2,10 @@
 
 This is a reproducible acceptance protocol, not a report of completed Raspberry Pi or model experiments.
 The owner moved these checks, including the paired 8k/32k evaluation, into the [v0.4.0 release gate #95](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
-They are pending release acceptance, not a remaining WP2.2 merge gate.
+On 2026-11-08, the owner waived B1/B2 for the v0.4.0 release deadline because no qualifying pairs were available and Pi thermal conditions were not comparable.
+They remain post-release requirements for automatic-profile approval, not a remaining WP2.2 merge gate.
+A Pi local-model run is optional for release acceptance; this does not waive the resource measurements required before enabling `auto`.
+The [release checklist](evidence/v0.4.0-preflight-20261107/README.md) preserves the pilot limitations and the null threshold results.
 Mac parser measurements below are screening evidence and cannot satisfy this acceptance gate.
 The proposed 128 MiB additional indexing RSS and five-percent median inference-degradation targets remain proposals until measured and reviewed.
 An implementation that keeps automatic indexing disabled because its resource profile is unvalidated is not an accepted automatic profile.
