@@ -1,0 +1,372 @@
+=== Build and CI ===
+
+Checked 2026-11-08 (Europe/Moscow).
+Source SHA: fa4d2986eed486af19e0309a6df9591cc46d6e7c
+Local and origin-tracking release/v0.4.0 both resolved to this SHA.
+macOS build: Go 1.26.10 darwin/arm64, git archive, CGO_ENABLED=0 go build -trimpath ./cmd/hint.
+Source archive SHA-256: a0aef9ab47f1082ebbfe51827775d1bb191666891d6a8212c4d32c45ebba50bb
+Executable SHA-256: 776845f3e606e235b5d9c3f6df81d23655fb938018db7dee4835aaaa928c4b26
+Live fixture profile: hub / glm-5.3-flash-local.
+GitHub Actions API filtered by head_sha returned no runs.
+GitHub commit check-runs API returned {"checks":[],"total_count":0}.
+The CI workflow triggers on PRs and pushes to main or develop.
+
+=== Smoke A1–A5 and A7 ===
+
+Source SHA: fa4d2986eed486af19e0309a6df9591cc46d6e7c
+Executable SHA-256: 776845f3e606e235b5d9c3f6df81d23655fb938018db7dee4835aaaa928c4b26
+Selected terminal commands, tool results and statuses from real Hint sessions.
+Absolute fixture paths are redacted. Cursor values are expired fixture handles.
+
+A1
+> /repos index on
+Index mode: on (shared by all sessions)
+Background: paused; reason: telemetry_unavailable
+Telemetry: known=false; age=unknown
+> /repos add ../second-fixture second
+Workspace revision 2 (2 roots)
+> /repos tree second
+> /repos index
+Index mode: on (shared by all sessions)
+Background: paused; reason: resource_cooldown
+Telemetry: known=true; age=1s
+> Call repo_map exactly with {"repo":"second","path":"beta.go","limit":1}, then call repo_list with {}. Report map root_id, revision, scope, location, next_cursor and both roots. Retain the exact next_cursor for the next turn.
+hint: repo_list {}
+hint: repo_map {"limit":1,"path":"beta.go","repo":"second"}
+> /repos remove second
+Workspace revision 3 (1 roots)
+> /repos add ../second-fixture second
+Workspace revision 4 (2 roots)
+> /repos tree second
+> /repos index
+Index mode: on (shared by all sessions)
+Background: paused; reason: resource_cooldown
+Telemetry: known=true; age=3s
+> Call repo_map with only the exact cursor from your first map result, then call repo_list with {}. Report both raw outcomes.
+hint: repo_list {}
+hint: repo_map {"cursor":"o_GWcF1jRta2GLLlP6UFtHZyZA0xyTlM7oNzmIEuUbKjrMGaIleKYjoC6rswlVsXAAAAAAAAAAGMRVKcXfndb1JcR82z3-1W"}
+hint: repo_map failed: {"error":{"code":"stale_cursor","message":"index: snapshot expired or was released\nindex: snapshot expired or was released\nworkspace: source or authority changed","retryable":false}}
+Workspace revision 4
+> /exit
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"beta","end_byte":54,"end_line":3,"file_id":"e_PXR4KieSd5bCjgfL-iK6PelzqIVqE1ge9F13rYDrCEU","id":"s_dnJkDTHJOUzug3OYgS5RsqOswZoiV4piOgLquzCVWxc","kind":"function","name":"Shared","signature":"func Shared() string","start_byte":14,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:35:59Z","freshness":"content_checked","id":"e_PXR4KieSd5bCjgfL-iK6PelzqIVqE1ge9F13rYDrCEU","path_display":"beta.go","source_version":"sha256:NxHZyacW9gxJY3L3ILaKOlooEiN-YJ02MZI76nTrQZw"}],"generation":1,"membership_revision":2,"order":"path","page":{"expires_at":"2026-11-08T00:45:59Z","next_cursor":"o_GWcF1jRta2GLLlP6UFtHZyZA0xyTlM7oNzmIEuUbKjrMGaIleKYjoC6rswlVsXAAAAAAAAAAGMRVKcXfndb1JcR82z3-1W","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_N5LS4Z9IC1Sal4eToyh9mKs3UQKN8Xedw0vL9mwX7ms","scope":{"entry_id":"e_PXR4KieSd5bCjgfL-iK6PelzqIVqE1ge9F13rYDrCEU","path_display":"beta.go"},"status":{"reason":"resource_cooldown","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":101,"files_checked":1}}
+Actual tool response:
+Workspace revision 2
+"second" [r_N5LS4Z9IC1Sal4eToyh9mKs3UQKN8Xedw0vL9mwX7ms] paused resource_cooldown
+  "<fixture>/second-fixture"
+"primary" [r_b6dQHPzlATafBc71bUwOTknXBe-rxh4Imu_w99JwC6A] paused resource_cooldown
+  "<fixture>/primary"
+Actual tool response:
+{"error":{"code":"stale_cursor","message":"index: snapshot expired or was released\nindex: snapshot expired or was released\nworkspace: source or authority changed","retryable":false}}
+Actual tool response:
+Workspace revision 4
+"second" [r_N5LS4Z9IC1Sal4eToyh9mKs3UQKN8Xedw0vL9mwX7ms] paused resource_cooldown
+  "<fixture>/second-fixture"
+"primary" [r_b6dQHPzlATafBc71bUwOTknXBe-rxh4Imu_w99JwC6A] paused resource_cooldown
+  "<fixture>/primary"
+
+A2
+> /repos index on
+Index mode: on (shared by all sessions)
+Background: paused; reason: telemetry_unavailable
+Telemetry: known=false; age=unknown
+> /repos tree primary
+> Make actual tool calls. Call repo_list with {}. Call repo_map with {}, then repo_map with {"path":"nested"}. Try edit_file on nested/hidden.go by replacing HiddenFromParent with MustBeBlocked. Try read_file with {"path":"nested/hidden.go"} through primary. Report each result.
+I'll make these calls in sequence, batching the independent ones first.hint: repo_map {}
+hint: repo_list {}
+Both calls returned. Indexing is paused (`resource_cooldown`, 0 files indexed). Now the scoped `repo_map` call:hint: repo_map {"path":"nested"}
+hint: repo_map failed: {"error":{"code":"access_denied","message":"workspace: path belongs to a nested root","retryable":false}}
+hint: edit_file {"new_str":"MustBeBlocked","old_str":"HiddenFromParent","path":"nested/hidden.go"}
+hint: edit_file failed: workspace: path belongs to a nested root
+The edit was blocked with the same nested-root error. Now the `read_file` attempt:hint: read_file {"path":"nested/hidden.go"}
+hint: read_file failed: workspace: path belongs to a nested root
+> /repos add ./nested nested
+Workspace revision 2 (2 roots)
+> Call repo_map with {"repo":"nested","path":"hidden.go"}, then repo_map with {"path":"alpha.go","symbol":"LookupBeacon"}. Report both tool results.
+Both calls are independent, so I'll batch them:hint: repo_map {"path":"alpha.go","symbol":"LookupBeacon"}
+hint: repo_map {"path":"hidden.go","repo":"nested"}
+> /exit
+Actual tool response:
+Workspace revision 1
+"primary" [r_dyzR7gYGkOVxNMIPOcZENJGxF6KHDBXxFZUJ_XdyyjA] paused resource_cooldown
+  "<fixture>/primary"
+Actual tool response:
+{"coverage":{"discovery_complete":false,"indexed_files":0,"known_files":0,"omitted_files":0,"pending_files":0},"entries":[],"files":[],"generation":0,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_dyzR7gYGkOVxNMIPOcZENJGxF6KHDBXxFZUJ_XdyyjA","scope":{"path_display":"."},"status":{"reason":"resource_cooldown","state":"paused"},"verification":{"budget_exhausted":false}}
+Actual tool response:
+{"error":{"code":"access_denied","message":"workspace: path belongs to a nested root","retryable":false}}
+Actual tool response:
+workspace: path belongs to a nested root
+Actual tool response:
+workspace: path belongs to a nested root
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"nested","end_byte":41,"end_line":2,"file_id":"e_i_U1J3qjZazWC4GcCJq_LCZWHd4On1w4glyf3MTtSX8","id":"s_3V28Ezh-KKymYfwk_d07gsDmldRVvuslTKAAbJXkl5k","kind":"function","name":"HiddenFromParent","signature":"func HiddenFromParent()","start_byte":15,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:39:13Z","freshness":"content_checked","id":"e_i_U1J3qjZazWC4GcCJq_LCZWHd4On1w4glyf3MTtSX8","path_display":"hidden.go","source_version":"sha256:eKSgLA0QcAdTyB_uLkgmRuYUD4sT0XxfuBJeFBTDm_Y"}],"generation":1,"membership_revision":2,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_cVz1Hy57-Vd5FxVi8hwgvddbN5JeNKIwkIj68kLM2NM","scope":{"entry_id":"e_i_U1J3qjZazWC4GcCJq_LCZWHd4On1w4glyf3MTtSX8","path_display":"hidden.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":42,"files_checked":1}}
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":116,"end_line":4,"file_id":"e_bP2Q_2bYFPqzAWKxIFo-nbjf7NHlGfTe0u6E7pydPTk","id":"s_rKuCPjdHvkCKPdQUz0xSxNRg9ZLE0HAGlMTzDZZ2qZM","kind":"function","name":"LookupBeacon","signature":"func LookupBeacon(s string) string","start_byte":57,"start_line":4}],"files":[{"checked_at":"2026-11-08T00:39:13Z","freshness":"content_checked","id":"e_bP2Q_2bYFPqzAWKxIFo-nbjf7NHlGfTe0u6E7pydPTk","path_display":"alpha.go","source_version":"sha256:OYQMIRdZ1TbFjGjofvz6jz_qxQ4gEs2bLRGI6jWitbU"}],"generation":1,"membership_revision":2,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_dyzR7gYGkOVxNMIPOcZENJGxF6KHDBXxFZUJ_XdyyjA","scope":{"entry_id":"e_bP2Q_2bYFPqzAWKxIFo-nbjf7NHlGfTe0u6E7pydPTk","path_display":"alpha.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":139,"files_checked":1}}
+
+A3
+> /repos index
+Index mode: auto (shared by all sessions)
+Background: paused; reason: resource_profile_unvalidated
+Telemetry: known=false; age=unknown
+> /repos index on
+Index mode: on (shared by all sessions)
+Background: paused; reason: telemetry_unavailable
+Telemetry: known=false; age=unknown
+> Call repo_map with {"path":"alpha.go","symbol":"LookupBeacon"} and report its result.
+hint: repo_map {"path":"alpha.go","symbol":"LookupBeacon"}
+> /repos index off
+Index mode: off (shared by all sessions)
+Background: paused; reason: configured_off
+Telemetry: known=false; age=unknown
+> Read alpha.go using read_file. Report the signature of LookupBeacon and whether repo_map is in your current tool catalog.
+hint: read_file {"path":"alpha.go"}
+> /exit
+> /repos index
+Index mode: auto (shared by all sessions)
+Background: paused; reason: resource_profile_unvalidated
+Telemetry: known=false; age=unknown
+> /exit
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":116,"end_line":4,"file_id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","id":"s_8buX4Fc0lnO8kHoJnZtyKnxL_WFTwrJqOktH_c1AHVk","kind":"function","name":"LookupBeacon","signature":"func LookupBeacon(s string) string","start_byte":57,"start_line":4}],"files":[{"checked_at":"2026-11-08T00:35:07Z","freshness":"content_checked","id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","path_display":"alpha.go","source_version":"sha256:OYQMIRdZ1TbFjGjofvz6jz_qxQ4gEs2bLRGI6jWitbU"}],"generation":1,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_lXnEvgM9sznAKLn37gaBblFAP2LQwJnj1T0OhsIwGe0","scope":{"entry_id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","path_display":"alpha.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":139,"files_checked":1}}
+Actual tool response:
+     1	package alpha
+     2	
+     3	func Shared() string { return "primary" }
+     4	func LookupBeacon(s string) string { return "beacon:" + s }
+     5	type Catalog struct{}
+
+A4
+> /repos index on
+Index mode: on (shared by all sessions)
+Background: paused; reason: telemetry_unavailable
+Telemetry: known=false; age=unknown
+> Call repo_map with {"path":"methods.go","symbol":"Mutable"}. Also call repo_map with {"path":"alpha.go","limit":1} and retain its exact next_cursor. Report the signatures, freshness and cursor.
+hint: repo_map {"path":"methods.go","symbol":"Mutable"}
+hint: repo_map {"limit":1,"path":"alpha.go"}
+> Call repo_map with {"path":"methods.go","symbol":"Mutable"} and read_file with {"path":"methods.go"}. Report exact freshness and current return expression.
+hint: read_file {"path":"methods.go"}
+hint: repo_map {"path":"methods.go","symbol":"Mutable"}
+> Call repo_map with {"path":"methods.go","symbol":"Mutable"} and report the exact outcome.
+hint: repo_map {"path":"methods.go","symbol":"Mutable"}
+hint: repo_map failed: {"error":{"code":"scope_not_found","message":"workspace: stat source: statat methods.go: no such file or directory","retryable":false}}
+> /repos add ../second-fixture second
+Workspace revision 2 (2 roots)
+> Call repo_map with only the exact cursor from the first turn. Report the raw outcome.
+hint: repo_map {"cursor":"LUnX9Gq8rf_cAPf3JxKo8OZ0mDmohPMPcrz8cetzbdJisvAt8rWnFQD52yT9OicPAAAAAAAAAAKVTl5D8eDVc0OCmal0A3Y0"}
+hint: repo_map failed: {"error":{"code":"stale_cursor","message":"index: snapshot expired or was released\nindex: snapshot expired or was released\nworkspace: source or authority changed","retryable":false}}
+> /exit
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":162,"end_line":5,"file_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","id":"s_C7QM5Iq4PVLH0ELEbFF8iMC_WStN8WKqD0LYksU_TcM","kind":"function","name":"Mutable","signature":"func Mutable(s string) string","start_byte":111,"start_line":5}],"files":[{"checked_at":"2026-11-08T00:37:41Z","freshness":"content_checked","id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go","source_version":"sha256:HPfmi8Pb41HayibR8xBMENXeeiVsf8GNobZ9WA6mbLE"}],"generation":1,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_I7EtdnG65wyi7PfedAabYUTk4MllAggsYxBx7QlvH_o","scope":{"entry_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":163,"files_checked":1}}
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":56,"end_line":3,"file_id":"e_fBBJfSo2yjwP-Oh95144yAYMrrMhXNEQ813iU4E0oS8","id":"s_5nSYOaiE8w9yvPxx63Nt0mKy8C3ytacVAPnbJP06Jw8","kind":"function","name":"Shared","signature":"func Shared() string","start_byte":15,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:37:41Z","freshness":"content_checked","id":"e_fBBJfSo2yjwP-Oh95144yAYMrrMhXNEQ813iU4E0oS8","path_display":"alpha.go","source_version":"sha256:OYQMIRdZ1TbFjGjofvz6jz_qxQ4gEs2bLRGI6jWitbU"}],"generation":2,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T00:47:41Z","next_cursor":"LUnX9Gq8rf_cAPf3JxKo8OZ0mDmohPMPcrz8cetzbdJisvAt8rWnFQD52yT9OicPAAAAAAAAAAKVTl5D8eDVc0OCmal0A3Y0","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_I7EtdnG65wyi7PfedAabYUTk4MllAggsYxBx7QlvH_o","scope":{"entry_id":"e_fBBJfSo2yjwP-Oh95144yAYMrrMhXNEQ813iU4E0oS8","path_display":"alpha.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":139,"files_checked":1}}
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":162,"end_line":5,"file_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","id":"s_C7QM5Iq4PVLH0ELEbFF8iMC_WStN8WKqD0LYksU_TcM","kind":"function","name":"Mutable","signature":"func Mutable(s string) string","start_byte":111,"start_line":5}],"files":[{"checked_at":"2026-11-08T00:37:49Z","freshness":"content_checked","id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go","source_version":"sha256:fZ60OMW-cOTl9UB9pk8IHNpSrJRrSnf-P3JRf6fKD6U"}],"generation":3,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_I7EtdnG65wyi7PfedAabYUTk4MllAggsYxBx7QlvH_o","scope":{"entry_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":163,"files_checked":1}}
+Actual tool response:
+     1	package alpha
+     2	
+     3	func (Catalog) Open() string { return "open" }
+     4	func (Catalog) Close() string { return "close" }
+     5	func Mutable(s string) string { return "new:" + s }
+Actual tool response:
+{"error":{"code":"scope_not_found","message":"workspace: stat source: statat methods.go: no such file or directory","retryable":false}}
+Actual tool response:
+{"error":{"code":"stale_cursor","message":"index: snapshot expired or was released\nindex: snapshot expired or was released\nworkspace: source or authority changed","retryable":false}}
+
+A5
+> /repos index on
+Index mode: on (shared by all sessions)
+Background: paused; reason: telemetry_unavailable
+Telemetry: known=false; age=unknown
+> /repos add ../second-fixture second
+Workspace revision 2 (2 roots)
+> /repos tree second
+> /repos index
+Index mode: on (shared by all sessions)
+Background: paused; reason: resource_cooldown
+Telemetry: known=true; age=1s
+> Call repo_map with {"repo":"second","path":"beta.go","limit":1}; retain the exact next_cursor for later and report it.
+hint: repo_map {"limit":1,"path":"beta.go","repo":"second"}
+> Call repo_map with {"repo":"second"} and report the exact tool error.
+hint: repo_map {"repo":"second"}
+hint: repo_map failed: {"error":{"code":"root_unavailable","message":"workspace: stat root location: workspace: attached root is unavailable\nstat <fixture>/second-fixture: no such file or directory","retryable":true}}
+> Call repo_map with {"repo":"second"}, then call repo_map with only the exact cursor from the first turn. Report both outcomes.
+I'll run both calls now. They're independent of each other (the cursor comes from turn 1), so I'll fire them together: first `{"repo":"second"}`, then `{"cursor":"hjXaE22oTAJdsVKtAVj42P9MqNBUXp3U0Me844qF_0NS3ZL5oTbMKF6NVZ-EjFtAAAAAAAAAAHoU-0-CWg2oCFitx3cEmsC"}` with no other parameters.hint: repo_map {"cursor":"hjXaE22oTAJdsVKtAVj42P9MqNBUXp3U0Me844qF_0NS3ZL5oTbMKF6NVZ-EjFtAAAAAAAAAAHoU-0-CWg2oCFitx3cEmsC"}
+hint: repo_map {"repo":"second"}
+hint: repo_map failed: {"error":{"code":"stale_cursor","message":"index: snapshot expired or was released","retryable":false}}
+> /exit
+Actual tool response:
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"beta","end_byte":54,"end_line":3,"file_id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","id":"s__0yo0FRendTQx7zjip8r_Q1LdkvmhNswoXo1Vn4SMW0","kind":"function","name":"Shared","signature":"func Shared() string","start_byte":14,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:36:51Z","freshness":"content_checked","id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","path_display":"beta.go","source_version":"sha256:NxHZyacW9gxJY3L3ILaKOlooEiN-YJ02MZI76nTrQZw"}],"generation":1,"membership_revision":2,"order":"path","page":{"expires_at":"2026-11-08T00:46:51Z","next_cursor":"hjXaE22oTAJdsVKtAVj42P9MqNBUXp3U0Me844qfK_0NS3ZL5oTbMKF6NVZ-EjFtAAAAAAAAAAHoU-0-CWg2oCFitx3cEmsC","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_hZ4pni8lnLD2kZs-Y7BmiufC8peEsSUzBngnammHBtU","scope":{"entry_id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","path_display":"beta.go"},"status":{"reason":"resource_cooldown","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":101,"files_checked":1}}
+Actual tool response:
+{"error":{"code":"root_unavailable","message":"workspace: stat root location: workspace: attached root is unavailable\nstat <fixture>/second-fixture: no such file or directory","retryable":true}}
+Actual tool response:
+{"coverage":{"discovery_complete":false,"indexed_files":1,"known_files":1,"omitted_files":0,"pending_files":0},"entries":[{"enclosing":"beta","end_byte":54,"end_line":3,"file_id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","id":"s__0yo0FRendTQx7zjip8r_Q1LdkvmhNswoXo1Vn4SMW0","kind":"function","name":"Shared","signature":"func Shared() string","start_byte":14,"start_line":3},{"enclosing":"beta","end_byte":100,"end_line":4,"file_id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","id":"s_i1up01AE-RbMMtl0HCBgvl6nyUBw5BJ7Fv4h2CGTzQg","kind":"function","name":"SecondaryOnly","signature":"func SecondaryOnly() string","start_byte":55,"start_line":4}],"files":[{"checked_at":"2026-11-08T00:38:39Z","freshness":"content_checked","id":"e_-Qr3hQO9VLxsIBWS6zf7OiqbaHWd4mQV-Oqw5z7PFt8","path_display":"beta.go","source_version":"sha256:NxHZyacW9gxJY3L3ILaKOlooEiN-YJ02MZI76nTrQZw"}],"generation":1,"membership_revision":2,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_hZ4pni8lnLD2kZs-Y7BmiufC8peEsSUzBngnammHBtU","scope":{"path_display":"."},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":101,"files_checked":1}}
+Actual tool response:
+{"error":{"code":"stale_cursor","message":"index: snapshot expired or was released","retryable":false}}
+
+A7
+> /repos add ../second-fixture second
+Workspace revision 2 (2 roots)
+> Reply exactly FIRST.
+> /repos
+Workspace revision 2 (2 roots)
+> /new
+hint: left session 5e55e0c8ab61ab79; this is session 3f29ad91e142f534
+> /repos
+Workspace revision 1 (1 roots)
+> /exit
+hint: continuing session 5e55e0c8ab61ab79 (2 messages, started just now)
+> /repos
+Workspace revision 2 (2 roots)
+> /exit
+hint: continuing session 5e55e0c8ab61ab79 (2 messages, started just now)
+hint: warning: session 5e55e0c8ab61ab79: workspace root "second" is unavailable: workspace: attach local: tool: root "<fixture>/second-fixture": lstat <fixture>/second-fixture: no such file or directory
+> /repos
+Workspace revision 2 (1 roots)
+> /exit
+
+A3 live TUI busy-status reproduction:
+Prompt: Write 600 words explaining Go slices and arrays.
+While the TUI displayed thinking and the provider turn was active, submitted /repos index.
+Observed: /repos is not available right now
+Expected: read-only status while the turn runs.
+The core TestReposIndexModeRequiresIdleEngine passed; the TUI disables the entire /repos command while busy.
+Proposed fix scope: allow the read-only status subcommand through the busy TUI gate and retain the mutation guard.
+
+A4 supplemental component results:
+=== RUN   TestContinuationRetentionDependsOnFailure
+--- PASS: TestContinuationRetentionDependsOnFailure (0.03s)
+No live transient-I/O or empty partial-page fixture was reproduced.
+
+A7 live TUI fork:
+Attached and removed detached; submitted Reply exactly FIRST.; attached
+second; submitted Reply exactly SECOND.; resumed the source session in the
+TUI and forked the first turn using the message browser and f.
+Observed: forked from session 7abfe6c3 after turn 1; this is session 81d74153.
+Observed /repos: Workspace revision 3 (1 roots), primary.
+Persisted fork header: parent 7abfe6c30b619d54, turn 1.
+Persisted workspace event: revision 3, active root primary, ownership
+reservation detached. The later second root was absent.
+
+=== A6 disclosure test ===
+
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/64
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/512
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1023
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1024
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/2048
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/0
+--- PASS: TestToolDisclosureUsesEffectiveOutputLimit (0.01s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/64 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/512 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1023 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1024 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/2048 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/0 (0.00s)
+PASS
+ok  	github.com/mrYush/hint/internal/repomap	0.399s
+
+=== A8 clone negatives ===
+
+/repos clone https://example.invalid/sample.git ./existing existing
+/repos clone https://fixture:placeholder@example.invalid/sample.git ./creds creds
+/repos clone https://example.invalid/sample.git?fixture=1 ./query query
+/repos clone https://example.invalid/sample.git#fixture ./fragment fragment
+/repos clone ../second-fixture ./local local
+/repos clone ssh://git@127.0.0.1:1/sample.git ./partial partial
+/repos
+/exit
+hint: warning: profile local keeps its API key in a config file; hint setup moves it into the OS secret store
+hint: interactive session; /help for commands, Ctrl-D or /exit to quit
+
+> hint: invalid: clone requires a new destination directory: mkdir <fixture>/primary/existing: file exists
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: clone requires an https:// or ssh:// URL without passwords, HTTPS userinfo, query or fragment
+
+> hint: invalid: git clone failed; incomplete destination retained; check URL, network and local authentication
+
+> Workspace revision 1 (1 roots)
+"primary" (primary) [r_VgHEctGIm3P81iIG3AGmMt9VdVYnTAexZgx5iRBF3gM]
+  "<fixture>/primary"
+
+
+> existing exists
+creds absent
+query absent
+fragment absent
+local absent
+partial exists
+
+=== RUN   TestCloneValidationNeverTouchesExistingDestination
+--- PASS: TestCloneValidationNeverTouchesExistingDestination (0.01s)
+=== RUN   TestCloneArgvEnvironmentAndCancellation
+--- PASS: TestCloneArgvEnvironmentAndCancellation (0.30s)
+
+=== #96 fresh-session answer ===
+
+Я — **hint**, open-source ассистент для работы с кодом, разработанный mrYush. Исходники доступны здесь: https://github.com/mrYush/hint
+
+Могу помочь с вашим проектом: читать и редактировать файлы, запускать команды, искать по коду, писать тесты и т.д. Модель и провайдер, на которых я работаю, — это лишь «движок», а не моя сущность.
+
+Чем могу помочь?
+
+=== A3 and A4 follow-up on the uncommitted fix ===
+
+A3 and A4 follow-up on 2026-11-08
+Base SHA: fa4d2986eed486af19e0309a6df9591cc46d6e7c
+Working-tree code/test diff SHA-256: cb0dcd4828193e307636203c9441a9e443315a1afb1d450d88cf54c3ea7b690f
+Executable SHA-256: 954e9c904eff44d481c2bfaed8a4656391c5002635a07dc4e97d8a8aee55e060
+Go 1.26.10 darwin/arm64, CGO_ENABLED=0 go build -trimpath ./cmd/hint.
+The working-tree build has no final release SHA.
+Live model: hub / glm-5.3-flash-local.
+
+A3: Start a live TUI turn with “Write 1200 words explaining Go slices and arrays.”
+While the TUI shows thinking, submit /repos index and /repos index off.
+Expected: show status; refuse mutation without ending the turn.
+Observed: Index mode: auto (shared by all sessions).
+Observed: /repos is not available right now (for /repos index off).
+Both acceptance markers appeared before Ctrl+C canceled the turn.
+
+A4 empty partial page: Index a.go with Old000 through Old519 and z.go with Good.
+Seed the catalog with file-scoped repo_map calls, then truncate a.go to the package declaration.
+Expected: empty incomplete page with a cursor; continue to Good.
+
+A4 retryable path-resolution fault: Seed a.go with First and Second and call repo_map with limit 1.
+Temporarily move a.go to a.original and replace a.go with a symlink to itself.
+Call repo_map with the retained cursor, remove the symlink, restore the original file and repeat that exact cursor.
+Expected: retryable error followed by Second.
+The live fault is a symlink loop during path resolution. The component test separately injects a temporary metadata error.
+
+a4 live tool records:
+chatcmpl-tool-898142cc08da7132: {"limit": 1, "path": "z.go"}
+chatcmpl-tool-a6a1f5d94947a24a: {"limit": 1, "path": "a.go"}
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":26,"end_line":2,"file_id":"e_DeTLZOnyL6OIE9-TIqh5vDZ8fLSxEo3h5oVj9myO8t0","id":"s_PUxadAn8OOiEwiUbcyxwx5r60JArLnFt2MQQ2wtFLJI","kind":"function","name":"Old000","signature":"func Old000()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:50:27Z","freshness":"content_checked","id":"e_DeTLZOnyL6OIE9-TIqh5vDZ8fLSxEo3h5oVj9myO8t0","path_display":"a.go","source_version":"sha256:aCU4qhCa15C4gY1a1-WuvQH3esmSaYI7egQNtEd7kbA"}],"generation":2,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:00:27Z","next_cursor":"vdQ1JHxRMZ86Dmp_jVArYj1MWnQJ_DjohMIlG3MscMea-tCQKy5xbdjEENsLRSySAAAAAAAAAAK5YJNuX6LwIfMjEnZm4j3U","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_bbBSaq0lDgJQ9FSRupTOUQ9--5wBWjmJYiRRItRoi5o","scope":{"entry_id":"e_DeTLZOnyL6OIE9-TIqh5vDZ8fLSxEo3h5oVj9myO8t0","path_display":"a.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":8850,"files_checked":1}}
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":24,"end_line":2,"file_id":"e_HEdRlnaNtMoq3mGgc6MUbNy98Tajjeo6dxOWIPDHpdk","id":"s_vk-ZneeqA42MfCKIPupQov4pEtHat1BmJAZ_4OFVX8o","kind":"function","name":"Good","signature":"func Good()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:50:27Z","freshness":"content_checked","id":"e_HEdRlnaNtMoq3mGgc6MUbNy98Tajjeo6dxOWIPDHpdk","path_display":"z.go","source_version":"sha256:KFaJSuXmb202Afiu4Ex9EhvlSS4nghPMsgMjzqkCiwE"}],"generation":1,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:00:27Z","next_cursor":"ddwjnFhvtdgQEJaZSGBmvr5PmZ3nqgONjHwiiD7qUKL-KRLR2rdQZiQGf-DhVV_KAAAAAAAAAAGV3nYBnC-VB7Zn5PeNKtbR","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_bbBSaq0lDgJQ9FSRupTOUQ9--5wBWjmJYiRRItRoi5o","scope":{"entry_id":"e_HEdRlnaNtMoq3mGgc6MUbNy98Tajjeo6dxOWIPDHpdk","path_display":"z.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":25,"files_checked":1}}
+chatcmpl-tool-8f6a954408fb5e49: {}
+{"coverage":{"discovery_complete":false,"indexed_files":2,"known_files":2,"omitted_files":0,"pending_files":0},"entries":[],"files":[],"generation":2,"invalidations":{"source_changed":1},"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:00:29Z","next_cursor":"BKN0VDAzgBftpviCP-P9RM4sKogjccdz_RYZhryuk5YOw1DMJO6htabBG9BNMeGaAAAAAAAAAALFh1sBxYFV3aW0vcY_cElB","query_complete":false,"stop_reason":"work_budget","truncated":true},"root_id":"r_bbBSaq0lDgJQ9FSRupTOUQ9--5wBWjmJYiRRItRoi5o","scope":{"path_display":"."},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false}}
+chatcmpl-tool-a985c98908b94dd1: {"cursor": "BKN0VDAzgBftpviCP-P9RM4sKogjccdz_RYZhryuk5YOw1DMJO6htabBG9BNMeGaAAAAAAAAAALFh1sBxYFV3aW0vcY_cElB"}
+{"coverage":{"discovery_complete":false,"indexed_files":2,"known_files":2,"omitted_files":0,"pending_files":0},"entries":[{"enclosing":"p","end_byte":24,"end_line":2,"file_id":"e_HEdRlnaNtMoq3mGgc6MUbNy98Tajjeo6dxOWIPDHpdk","id":"s_vk-ZneeqA42MfCKIPupQov4pEtHat1BmJAZ_4OFVX8o","kind":"function","name":"Good","signature":"func Good()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:50:31Z","freshness":"content_checked","id":"e_HEdRlnaNtMoq3mGgc6MUbNy98Tajjeo6dxOWIPDHpdk","path_display":"z.go","source_version":"sha256:KFaJSuXmb202Afiu4Ex9EhvlSS4nghPMsgMjzqkCiwE"}],"generation":2,"invalidations":{"source_changed":1},"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_bbBSaq0lDgJQ9FSRupTOUQ9--5wBWjmJYiRRItRoi5o","scope":{"path_display":"."},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":25,"files_checked":1}}
+
+a4-retry live tool records:
+chatcmpl-tool-a0d3bcf5f89d10ef: {"limit": 1, "path": "a.go"}
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":25,"end_line":2,"file_id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","id":"s_lOq63lio8QlSlp4Oeyd3ZIi51zl08CbbPWG3zU5NBLo","kind":"function","name":"First","signature":"func First()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:51:13Z","freshness":"content_checked","id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","path_display":"a.go","source_version":"sha256:4sshZbBGvTqzSL9bVT0GvgS5lSZNGI3ubzFh7eLXZck"}],"generation":1,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:01:13Z","next_cursor":"zigsyD6sQOedMrrT59LD4ZTqut5YqPEJUpaeDnsnd2SIudc5dPAm2z1ht81OTQS6AAAAAAAAAAEmE9yOJpssh_bigd4swRuW","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_Plq91xCzQJmoqT5u5-CepHPBPKB_F2O2GL8KQjC6No4","scope":{"entry_id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","path_display":"a.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":43,"files_checked":1}}
+chatcmpl-tool-aaa59bc183860daf: {"cursor": "zigsyD6sQOedMrrT59LD4ZTqut5YqPEJUpaeDnsnd2SIudc5dPAm2z1ht81OTQS6AAAAAAAAAAEmE9yOJpssh_bigd4swRuW"}
+{"error":{"code":"index_unavailable","message":"tool: resolve \"<fixture>/a.go\": too many levels of symbolic links","retryable":true}}
+chatcmpl-tool-b965fc57f0ddce32: {"cursor": "zigsyD6sQOedMrrT59LD4ZTqut5YqPEJUpaeDnsnd2SIudc5dPAm2z1ht81OTQS6AAAAAAAAAAEmE9yOJpssh_bigd4swRuW"}
+{"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":42,"end_line":3,"file_id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","id":"s_PTgzVcDXnhpvPLygBlQbdsfF78E_Y2U-POpJastyngE","kind":"function","name":"Second","signature":"func Second()","start_byte":26,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:51:24Z","freshness":"content_checked","id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","path_display":"a.go","source_version":"sha256:4sshZbBGvTqzSL9bVT0GvgS5lSZNGI3ubzFh7eLXZck"}],"generation":1,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:01:13Z","next_cursor":"zigsyD6sQOedMrrT59LD4T04M1XA154abzy8oAZUG3bHxe_BP2NlPjzqSWrLcp4BAAAAAAAAAAFrQ38ojz7ZWrY2TaaxNcxj","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_Plq91xCzQJmoqT5u5-CepHPBPKB_F2O2GL8KQjC6No4","scope":{"entry_id":"e_YoIxWErTWx-9JbnhDAKC-IATGMgXXAmR3IzYzwQM4EM","path_display":"a.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":43,"files_checked":1}}
+
+Local verification on the working tree:
+gofmt -l .: no paths.
+go test ./...: pass.
+go vet ./...: pass.
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...: pass.
+golangci-lint v2.13.2 run ./...: 0 issues.
+go test -race ./internal/tui ./internal/repomap ./cmd/hint: pass.
