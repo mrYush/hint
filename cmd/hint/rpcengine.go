@@ -676,8 +676,10 @@ func (s *rpcSession) RunTurn(ctx context.Context, text string, ask permission.Pr
 	out := ag.RunTurn(ctx, history)
 	ch := make(chan agentapi.Event)
 	go func() {
-		defer release()
+		// Closing the stream lets callers start another turn immediately.
+		// Release all turn state first; deferred calls run in reverse order.
 		defer close(ch)
+		defer release()
 		defer s.slot.set(nil)
 		for ev := range out {
 			s.rec.Observe(ev)
