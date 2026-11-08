@@ -62,6 +62,17 @@ func managerFixtureWithStore(t *testing.T, runner Extractor, path string, store 
 	return m, space, path
 }
 
+// stopManagerTestScheduler isolates manually driven jobs from scheduler ticks.
+// Join both loops before giving direct operations a fresh lifetime context;
+// Close still joins the already-closed loop channels and releases the store.
+func stopManagerTestScheduler(t *testing.T, m *Manager) {
+	t.Helper()
+	m.cancel()
+	<-m.done
+	<-m.sampleDone
+	m.ctx, m.cancel = context.WithCancel(t.Context())
+}
+
 func managerWrite(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
@@ -470,6 +481,7 @@ func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *te
 
 func TestManagerDirectoryStreamCapacityRetriesWithoutLosingTail(t *testing.T) {
 	m, space, primary := managerFixture(t, nil)
+	stopManagerTestScheduler(t, m)
 	if err := m.acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -671,12 +683,13 @@ func TestManagerInferenceCancellationHoldsLeaseUntilRunnerStops(t *testing.T) {
 		return extract.Result{}, ctx.Err()
 	}}
 	m, space, path := managerFixture(t, runner)
+	stopManagerTestScheduler(t, m)
 	managerWrite(t, filepath.Join(path, "x.go"), "package p")
 	lease, err := space.Resolve("", "x.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	m.mu.Lock()
 	m.backgroundCancel = cancel
@@ -685,11 +698,38 @@ func TestManagerInferenceCancellationHoldsLeaseUntilRunnerStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { err := m.refreshHeld(ctx, lease); m.release(); done <- err }()
-	<-started
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		err := m.refreshHeld(ctx, lease)
+		m.release()
+		done <- err
+	}()
+	// Unblock and join the fake runner even if an assertion fails before finish.
+	defer func() {
+		cancel()
+		select {
+		case <-finish:
+		default:
+			close(finish)
+		}
+		<-stopped
+	}()
+	select {
+	case <-started:
+	case err := <-done:
+		t.Fatalf("worker exited before starting: %v", err)
+	case <-ctx.Done():
+		t.Fatalf("worker did not start: %v", ctx.Err())
+	}
 	release := m.Inference()
-	<-canceled
-	waitCtx, stop := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer release()
+	select {
+	case <-canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("inference did not cancel the worker")
+	}
+	waitCtx, stop := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer stop()
 	if err := m.acquire(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
 		if err == nil {
@@ -698,8 +738,13 @@ func TestManagerInferenceCancellationHoldsLeaseUntilRunnerStops(t *testing.T) {
 		t.Fatalf("lease reused before stop: %v", err)
 	}
 	close(finish)
-	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancel=%v", err)
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel=%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not stop after finish")
 	}
 	release()
 	release()
