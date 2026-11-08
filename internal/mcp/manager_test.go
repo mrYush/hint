@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -267,6 +270,88 @@ func TestManagerRestartRetriesReadsOnly(t *testing.T) {
 				t.Errorf("dials = %d, want a reconnect", d.count())
 			}
 		})
+	}
+}
+
+// callWriteFailure returns a transport error before the SDK observes read EOF.
+// This makes the closed-pipe path independent of goroutine scheduling.
+type callWriteFailure struct {
+	sdk.Transport
+	err error
+}
+
+func (t callWriteFailure) Connect(ctx context.Context) (sdk.Connection, error) {
+	conn, err := t.Transport.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return callWriteFailureConn{Connection: conn, err: t.err}, nil
+}
+
+type callWriteFailureConn struct {
+	sdk.Connection
+	err error
+}
+
+func (c callWriteFailureConn) Write(ctx context.Context, msg jsonrpc.Message) error {
+	if req, ok := msg.(*jsonrpc.Request); ok && req.Method == "tools/call" {
+		return c.err
+	}
+	return c.Connection.Write(ctx, msg)
+}
+
+func TestManagerClosedPipeRetriesReadsOnly(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		class     agentapi.ActionClass
+		failAgain bool
+		wantDials int
+	}{
+		{"read retries", agentapi.ClassRead, false, 2},
+		{"read retries only once", agentapi.ClassRead, true, 2},
+		{"write does not retry", agentapi.ClassWrite, false, 1},
+		{"execute does not retry", agentapi.ClassExecute, false, 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, d := testManager(t, []fakeTool{echoTool()}, ServerConfig{Permission: tt.class}, Options{})
+			d.wrapClient = func(transport sdk.Transport) sdk.Transport {
+				if d.count() == 1 || tt.failAgain {
+					return callWriteFailure{Transport: transport, err: io.ErrClosedPipe}
+				}
+				return transport
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			tools, err := m.Tools(ctx)
+			if err != nil || len(tools) != 1 {
+				t.Fatalf("Tools = %v, %v", toolNames(tools), err)
+			}
+			res, err := tools[0].Run(ctx, "call-1", json.RawMessage(`{}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantErr := tt.class != agentapi.ClassRead || tt.failAgain
+			if res.IsError != wantErr {
+				t.Errorf("result = %+v; want error=%v", res, wantErr)
+			}
+			if tt.class != agentapi.ClassRead && !strings.Contains(res.Text(), "may have reached the server") {
+				t.Errorf("result = %+v; want the ambiguity error", res)
+			}
+			if d.count() != tt.wantDials {
+				t.Errorf("dials = %d, want %d", d.count(), tt.wantDials)
+			}
+		})
+	}
+}
+
+func TestIsConnectionClosedPipe(t *testing.T) {
+	for _, err := range []error{io.ErrClosedPipe, fmt.Errorf("calling tools/call: %w", io.ErrClosedPipe)} {
+		if !isConnectionClosed(err) {
+			t.Errorf("closed pipe not recognized: %v", err)
+		}
+	}
+	if isConnectionClosed(errors.New("invalid tool arguments")) {
+		t.Fatal("application error classified as a closed connection")
 	}
 }
 

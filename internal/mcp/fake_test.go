@@ -44,10 +44,11 @@ func textResult(text string) *sdk.CallToolResult {
 // memoryDial is a DialFunc that connects to one in-memory server. Every
 // call to dial creates a fresh session, so a restart is observable.
 type memoryDial struct {
-	mu       sync.Mutex
-	server   *sdk.Server
-	sessions []*sdk.ServerSession
-	dials    int
+	mu         sync.Mutex
+	server     *sdk.Server
+	sessions   []*sdk.ServerSession
+	dials      int
+	wrapClient func(sdk.Transport) sdk.Transport
 }
 
 func newMemoryDial(server *sdk.Server) *memoryDial {
@@ -72,7 +73,11 @@ func (d *memoryDial) dial(ctx context.Context, _ ServerConfig) (*sdk.ClientSessi
 	}()
 	client := sdk.NewClient(&sdk.Implementation{Name: "test", Version: "v0"},
 		&sdk.ClientOptions{Capabilities: &sdk.ClientCapabilities{}})
-	return client.Connect(ctx, clientTransport, nil)
+	var transport sdk.Transport = clientTransport
+	if d.wrapClient != nil {
+		transport = d.wrapClient(transport)
+	}
+	return client.Connect(ctx, transport, nil)
 }
 
 // kill closes every server session, as a crashed child would.
