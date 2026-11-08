@@ -1,0 +1,17 @@
+Package: hint
+Architecture: arm64
+Version: 0.4.0
+Priority: optional
+Section: utils
+Maintainer: Yurii Simonov <rep.yurii@gmail.com>
+Installed-Size: 34816
+Depends: ripgrep
+Filename: pool/main/hint_0.4.0_linux_arm64.deb
+Size: 11384912
+MD5sum: 18f845a7362c57a65e09768362441793
+SHA1: ac28900788cb69907da4fd1079290b151e3f9a14
+SHA256: 9104097abb7e3517a8710d429a0359c49f913deae84f6b51cd7c57dc548300eb
+SHA512: 67ba07e3cc5f455de33fbacd8e8c323f42783955360d951f0219fa15007b111a95134e1292899d0b5ca5c241318f00b4c31a4a16795736beaefbf9756ee52f65
+Homepage: https://github.com/mrYush/hint
+Description: Context-aware CLI assistant that reads, edits and runs your project
+
