@@ -16,6 +16,15 @@ Optional PDF extraction and heavy OCR retain explicit capability/admission rules
 The workspace/index foundations are required release capabilities, but their proposed WP2.11/WP2.12 decomposition still needs formal work packages and review.
 Re-estimate the phase after that decomposition and the parser/backend measurements; do not carry forward the old estimate or invent a new duration without those inputs.
 
+## v0.4.0 release disposition
+
+Published on 2026-11-08 at `7d1f34783c42278a893f862b2422f7e00901e827` ([release](https://github.com/mrYush/hint/releases/tag/v0.4.0)).
+The [acceptance checklist](evidence/v0.4.0-preflight-20261107/README.md) records the exact manual candidate builds, final-tag CI and the owner-authorized B1/B2 release timing waiver.
+A3/A4 follow-up passed on candidate `73c11e6885f32bdfb655e181be24c7c3c4b5504f`; those manual results are not represented as a new run on the published tag.
+`auto` remains paused pending measurements, profile review and explicit owner approval.
+PR [#104](https://github.com/mrYush/hint/pull/104) brought the released file tree into `develop`; its squash merge preserved the content but not `main` ancestry.
+The phase remains in progress because the uncompleted capabilities and measurement checkboxes below are still outstanding.
+
 ## Built-in identity for v0.4.0
 
 **Branch:** `feature/hint-identity`
