@@ -423,7 +423,8 @@ func (s *server) close() error {
 // protocol error is not one: the server answered, so a retry would only
 // repeat the same failure.
 func isConnectionClosed(err error) bool {
-	if errors.Is(err, mcp.ErrConnectionClosed) || errors.Is(err, mcp.ErrSessionMissing) || errors.Is(err, io.EOF) {
+	if errors.Is(err, mcp.ErrConnectionClosed) || errors.Is(err, mcp.ErrSessionMissing) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
 		return true
 	}
 	msg := err.Error()
