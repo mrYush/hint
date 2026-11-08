@@ -321,6 +321,32 @@ func TestMapReportsDefinitiveInvalidationsSeparatelyFromCoverage(t *testing.T) {
 	t.Fatal("invalidation traversal failed to finish")
 }
 
+func TestMapEmptyPartialPageCanContinue(t *testing.T) {
+	m, space, dir := queryFixture(t)
+	var source strings.Builder
+	source.WriteString("package p\n")
+	for i := range 520 {
+		fmt.Fprintf(&source, "func Old%03d() {}\n", i)
+	}
+	indexQueryFile(t, m, space, dir, "a.go", source.String())
+	indexQueryFile(t, m, space, dir, "z.go", "package p; func Good() {}")
+	managerWrite(t, filepath.Join(dir, "a.go"), "package p\n")
+
+	wrapped := tool.WithLimits(&mapTool{manager: m, space: space}, tool.Limits{MaxOutput: MaxOutputBytes})
+	first := runMap(t, wrapped, `{}`, MaxOutputBytes)
+	if len(first.Entries) != 0 || first.Page.QueryComplete || first.Page.NextCursor == "" {
+		t.Fatalf("expected an empty partial page with a continuation: %+v", first)
+	}
+	args, err := json.Marshal(Request{Cursor: first.Page.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := runMap(t, wrapped, string(args), MaxOutputBytes)
+	if !next.Page.QueryComplete || len(next.Entries) != 1 || next.Entries[0].Name != "Good" {
+		t.Fatalf("continuation did not reach the current declaration: %+v", next)
+	}
+}
+
 func TestMapValidationReportsHashBudgetExhaustion(t *testing.T) {
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "x.go", "package p; func Open() {}")
