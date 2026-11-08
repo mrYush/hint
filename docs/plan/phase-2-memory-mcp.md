@@ -95,7 +95,7 @@ Implementation issue: [#93](https://github.com/mrYush/hint/issues/93).
 Scope synchronized on 2026-11-06 from the workspace-navigation plan and research.
 The owner authorized implementation to readiness in this existing branch on 2026-11-06, after the design review.
 The owner accepted the remediation on 2026-11-07, subject to correcting the FIFO-test coverage and synchronizing the documents.
-The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements are the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
+The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements were assigned to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
 The remediation checklist below records the acceptance work and its evidence for this branch.
 The [remediation record](evidence/wp2.2-remediation-20261107/README.md) is the current review handoff; the [original corpus measurements](evidence/wp2.2-mac-20261106/README.md) and [catalog scaling evidence](evidence/wp2.2-mac-20261106/metadata.md) remain historical measurements.
 Local Mac checks do not satisfy the Pi 4/local-model 8k/32k gates; those measurements moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
@@ -398,17 +398,18 @@ Hangs, data loss, broken continuation and failure to recover from available capa
 - [ ] Clean obsolete derived-cache schema files safely, preserving user data and any future durable notes.
 - [ ] Measure long-running wide/deep filesystem traversal, repeated edits, many roots, quota pressure and cleanup recovery separately from synthetic catalog insertion/query measurements.
 
-#### Separate acceptance task — Pi/model evaluation and auto mode (v0.4.0 release gate)
+#### Separate acceptance task — Pi/model evaluation and auto mode
 
-The owner approved this split on 2026-11-07: #93 closes as a correct manually enabled capability, and the measurements become the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
-`auto` stays paused until that gate passes.
+On 2026-11-07, the owner closed #93 as a manually enabled capability and moved the measurements to [#95](https://github.com/mrYush/hint/issues/95).
+On 2026-11-08, the owner deferred B1 and B2 until after v0.4.0 because no qualifying pairs were available and the Pi requires stable thermal conditions.
+The local-model run on the Pi is optional for release acceptance.
+Enabling `auto` requires completed model and Pi resource measurements, review of the measured profile, and owner approval.
 
 - ✅ Owner disposition (2026-11-07): #93 closes as a correct manually enabled capability; Pi/model acceptance moves to the v0.4.0 release gate.
 - ✅ Revised closure boundary recorded in this phase file and in #95 (2026-11-07), with the new task and its acceptance criteria.
   The PR must explicitly supersede the old planning-only text in #93; that issue body is not evidence of the current implementation status.
-- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95): the owner runs the saved Pi 4 4 GB and local-model 8k/32k methodology there, retaining unsupported and unmeasured conditions explicitly.
-- ✅ Scheduled in the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95), together with the numerical resource-profile and default-disclosure decisions.
-- ✅ `auto` stays paused; the v0.4.0 release gate is what can change it.
+- [ ] Complete the saved Pi 4 4 GB and local-model 8k/32k methodology after v0.4.0, retaining unsupported and unmeasured conditions explicitly.
+- [ ] Review the numerical resource profile and default disclosure with the owner before enabling `auto`.
 
 Document full-text search, PDF/DOCX/OCR adapters, durable agent notes, semantic retrieval and reference ranking remain outside #93 as already specified above.
 Their later implementation does not replace any remediation item in this branch.

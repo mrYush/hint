@@ -1,0 +1,87 @@
+Raspberry Pi release preflight
+
+Raspberry Pi 4 Model B Rev 1.1, 4 GB, Debian 13.5 aarch64, kernel 6.18.34+rpt-rpi-v8.
+MMC 119.4 GiB with ext4 root, zram 2 GiB, ondemand governor.
+Cooling, power supply and ambient temperature: null.
+Runtime: llama-server 0.4.0-dev build 1, df03399, GNU 14.2.0.
+Model: Qwen2.5-1.5B-Instruct-Q4_K_M.
+GGUF SHA-256: 6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
+Runtime settings: --jinja -t 4 -c 4096 -np 1; /slots confirmed 4096.
+Linux ARM64 binary cross-built from the source SHA below and verified on the Pi with sha256sum -c.
+The archive build reported dev (commit none); use the recorded SHA and checksum.
+
+Initial on was paused with telemetry_unavailable.
+Host PSI and the cgroup memory controller became available after adding psi=1 and cgroup_enable=memory and rebooting.
+Hint then reported known telemetry and eligible background work with one tracked root.
+The primary tree listed nested as a boundary ownership reservation and malformed.go as parse_failed.
+Off read alpha.go and found LookupBeacon in a focused dry run.
+On first returned unknown_root with the model-supplied alias hint.
+A focused retry without repo located LookupBeacon in alpha.go at line 4; Hint reported one compaction and returned to eligible.
+The subsequent instrumentation pilot is described below.
+
+Pi B2 instrumentation pilot, partial owner-provided observations.
+Run directory on the Pi: /home/pi/hint-b2/pilot.J1eIMi
+Source SHA: fa4d2986eed486af19e0309a6df9591cc46d6e7c
+Binary SHA-256: 18fac1a70004925cea18c55dda17f00e0c323524cded4854b484eb459bf940e5
+Model: Qwen2.5-1.5B-Instruct-Q4_K_M; effective context 4096.
+Order: off, on. A fresh model server and Hint process were started per side.
+Exact prompt: Find LookupBeacon. Report its exact Go signature and source file and line.
+Expected: func LookupBeacon(s string) string, alpha.go line 4.
+
+Off: task correctness failed. The only observed tool call was read_file with
+path LookupBeacon.go, which returned no such file. No correct location or
+signature was given. Post-turn background status was configured_off.
+
+On: task correctness failed. The model called instructions twice with quote
+combined with path or section; both calls failed validation. It printed
+tool-like list_dir and instructions text, with no corresponding observed
+executions in the supplied transcript. No repo_map call or correct answer was
+observed. Before the prompt, the tree reported resource_cooldown, with no
+subsequent pre-turn confirmation of eligibility. Post-turn status was eligible with known telemetry (age 1s), one root,
+and no active requests. Final server timings and resource sample counts are recorded below.
+
+This instrumentation pilot contributes no qualifying B2 pairs. Missing
+resource and latency metrics remain null until the raw outputs are collected.
+
+The pilot completed both sides. The script displayed no sampler stderr.
+Resource JSONL line counts: off 580; on 999. Raw files are retained on the Pi and in the local ignored pilot directory.
+
+| Mode | Server task | Evaluated prompt tokens | Prompt eval ms | Generated tokens | Eval ms | Truncated |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| off | 1 | 2628 | 437921.98 | 25 | 14685.14 | no |
+| off | 4 | 26 | 3881.93 | 10 | 2854.59 | no |
+| off | 29 | 49 | 14524.25 | 43 | 25137.70 | no |
+| on | 1 | 3026 | 583916.28 | 51 | 32777.06 | no |
+| on | 54 | 74 | 21957.92 | 168 | 107964.53 | no |
+| on | 223 | 69 | 21762.11 | 143 | 94270.00 | no |
+
+The sum of reported prompt and generation times is 499005.59 ms off and
+862647.90 ms on. The requests followed different tool trajectories and
+pre-turn active-on was unverified. The sums are descriptive pilot data.
+TTFT and acceptance thresholds remain null.
+
+## Pilot resource sample validation
+
+All 1579 JSONL rows parsed.
+Both process families, their RSS and PSS, and all three PSI sources were present on every row.
+Run IDs matched the modes and monotonic timestamps increased strictly.
+Median sample interval was 1.000 s in each mode; the maximum was 1.127 s off and 1.131 s on.
+Hint had at most one simultaneous observed process off and two on.
+These are sampled family peaks and may miss shorter-lived helpers.
+
+| Mode | Hint peak RSS MiB | Hint peak PSS MiB | Model peak RSS MiB | Model peak PSS MiB | Start °C | Peak °C | End °C |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| off | 30.03 | 30.24 | 1413.09 | 1408.86 | 51.12 | 85.70 | 68.65 |
+| on | 56.42 | 40.09 | 1341.96 | 1337.78 | 71.09 | 85.70 | 64.76 |
+
+The descriptive Hint peak RSS difference is 26.39 MiB.
+The two sides started 19.97 °C apart.
+The current soft temperature-limit flag appeared in 327 off and 730 on samples.
+Current frequency capping and throttling flags appeared together in 1 off and 9 on samples.
+The [Raspberry Pi flag definitions](https://www.raspberrypi.com/documentation/computers/os.html#get_throttled) distinguish current and sticky bits.
+These thermally unequal runs cannot establish the additional indexing RSS or median throughput acceptance results.
+Before measured pairs, freeze a common thermal start band and validate a cooling and recovery protocol on the Pi.
+
+Resource JSONL SHA-256 values:
+- off: `5bc8bc415b5abf688cd6f1f3e1ab9d7a2eea8fa433ff379f4ed59a519c34798b`
+- on: `36cbd6144f08be27f80e773c730caec27ab3414b24bdbf389c6b0602e7be840c`

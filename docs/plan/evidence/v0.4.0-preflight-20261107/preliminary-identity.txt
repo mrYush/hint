@@ -1,0 +1,2 @@
+hint: warning: profile local keeps its API key in a config file; hint setup moves it into the OS secret store
+hint: local: network: stream broken: unexpected EOF
