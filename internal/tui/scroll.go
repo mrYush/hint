@@ -19,10 +19,6 @@ const noSelection = -1
 // without mouse reporting sends as arrows, scrolls the transcript.
 func (m *model) scrollKey(k tea.KeyPressMsg) bool {
 	switch k.String() {
-	case "shift+up":
-		m.vp.ScrollUp(1)
-	case "shift+down":
-		m.vp.ScrollDown(1)
 	case "up":
 		if m.ta.Line() != 0 {
 			return false

@@ -29,7 +29,7 @@ const (
 	inputLines  = 3
 )
 
-const help = "enter sends · shift+enter newline · ↑↓ pgup/pgdn scroll · esc picks a message · tab completes · /help"
+const help = "enter sends · shift+enter newline · ↑↓ pgup/pgdn scroll · shift+↑↓ history · esc picks a message · tab completes · /help"
 
 // model is the whole shell: the connection, the transcript and the three
 // widgets. It is a value, as Bubble Tea wants; the pointers inside
@@ -80,6 +80,12 @@ type model struct {
 	// completion of a question by a model (WP1.6).
 	comp *completion
 	cmpl *completer
+	// hist is what was sent this run, oldest first; histAt walks it back
+	// from the newest (0) or is noSelection while the input holds the
+	// draft. draft is that unsent text, put back when the walk returns.
+	hist   []string
+	histAt int
+	draft  string
 	// MCP server names are read without connecting; prompts load only for a
 	// matching server prefix or an explicit prompt command.
 	promptServers        []string
@@ -149,6 +155,7 @@ func newModel(ctx context.Context, opts Options, dark bool, send sender) model {
 		entries:       fromHistory(opts.History),
 		sel:           noSelection,
 		cmpl:          newCompleter(),
+		histAt:        noSelection,
 	}
 	m.turns = turnsOf(m.entries)
 	if opts.PickSession {
@@ -302,6 +309,9 @@ func (m model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.sel != noSelection {
 		return m.browseKey(k)
 	}
+	if m.historyKey(k) {
+		return m, nil
+	}
 	if m.scrollKey(k) {
 		return m, nil
 	}
@@ -376,6 +386,7 @@ func (m model) submit() (model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+	m.rememberInput(text)
 	if strings.HasPrefix(text, "/") {
 		m.ta.Reset()
 		return m.runCommand(text)

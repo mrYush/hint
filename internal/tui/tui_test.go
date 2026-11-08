@@ -1256,13 +1256,15 @@ func TestScrollKeys(t *testing.T) {
 	if h.m.vp.YOffset() != bottom-1 {
 		t.Errorf("↑ on the first line did not scroll")
 	}
-	// shift+↑↓ scroll whatever line the cursor is on.
+	// shift+↑↓ belongs to the input history; with nothing sent the keys
+	// are a no-op and leave the view and the question alone.
 	h.press("shift+down")
-	if h.m.vp.YOffset() != bottom {
-		t.Errorf("shift+↓ did not scroll")
+	if h.m.vp.YOffset() != bottom-1 {
+		t.Errorf("shift+↓ scrolled")
 	}
-	if h.m.ta.Value() != "first\nsecond" {
-		t.Errorf("scrolling changed the question: %q", h.m.ta.Value())
+	h.press("shift+up")
+	if h.m.vp.YOffset() != bottom-1 || h.m.ta.Value() != "first\nsecond" {
+		t.Errorf("shift+↑ scrolled or changed the question: %q", h.m.ta.Value())
 	}
 }
 

@@ -172,6 +172,9 @@ func (m model) canAsk() bool {
 // suggestion is for text that is gone, a request in flight is for it
 // too, and the idle trigger starts counting again.
 func (m model) typed() (model, tea.Cmd) {
+	// Editing leaves a recalled line: the next shift+↑ starts a new walk
+	// from the text as it stands.
+	m.histAt, m.draft = noSelection, ""
 	c := m.cmpl
 	c.sugg = nil
 	var cmds []tea.Cmd

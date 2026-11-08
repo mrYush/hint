@@ -132,9 +132,12 @@ end of the line before Enter. Ctrl+C while an answer is being written
 stops that answer; Ctrl+D or `/exit` leaves, and the session is kept.
 
 The conversation scrolls with ↑ on the input's first line and ↓ on its
-last (a mouse wheel works the same way), Shift+↑/↓ by line, PgUp/PgDn by
-page and Ctrl+Home/End to its ends; the header says how many lines are
-below. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓ move
+last (a mouse wheel works the same way), PgUp/PgDn by page and
+Ctrl+Home/End to its ends; the header says how many lines are below.
+Shift+↑/↓ walks back and forth through the lines you sent this run and
+puts the one picked into the input; Shift+↓ past the newest line puts
+back the draft you had not sent, and editing a recalled line starts a
+new walk. Esc in an empty input (or Ctrl+↑) picks a message: ↑/↓ move
 between messages, `y` copies the one picked, `f` forks the conversation
 after that message's turn (see [Sessions](#sessions)), Esc returns to the
 input. One-letter answers and commands (`y`/`n`/`a`, `j`/`k`) work in a
