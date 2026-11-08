@@ -12,7 +12,39 @@ import (
 
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/workspace"
+	"github.com/mrYush/hint/pkg/agentapi"
 )
+
+func TestRunTurnReleasesWorkspaceBeforeChannelCloses(t *testing.T) {
+	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "ok" }}, "")
+	eng, err := newEngine(t.Context(), as)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(eng.closeMCP)
+	live := eng.newSession(nil, "test")
+	for _, prompt := range []string{"first", "second"} {
+		events, err := live.RunTurn(t.Context(), prompt, nil)
+		if err != nil {
+			t.Fatalf("%s RunTurn: %v", prompt, err)
+		}
+		for ev := range events {
+			if ev.Kind == agentapi.EventError {
+				t.Errorf("%s turn: %+v", prompt, ev.Err)
+			}
+		}
+		// A drained event stream must permit both mode changes and a new turn.
+		if !eng.indexModeMu.TryLock() {
+			t.Fatal("closed event stream still holds the index mode lock")
+		}
+		eng.indexModeMu.Unlock()
+		release, err := live.workspace.BeginTurn()
+		if err != nil {
+			t.Fatalf("closed event stream still holds the workspace: %v", err)
+		}
+		release()
+	}
+}
 
 func TestReposAddRemovePersistenceAndBusy(t *testing.T) {
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")

@@ -612,6 +612,9 @@ func (m model) runCommand(line string) (model, tea.Cmd) {
 		known = known || c.name == name
 	}
 	enabled := isPrompt && !m.busy && m.sessionID != ""
+	if m.busy && m.sessionID != "" && name == "/repos" && len(fields) == 2 && arg == "index" {
+		enabled = true
+	}
 	for _, c := range m.available() {
 		enabled = enabled || c.name == name
 	}

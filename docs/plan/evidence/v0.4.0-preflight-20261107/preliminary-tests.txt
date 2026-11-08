@@ -1,0 +1,24 @@
+go version go1.26.10 darwin/arm64
+817f4ff18954e82971a5ad37f1f1a19c53870c8f726591b922dd2780b8cee381  hint
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/64
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/512
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1023
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/1024
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/2048
+=== RUN   TestToolDisclosureUsesEffectiveOutputLimit/0
+--- PASS: TestToolDisclosureUsesEffectiveOutputLimit (0.01s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/64 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/512 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1023 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/1024 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/2048 (0.00s)
+    --- PASS: TestToolDisclosureUsesEffectiveOutputLimit/0 (0.00s)
+PASS
+ok  	github.com/mrYush/hint/internal/repomap	1.039s
+=== RUN   TestSystemPrompt
+--- PASS: TestSystemPrompt (0.00s)
+PASS
+ok  	github.com/mrYush/hint/cmd/hint	0.516s

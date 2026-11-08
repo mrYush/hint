@@ -9,6 +9,24 @@ import (
 	"testing"
 )
 
+// extractWithWarmEngine keeps cold WASM compilation out of syntax assertions.
+// The production job deadline still bounds parsing and declaration extraction.
+func extractWithWarmEngine(t *testing.T, source Source, limits Limits) (Result, error) {
+	t.Helper()
+	engine := &Engine{}
+	t.Cleanup(func() {
+		if err := engine.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if language := Language(source.Path); language != "" && language != "go" {
+		if err := engine.initializeWASM(t.Context(), language); err != nil {
+			t.Fatalf("initialize grammar: %v", err)
+		}
+	}
+	return engine.Extract(t.Context(), source, limits)
+}
+
 func TestDeclarations(t *testing.T) {
 	tests := []struct {
 		path, source string
@@ -23,7 +41,7 @@ func TestDeclarations(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got, err := Extract(context.Background(), Source{Path: tt.path, Content: []byte(tt.source)}, DefaultLimits())
+			got, err := extractWithWarmEngine(t, Source{Path: tt.path, Content: []byte(tt.source)}, DefaultLimits())
 			if err != nil || !got.Complete || got.Omission != "" {
 				t.Fatalf("Extract = %+v, %v", got, err)
 			}
@@ -56,7 +74,7 @@ func TestSignatureAndEnclosing(t *testing.T) {
 		{"x.rs", "struct Store; impl Store { pub fn get(&self) -> i32 { 1 } }", "get", "pub fn get(&self) -> i32", "Store"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			r, err := Extract(context.Background(), Source{tt.path, []byte(tt.source)}, DefaultLimits())
+			r, err := extractWithWarmEngine(t, Source{tt.path, []byte(tt.source)}, DefaultLimits())
 			if err != nil || !r.Complete {
 				t.Fatalf("Extract = %+v, %v", r, err)
 			}
@@ -81,7 +99,7 @@ func TestNestedCallableBodiesAreRedacted(t *testing.T) {
 		{"x.py", "def open(callback=lambda: 'BODY_SENTINEL'):\n    return 'BODY_SENTINEL'\n"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			r, err := Extract(context.Background(), Source{tt.path, []byte(tt.source)}, DefaultLimits())
+			r, err := extractWithWarmEngine(t, Source{tt.path, []byte(tt.source)}, DefaultLimits())
 			if err != nil || !r.Complete || len(r.Declarations) != 1 {
 				t.Fatalf("Extract = %+v, %v", r, err)
 			}
@@ -102,7 +120,7 @@ func TestMalformedNeverPublishesPartialDeclarations(t *testing.T) {
 		{"x.rs", "fn good() {} fn bad( {"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			r, err := Extract(context.Background(), Source{tt.path, []byte(tt.source)}, DefaultLimits())
+			r, err := extractWithWarmEngine(t, Source{tt.path, []byte(tt.source)}, DefaultLimits())
 			if err != nil || r.Complete || r.Omission != "parse_failed" || len(r.Declarations) != 0 {
 				t.Fatalf("Extract = %+v, %v", r, err)
 			}
@@ -128,7 +146,7 @@ func TestLimits(t *testing.T) {
 			t.Run(path+"/"+tt.name, func(t *testing.T) {
 				limits := DefaultLimits()
 				tt.change(&limits)
-				r, err := Extract(context.Background(), Source{path, []byte(source)}, limits)
+				r, err := extractWithWarmEngine(t, Source{path, []byte(source)}, limits)
 				if err != nil || r.Complete || r.Omission != tt.omission || len(r.Declarations) != 0 {
 					t.Fatalf("Extract = %+v, %v", r, err)
 				}
