@@ -60,6 +60,21 @@ The output is not a market report; it is a scored roadmap and a product definiti
 - [ ] Owner review: present the findings, the scorecard, the next two releases and the ATE definition; the owner accepts or returns them before Phase 3 starts.
 - [ ] Record the decisions and rejected alternatives in a dated review note, including what the review deliberately did not change.
 
+### WP2R.3 — Harbor benchmark integration
+
+**Branch:** `feature/harbor-adapter`
+
+[Issue #107](https://github.com/mrYush/hint/issues/107) adds a maintained Harbor adapter and a reproducible Terminal-Bench CPU-only workflow.
+This companion package supplies external evaluation evidence for WP2R.2 and keeps its fixture and scorecard scope separate.
+
+- ✅ Pin Harbor and Hint, run the production headless loop in isolated Docker trials, and preserve Harbor's verifier and task settings.
+- ✅ Record effective configuration, artifacts, ATIF, available usage and exceptions, with a deterministic tool-using Docker regression.
+- [ ] Validate real model routes within an agreed smoke budget.
+  GLM and DeepSeek gateway runs require operator-confirmed model IDs, endpoints and budget.
+- ✅ Add offline Python CI for option validation, partial log recovery, result accounting, static typing and API documentation.
+- [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
+  The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
+
 ## Outputs
 
 - A code and architecture findings register with dispositions and a `v0.4.1` decision.

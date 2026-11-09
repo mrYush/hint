@@ -93,6 +93,10 @@ A change that builds locally and fails `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go
 - Do not log a secret.
   API keys and tokens go through `config.Mask` before any log or debug line.
 
+## Python
+
+For Python work in the Harbor integration, follow [its local AGENTS.md](integrations/harbor/AGENTS.md).
+
 ## Layout
 
 Today's packages are listed in CONTRIBUTING.

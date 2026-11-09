@@ -1,0 +1,10 @@
+# Copy outside the checkout and fill in exact gateway values.
+# The key lives only in the named environment variable.
+model: replace-with-exact-model-id
+base_url: https://gateway.example/v1
+context_window: 32768
+route: glm
+reasoning_expectation: endpoint-default
+api_key_env: HINT_API_KEY
+# Record the approved amount in USD. Enforce it at the provider.
+smoke_budget_usd: 1.00
