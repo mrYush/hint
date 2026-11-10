@@ -46,6 +46,21 @@ class AdapterTests(unittest.TestCase):
         ):
             return HintAgent(logs_dir=Path("/tmp/unused"), **{**defaults, **overrides})
 
+    def test_https_required(self) -> None:
+        """Require deliberate opt-in before sending credentials over test HTTP."""
+        for endpoint in ("http://gateway.invalid/v1", "http://localhost:1234/v1"):
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, "HTTPS is required"):
+                    self.agent(base_url=endpoint)
+        with self.assertRaisesRegex(ValueError, "restricted to local"):
+            self.agent(base_url="http://gateway.invalid/v1", allow_insecure_http=True)
+        self.assertEqual(
+            self.agent(
+                base_url="http://localhost:1234/v1", allow_insecure_http=True
+            ).endpoint,
+            "http://localhost:1234/v1",
+        )
+
     def test_exact_route(self) -> None:
         """Check exact route."""
         agent = self.agent()
@@ -173,6 +188,12 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
         environment = Mock()
         environment.exec = AsyncMock(return_value=Mock(return_code=1))
         environment.upload_file = AsyncMock()
+
+        async def collect(trial: HintTrial) -> HintAnswer:
+            trial.collection_errors["session"] = "OSError"
+            trial.answer = HintAnswer(error=AgentError(kind="turn_limit"))
+            raise TimeoutError("fixture-test-token")
+
         with TemporaryDirectory() as temp:
             agent.logs_dir = Path(temp)
             with (
@@ -192,8 +213,7 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(
                     HintTrial,
                     "collect",
-                    new_callable=AsyncMock,
-                    return_value=HintAnswer(error=AgentError(kind="turn_limit")),
+                    new=collect,
                 ),
                 self.assertRaisesRegex(AgentTimeoutError, "kind=turn_limit"),
             ):
@@ -205,6 +225,42 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
             execution = json.loads((agent.logs_dir / "execution.json").read_text())
             self.assertEqual(execution["error_kind"], "turn_limit")
             self.assertFalse(execution["cancelled"])
+            self.assertEqual(
+                execution["collection_errors"],
+                {"session": "OSError", "collection": "TimeoutError"},
+            )
+
+    async def test_missing_and_invalid_evidence(self) -> None:
+        """Distinguish absent artifacts from invalid JSON without leaking validation input."""
+        agent = AdapterTests().agent()
+        environment = Mock()
+        environment.exec = AsyncMock(return_value=Mock(return_code=1))
+        with TemporaryDirectory() as temp:
+            agent.logs_dir = Path(temp)
+            trial = HintTrial(
+                agent=agent,
+                environment=environment,
+                state="/tmp/test",
+                context=AgentContext(),
+            )
+            await trial.collect()
+            self.assertEqual(trial.collection_errors["stdout.json"], "missing")
+            self.assertEqual(trial.collection_errors["session"], "missing")
+            environment.exec.return_value = Mock(return_code=0)
+
+            async def invalid(*, source_path: str, target_path: Path) -> None:
+                target_path.write_text('{"session_id": ["fixture-test-token"]}')
+
+            environment.download_file = AsyncMock(side_effect=invalid)
+            environment.download_dir = AsyncMock(
+                side_effect=OSError("fixture-test-token")
+            )
+            trial.collection_errors.clear()
+            with self.assertLogs(agent.logger, level="WARNING") as logs:
+                await trial.collect()
+            self.assertEqual(trial.collection_errors["stdout.json"], "ValidationError")
+            self.assertEqual(trial.collection_errors["session"], "OSError")
+            self.assertNotIn("fixture-test-token", str(logs.output))
 
     async def test_partial_download(self) -> None:
         """Retain stderr and the session if stdout download fails."""
@@ -214,7 +270,7 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
 
         async def download_file(*, source_path: str, target_path: Path) -> None:
             if source_path.endswith("stdout.json"):
-                raise OSError("failed download")
+                raise OSError("fixture-test-token failed download")
             target_path.write_text("fixture-test-token")
 
         async def download_dir(*, source_dir: str, target_dir: Path) -> None:
@@ -245,6 +301,8 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
             with self.assertLogs(agent.logger, level="WARNING"):
                 answer = await trial.collect()
             self.assertIsNone(answer.session_id)
+            self.assertEqual(trial.collection_errors, {"stdout.json": "OSError"})
+            self.assertNotIn("fixture-test-token", json.dumps(trial.collection_errors))
             self.assertEqual((agent.logs_dir / "stderr.log").read_text(), "[REDACTED]")
             self.assertTrue((agent.logs_dir / "trajectory.json").exists())
 

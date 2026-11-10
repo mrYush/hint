@@ -1,9 +1,11 @@
 """Check the benchmark runner's accounting and configuration validation."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 
 from harbor.models.trial.error_policy import FailureCause, policy_for
 from pydantic import ValidationError
@@ -11,6 +13,8 @@ from pydantic import ValidationError
 from benchmark import (
     ManifestScope,
     RouteConfig,
+    RunArgs,
+    launch,
     read_route_config,
     summarize,
     task_manifest,
@@ -20,6 +24,88 @@ from hint_harbor.agent import ERRORS, HintAgent
 
 class BenchmarkTests(TestCase):
     """Test offline review regressions without launching Docker."""
+
+    def test_oracle_rejects_route_options_before_io(self) -> None:
+        """Reject every conflicting option before accessing tasks or running Harbor."""
+        args = RunArgs(
+            dataset=Path("/missing"),
+            job=Path("/missing-job"),
+            task="one",
+            all=False,
+            oracle=True,
+            dry_run=True,
+            attempts=1,
+            concurrent=1,
+            platform="linux/amd64",
+            binary_dir=None,
+            model=None,
+            base_url=None,
+            context_window=None,
+            route=None,
+            reasoning_expectation=None,
+            route_config=None,
+        )
+        for field, value in (
+            ("model", "x"),
+            ("base_url", "https://x"),
+            ("context_window", 100),
+            ("route", "glm"),
+            ("reasoning_expectation", "endpoint-default"),
+            ("route_config", Path("route.yaml")),
+            ("binary_dir", Path("bin")),
+        ):
+            with self.subTest(field=field), patch("benchmark.subprocess.run") as run:
+                with self.assertRaisesRegex(ValueError, "Oracle job"):
+                    launch(args=replace(args, **{field: value}))
+                run.assert_not_called()
+
+    def test_live_run_requires_confirmed_budget_and_environment(self) -> None:
+        """Reject unconfirmed live jobs before credential access and subprocess launch."""
+        args = RunArgs(
+            dataset=Path("/missing"),
+            job=Path("/missing-job"),
+            task="one",
+            all=False,
+            oracle=False,
+            dry_run=False,
+            attempts=1,
+            concurrent=1,
+            platform="linux/amd64",
+            binary_dir=Path("bin"),
+            model=None,
+            base_url=None,
+            context_window=None,
+            route=None,
+            reasoning_expectation=None,
+            route_config=Path("route.yaml"),
+        )
+        route = RouteConfig(
+            model="model",
+            base_url="https://example.invalid",
+            context_window=100,
+            route="glm",
+            reasoning_expectation="endpoint-default",
+            api_key_env="KEY",
+            smoke_budget_usd=1,
+        )
+        for budget, trusted in ((False, False), (False, True), (True, False)):
+            with (
+                self.subTest(budget=budget, trusted=trusted),
+                patch("benchmark.task_manifest", return_value=[]),
+                patch(
+                    "benchmark.read_route_config",
+                    return_value=route.model_copy(
+                        update={
+                            "provider_budget_confirmed": budget,
+                            "trusted_environment_confirmed": trusted,
+                        }
+                    ),
+                ),
+                patch("benchmark.subprocess.run") as run,
+            ):
+                with self.assertRaisesRegex(ValueError, "Live runs require"):
+                    launch(args=args)
+                run.assert_not_called()
 
     def test_summary(self) -> None:
         """Retain verifier outcomes and exception rows despite missing or corrupt evidence."""

@@ -83,7 +83,13 @@ For GLM, use `route: glm` and `reasoning_expectation: endpoint-default`.
 For DeepSeek, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying the gateway setting for the exact model ID.
 The manifest records `reasoning_enforced: false` because the adapter sends no reasoning or output-token override.
 Direct DeepSeek API and reasoning-enabled DeepSeek tool turns require the [provider dependency](#deepseek-provider-dependency).
-Enforce the approved smoke budget at the provider.
+Enforce the approved smoke budget at the provider using a dedicated restricted key.
+Set `provider_budget_confirmed: true` only after configuring a spending cap at or below `smoke_budget_usd`.
+Set `trusted_environment_confirmed: true` only after reviewing the task images and accepting the trust boundary below.
+Live `benchmark.py` runs require both declarations in `--route-config`; dry runs can inspect unconfirmed settings.
+These declarations record operator confirmation; the adapter cannot verify or enforce the provider cap.
+HTTPS is required by default.
+Direct Harbor invocation can explicitly set `--ak allow_insecure_http=true` for a local fake provider with a fake credential.
 The manifest records the amount with `smoke_budget_enforced: false` because Hint has no reliable local cost cap.
 
 Use this Bash function to keep the one-task and full-suite configuration identical.
@@ -144,6 +150,12 @@ A task with a pre-existing `.hint/config.yaml` or `hint.yaml` fails explicitly t
 The task image needs Bash and standard coreutils including chown, chmod, id, touch, sleep, uname, `sha256sum` and util-linux `setsid`.
 Harbor timeouts cancel the invocation, and the adapter sends TERM followed by KILL to its process group and collects available logs before environment teardown.
 Use this integration with trusted benchmark environments since the agent process needs access to the inference credential.
+Tools running under the same UID can potentially read the process credential and modify session files and logs.
+File permissions and log redaction do not isolate those tools from Hint.
+Review task images and instructions, use a dedicated restricted credential with a provider-side spending cap, and keep other secrets outside the task environment.
+Untrusted workloads require the credential and process isolation tracked in [#111](https://github.com/mrYush/hint/issues/111).
+`execution.json` records collection failures by artifact and safe error category, without raw exception messages or tracebacks.
+Missing, invalid and unreadable evidence is retained alongside the original Hint failure classification.
 
 ## Free regression
 
@@ -169,7 +181,7 @@ All cases scan saved files for the fake key.
 The pinned Hint code reads reasoning deltas in [stream.go](../../internal/provider/openai/stream.go).
 The outgoing [Chat Completions message](../../internal/provider/openai/convert.go) does not serialize `reasoning_content`.
 [DeepSeek's thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/) requires that history for requests carrying tools, and its current API defaults to thinking.
-A separate provider change on `fix/deepseek-reasoning-history` must implement explicit reasoning controls and preserve the required reasoning through multi-tool history before enabling direct DeepSeek evaluation.
+The separate provider change [#109](https://github.com/mrYush/hint/issues/109) on `fix/deepseek-reasoning-history` must implement explicit reasoning controls and preserve the required reasoning through multi-tool history before enabling direct DeepSeek evaluation.
 Cover resumed and compacted sessions in the provider regression and verify an authorized multi-tool smoke against the direct endpoint.
 The integration tracks this dependency in the [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
 

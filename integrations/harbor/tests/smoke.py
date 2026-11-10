@@ -236,6 +236,8 @@ def run(*, args: SmokeArgs, fixture: Path) -> None:
             "route=compatible",
             "--ak",
             "reasoning_expectation=endpoint-default",
+            "--ak",
+            "allow_insecure_http=true",
             "-n",
             "1",
             "-k",

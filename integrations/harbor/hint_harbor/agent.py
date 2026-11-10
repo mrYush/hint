@@ -5,11 +5,12 @@ import json
 import re
 import shlex
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import cached_property
 from hashlib import file_digest
 from importlib.metadata import version
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ClassVar, Final, Literal, override
@@ -76,6 +77,7 @@ class HintOptions(InstalledAgentOptions):
     :ivar context_window: Exact model context window in tokens.
     :ivar route: Provider family.
     :ivar reasoning_expectation: Operator declaration about gateway behavior.
+    :ivar allow_insecure_http: Explicit opt-in for local fake-provider HTTP.
     """
 
     binary_dir: Path = Field(
@@ -85,6 +87,7 @@ class HintOptions(InstalledAgentOptions):
         ge=1, description="Context window of the exact model in tokens."
     )
     route: Route = Field(description="Provider family for compatibility checks.")
+    allow_insecure_http: bool = False
     reasoning_expectation: Reasoning = Field(
         description="Endpoint reasoning behavior, declared by the operator."
     )
@@ -214,6 +217,7 @@ class EffectiveConfig(BaseModel):
     python: str
     base_url: str
     model: str
+    allow_insecure_http: bool = False
     api_format: ModelApiFormat = CHAT
     route: Route
     reasoning_expectation: Reasoning
@@ -246,6 +250,7 @@ class ExecutionRecord(BaseModel):
     cancelled: bool
     error_kind: str | None = None
     usage: dict[str, int | float | None]
+    collection_errors: dict[str, str] = Field(default_factory=dict)
 
 
 class HintAgent(BaseInstalledAgent):
@@ -345,6 +350,27 @@ class HintAgent(BaseInstalledAgent):
             raise ValueError(
                 "Use an HTTP(S) base URL without credentials, query or fragment"
             )
+        if url.scheme == "http" and not options.allow_insecure_http:
+            raise ValueError(
+                "HTTPS is required; allow_insecure_http is for local test providers"
+            )
+        if url.scheme == "http":
+            local_host = url.hostname in {"localhost", "host.docker.internal"}
+            try:
+                address = ip_address(url.hostname)
+                local_host = (
+                    local_host
+                    or address.is_loopback
+                    or address in ip_network("10.0.0.0/8")
+                    or address in ip_network("172.16.0.0/12")
+                    or address in ip_network("192.168.0.0/16")
+                )
+            except ValueError:
+                pass
+            if not local_host:
+                raise ValueError(
+                    "HTTP opt-in is restricted to local test-provider addresses"
+                )
         if not secret or not re.fullmatch(r"[!-~]+", secret):
             raise AgentAuthenticationError(
                 "Supply an API key through the configured environment variable"
@@ -498,6 +524,7 @@ class HintAgent(BaseInstalledAgent):
             model=self.model,
             route=self.hint_options.route,
             reasoning_expectation=self.hint_options.reasoning_expectation,
+            allow_insecure_http=self.hint_options.allow_insecure_http,
             context_window=self.hint_options.context_window,
         )
         self.write_json(name="effective.json", data=effective)
@@ -548,10 +575,12 @@ class HintAgent(BaseInstalledAgent):
                                 "Could not stop Hint before collecting logs"
                             )
                     answer = await trial.collect()
-            except Exception:
-                if exit_code == 0:
-                    raise RuntimeError("Could not collect Hint artifacts") from None
-                self.logger.warning("Could not collect partial Hint artifacts")
+            except Exception as error:
+                answer = trial.answer
+                trial.collection_errors["collection"] = type(error).__name__
+                self.logger.warning(
+                    "Could not collect Hint artifacts (%s)", type(error).__name__
+                )
             finally:
                 try:
                     await environment.exec(command=f"rm -rf {state}", timeout_sec=3)
@@ -564,6 +593,7 @@ class HintAgent(BaseInstalledAgent):
                         finished_at=datetime.now(timezone.utc).isoformat(),
                         exit_code=exit_code,
                         cancelled=cancelled,
+                        collection_errors=trial.collection_errors,
                         error_kind=answer.error.kind if answer.error else None,
                         usage={
                             "n_input_tokens": context.n_input_tokens,
@@ -579,6 +609,10 @@ class HintAgent(BaseInstalledAgent):
             exception = ERRORS.get(kind, NonZeroAgentExitCodeError)
             raise exception(
                 f"Hint failed (exit={exit_code}, kind={kind}, status={error.status_code}); see agent logs"
+            )
+        if trial.collection_errors:
+            raise RuntimeError(
+                "Incomplete Hint artifacts; see execution.json collection_errors"
             )
         if not answer.session_id or not (self.logs_dir / "trajectory.json").is_file():
             raise RuntimeError("Hint did not return a recorded session and trajectory")
@@ -602,12 +636,16 @@ class HintTrial:
     :ivar environment: Target Harbor environment.
     :ivar state: Agent-owned container directory.
     :ivar context: Harbor usage context for this attempt.
+    :ivar collection_errors: Artifact names mapped to safe failure categories.
+    :ivar answer: Parsed stdout retained even if later collection times out.
     """
 
     agent: HintAgent
     environment: BaseEnvironment
     state: str
     context: AgentContext
+    collection_errors: dict[str, str] = field(default_factory=dict)
+    answer: HintAnswer = field(default_factory=HintAnswer)
 
     def command(self) -> str:
         """Build a launch command without credentials or prompt contents.
@@ -695,6 +733,7 @@ kill -KILL "-$pid" 2>/dev/null || true
                         command=f"test -f {state}/{name}"
                     )
                     if exists.return_code != 0:
+                        self.collection_errors[name] = "missing"
                         continue
                     local = raw / name
                     await self.environment.download_file(
@@ -709,14 +748,19 @@ kill -KILL "-$pid" 2>/dev/null || true
                     (self.agent.logs_dir / name).write_text(data, encoding="utf-8")
                     if name == "stdout.json" and data.strip():
                         answer = HintAnswer.model_validate_json(data)
-                except Exception:
+                        self.answer = answer
+                    elif name == "stdout.json":
+                        self.collection_errors[name] = "empty"
+                except Exception as error:
+                    self.collection_errors[name] = type(error).__name__
                     self.agent.logger.warning(
-                        "Could not collect complete Hint %s", name
+                        "Could not collect Hint %s (%s)", name, type(error).__name__
                     )
             usage = answer.usage or Usage()
             context.n_input_tokens = usage.input_tokens
             context.n_output_tokens = usage.output_tokens
             context.n_cache_tokens = usage.cached_input_tokens
+            stage = "session"
             try:
                 remote = f"{state}/data/hint/sessions"
                 if (
@@ -745,6 +789,7 @@ kill -KILL "-$pid" 2>/dev/null || true
                         )
                         records = read_journal(path=clean)
                         if records:
+                            stage = "trajectory"
                             trajectory = convert(
                                 records=records,
                                 model=self.agent.model,
@@ -759,8 +804,14 @@ kill -KILL "-$pid" 2>/dev/null || true
                                 output, encoding="utf-8"
                             )
                         break
-            except Exception:
+                else:
+                    self.collection_errors["session"] = "missing"
+                if not (self.agent.logs_dir / "trajectory.json").is_file():
+                    self.collection_errors.setdefault("trajectory", "missing")
+            except Exception as error:
+                self.collection_errors[stage] = type(error).__name__
                 self.agent.logger.warning(
-                    "Could not collect complete Hint session or trajectory"
+                    "Could not collect Hint session or trajectory (%s)",
+                    type(error).__name__,
                 )
         return answer

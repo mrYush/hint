@@ -48,6 +48,8 @@ class RouteConfig(BaseModel):
     reasoning_expectation: Reasoning
     api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     smoke_budget_usd: float = Field(gt=0, allow_inf_nan=False)
+    provider_budget_confirmed: bool = False
+    trusted_environment_confirmed: bool = False
 
 
 def read_route_config(*, path: Path) -> RouteConfig:
@@ -110,6 +112,8 @@ class HintManifest(BaseModel):
     api_key_env: str
     smoke_budget_usd: float | None
     smoke_budget_enforced: bool = False
+    provider_budget_confirmed: bool = False
+    trusted_environment_confirmed: bool = False
     fallback: None = None
     output_token_override: None = None
 
@@ -324,6 +328,19 @@ def launch(*, args: RunArgs) -> int:
     :param args: Operator-selected scope and settings.
     :returns: Harbor status, or one for incomplete attempt accounting.
     """
+    if args.oracle and any(
+        value is not None
+        for value in (
+            args.route_config,
+            args.model,
+            args.base_url,
+            args.context_window,
+            args.route,
+            args.reasoning_expectation,
+            args.binary_dir,
+        )
+    ):
+        raise ValueError("An Oracle job does not accept model route or binary options")
     tasks = task_manifest(dataset=args.dataset.resolve(), task_name=args.task)
     job = args.job.resolve()
     if job.exists():
@@ -385,6 +402,14 @@ def launch(*, args: RunArgs) -> int:
             ):
                 raise ValueError("Use either --route-config or individual route flags")
             route_config = read_route_config(path=args.route_config)
+        if not args.dry_run and (
+            route_config is None
+            or not route_config.provider_budget_confirmed
+            or not route_config.trusted_environment_confirmed
+        ):
+            raise ValueError(
+                "Live runs require route YAML confirming a provider-side budget and trusted environment"
+            )
         model = route_config.model if route_config else args.model
         endpoint = route_config.base_url if route_config else args.base_url
         context_window = (
@@ -434,6 +459,12 @@ def launch(*, args: RunArgs) -> int:
             context_window=context_window,
             api_key_env=key_name,
             smoke_budget_usd=route_config.smoke_budget_usd if route_config else None,
+            provider_budget_confirmed=route_config.provider_budget_confirmed
+            if route_config
+            else False,
+            trusted_environment_confirmed=route_config.trusted_environment_confirmed
+            if route_config
+            else False,
         )
         command.extend(
             (
