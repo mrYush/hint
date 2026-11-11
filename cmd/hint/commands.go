@@ -71,7 +71,11 @@ func newModelsCommand(flags *config.Flags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			cfg, err := config.Load(*flags)
+			env, err := processEnvironment()
+			if err != nil { return err }
+			configOpts, err := env.configOptions(*flags, false)
+			if err != nil { return err }
+			cfg, err := config.LoadFrom(configOpts)
 			if err != nil {
 				return fmt.Errorf("loading configuration: %w", err)
 			}
