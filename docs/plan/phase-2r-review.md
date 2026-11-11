@@ -88,7 +88,8 @@ This focused part of [#115](https://github.com/mrYush/hint/issues/115) uses its 
 **Branch:** `dev/harbor-review-cleanup`
 
 The owner requested completion of [#115](https://github.com/mrYush/hint/issues/115) on 2026-11-11.
-The [implementation plan and findings register](harbor-review-cleanup.md) records the complete review scope, retained decisions and verification requirements.
+The cleanup was merged into `develop` in [PR #118](https://github.com/mrYush/hint/pull/118) on 2026-11-11 (`1c45765`).
+The findings register below preserves the complete review dispositions and their evidence.
 This follow-up completes review cleanup without absorbing the real-route acceptance in #107 or the separate #109–#114 work.
 
 - ✅ Remove unreachable YAML exception handling and the redundant credential-overlay branch.
@@ -96,6 +97,45 @@ This follow-up completes review cleanup without absorbing the real-route accepta
 - ✅ Remove repeated production ATIF parsing and verify serialized tool trajectories against Harbor's schema in regression tests.
 - ✅ Record a disposition and evidence or rationale for every finding named in #115.
 - ✅ Run Python, Docker fake-provider and repository checks, then prepare the branch for review into `develop`.
+
+##### Findings register
+
+All 33 finding IDs listed in #115 are covered below.
+Grouped IDs share a disposition and rationale.
+
+| Finding | Disposition | Evidence or rationale |
+| --- | --- | --- |
+| F-06 | Fixed in #108 | `test_journal_tail_validation` and `test_journal_invalid_utf8` distinguish unfinished final JSON from complete invalid JSON, schema errors and interior corruption. |
+| F-09 | Intentionally retained | The runner accepts the pinned 63-task export; task selection operates on that complete export and does not add partial-export support. `test_dataset_export_contract` covers empty, partial and oversized exports. |
+| F-10 | Unsupported finding | An empty export fails the 63-task check before reaching `Task not found`; `test_dataset_export_contract` also verifies a missing named task in a complete export. |
+| F-11 | Fixed in #108 | `test_summary_propagates_programming_errors` verifies that unexpected programming errors escape rather than becoming unreadable-result rows. |
+| F-12 / D-06 | Fixed in #118 | Removed the unreachable outer YAML handler. `test_route_config_does_not_echo_inline_credentials` retains sanitized parser/schema errors at the configuration boundary. |
+| T-02 / T-05 / T-08 / T-09 | Intentionally retained | Provider finish/error values and journal record/content kinds are external data that may grow; retain their strings and existing fallback/ignore behavior instead of narrowing every field to a closed enum. `test_future_provider_values` and `test_tool_trajectory_round_trip` cover these boundaries. The journal role remains restricted where conversion needs a known role. |
+| T-06 | Intentionally retained | `BaseHTTPRequestHandler` dispatches `do_POST` dynamically; it does not declare that method for an `@override` annotation. |
+| T-07 | Intentionally retained | The classmethod's inferred `cls` type preserves subclass typing; an explicit narrower annotation adds no guarantee. |
+| T-10 | Intentionally retained | Existing test factories and cached-property substitution are confined to test fixtures. Replacing them does not fix production behavior and is not an acceptance gate. |
+| A-06 | Intentionally retained | `RunArgs` gives `launch` a typed, independently testable input; matching the CLI fields is expected. |
+| A-08 | Intentionally retained | Verify the binary immediately before execution, including the preinstalled-agent lifecycle; installation-time verification alone does not cover that boundary. |
+| A-09 | Fixed in #118 | Removed the repeated production parse. `test_tool_trajectory_round_trip`, `test_partial_trace_and_unknown_usage` and session-selection tests validate the emitted JSON against Harbor's schema, including tool observations and unavailable metrics. The Docker smoke independently parses the saved trajectory. |
+| D-03 | Intentionally retained | `select_binary` is a documented convenience entry point with architecture/checksum tests; its small size does not make it dead code. |
+| D-05 | Fixed in #118 | Supply the required credential overlay directly after placeholder injection or live-key validation. `test_route_launch_releases_validation_agent` exercises both paths with the real adapter. |
+| D-07 | Intentionally retained | The small `summarize` dispatch preserves the typed `agent` and `execution` result fields and per-artifact error accounting without a generic untyped abstraction. |
+| N-01 / N-02 / N-03 / N-04 / N-05 / N-06 / N-07 / N-08 / N-09 | Intentionally retained | These readability suggestions do not identify a behavior failure. Preserve existing artifact names and public helpers; defer renames until the corresponding code needs a functional change. The adapter's `CancelledError` denotes a Hint result and is distinct from `asyncio.CancelledError`. |
+| C-07 | Intentionally retained | Keep the Harbor job on every PR. Path filters are an optional optimization and are unnecessary for this small job; required-check behavior remains unchanged. |
+| S-11 | Intentionally retained | The fake server defaults to loopback and uses a fake credential. Explicit bridge binding is needed for the documented Docker Engine workflow. |
+| S-13 | Fixed in #118 | Reuse the existing auth validation, then release the temporary parent-side agent before subprocess execution. `test_route_launch_releases_validation_agent` verifies through a weak reference that the real validation agent is gone at the subprocess boundary in both live and dry-run paths. Environment auth remains necessary; no memory-erasure guarantee is implied. |
+| S-14 | Intentionally retained | The operator selects the credential variable in trusted route YAML. A naming suffix would neither establish credential purpose nor preserve all valid configurations. |
+| S-17 | Fixed in #108 | `test_digest_validation` covers exact 64-digit hexadecimal SHA-256 digests for both agent and verifier images. |
+| Owner-requested removal of monetary budget declarations | Fixed in #118 | Route YAML and new manifests no longer declare an unenforced amount or require a provider-budget confirmation. Trusted-environment confirmation is preserved. |
+
+##### Verification
+
+Local verification on 2026-11-11 passed all 29 Python unit tests, Ruff formatting and lint checks, Pyright, and Sphinx with warnings treated as errors.
+Repository checks passed: `gofmt -l .`, `go test ./...`, `go test -race ./...`, `go vet ./...`, golangci-lint v2.13.2 and `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...`.
+Docker fake-provider checks on linux/amd64 passed four successful trials with reward 1.0 and no exceptions, plus one authentication-failure trial and one timeout trial with the expected exception types and cancellation state.
+The Docker checks covered native tools, separate verification, session isolation, saved ATIF, usage accounting and credential redaction.
+These checks used a local fake provider; real-model acceptance remains in #107 and the documented isolation boundary remains in #111.
+The [integration README](../../integrations/harbor/README.md#free-regression) contains the reproduction commands.
 
 
 #### Review remediation plan (2026-11-11)
