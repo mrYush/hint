@@ -87,6 +87,7 @@ Enforce the approved smoke budget at the provider using a dedicated restricted k
 Set `provider_budget_confirmed: true` only after configuring a spending cap at or below `smoke_budget_usd`.
 Set `trusted_environment_confirmed: true` only after reviewing the task images and accepting the trust boundary below.
 Live `benchmark.py` runs require both declarations in `--route-config`; dry runs can inspect unconfirmed settings.
+Individual route flags (`--model`, `--base-url`, `--context-window`, `--route`, `--reasoning-expectation`) are available only with `--dry-run`.
 These declarations record operator confirmation; the adapter cannot verify or enforce the provider cap.
 HTTPS is required by default.
 Direct Harbor invocation can explicitly set `--ak allow_insecure_http=true` for a local fake provider with a fake credential.
@@ -199,3 +200,12 @@ uv pip install --python "$py" -r requirements.txt '.[dev,docs]'
 ```
 
 Pyright reads Harbor's installed library source because Harbor 0.25.0 does not ship a `py.typed` marker.
+
+### Session evidence validation
+
+Sanitized downloaded journals are retained under `agent/sessions/` with generated filenames.
+The primary `session.jsonl` and ATIF trajectory must match the stdout session ID unambiguously for a successful attempt, and its trajectory must contain steps.
+If stdout lacks an ID after failure or cancellation, a single available journal can produce a partial trajectory marked `unconfirmed_session_id` in `execution.json` collection errors.
+Ambiguous or unmatched journals remain available as partial evidence without selecting a primary trajectory.
+Journals without convertible steps are retained with `empty_trajectory` status and cannot make an attempt successful.
+Journal recovery tolerates only unfinished final JSON without a newline, while complete malformed records and schema errors fail collection.

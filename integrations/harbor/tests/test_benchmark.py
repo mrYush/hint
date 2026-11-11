@@ -1,5 +1,6 @@
 """Check the benchmark runner's accounting and configuration validation."""
 
+import io
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +16,7 @@ from benchmark import (
     RouteConfig,
     RunArgs,
     launch,
+    main,
     read_route_config,
     summarize,
     task_manifest,
@@ -153,12 +155,12 @@ class BenchmarkTests(TestCase):
 [task]
 name = "fixture"
 [environment]
-docker_image = "test@sha256:abc"
+docker_image = "test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 cpus = 1
 [environment.env]
 SECRET = "canary"
 [verifier.environment]
-docker_image = "verifier@sha256:abc"
+docker_image = "verifier@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 memory_mb = 512
 [verifier.environment.env]
 SECRET = "canary"
@@ -172,6 +174,71 @@ SECRET = "canary"
         self.assertEqual(result[0]["verifier_resources"], {"cpus": 1})
         self.assertEqual(result[1]["verifier_resources"], {"memory_mb": 512})
         self.assertNotIn("canary", json.dumps(result))
+
+    def test_digest_validation(self) -> None:
+        """Validate both image references with exact SHA-256 lengths and characters."""
+        with TemporaryDirectory() as temp:
+            dataset = Path(temp)
+            for index in range(63):
+                (dataset / str(index)).mkdir()
+                (dataset / str(index) / "task.toml").touch()
+            path = dataset / "0/task.toml"
+            valid = "registry:5000/repo:tag@sha256:" + "ab" * 32
+            for image in (
+                valid,
+                "repo@sha256:" + "AB" * 32,
+                "repo@sha256:abc",
+                valid + "0",
+                valid[:-1],
+                valid[:-1] + "g",
+                "@sha256:" + "a" * 64,
+                valid + "\n",
+                valid + "@other",
+            ):
+                for section in ("environment", "verifier.environment"):
+                    with self.subTest(image=image, section=section):
+                        agent_image = image if section == "environment" else valid
+                        verifier_image = (
+                            image if section == "verifier.environment" else valid
+                        )
+                        path.write_text(
+                            f'[task]\nname="fixture"\n[environment]\ndocker_image={json.dumps(agent_image)}\n[verifier.environment]\ndocker_image={json.dumps(verifier_image)}\n'
+                        )
+                        if image in (valid, "repo@sha256:" + "AB" * 32):
+                            self.assertEqual(
+                                len(task_manifest(dataset=dataset, task_name="0")), 1
+                            )
+                        else:
+                            with self.assertRaisesRegex(
+                                ValueError, "Invalid pinned SHA-256"
+                            ):
+                                task_manifest(dataset=dataset, task_name="0")
+
+    def test_summary_propagates_programming_errors(self) -> None:
+        """Do not classify unexpected attribute failures as unreadable result files."""
+        with TemporaryDirectory() as temp:
+            job = Path(temp)
+            (job / "trial").mkdir()
+            (job / "trial/result.json").write_text("{}")
+            with patch(
+                "benchmark.TrialResult.model_validate_json",
+                side_effect=AttributeError("regression"),
+            ):
+                with self.assertRaisesRegex(AttributeError, "regression"):
+                    summarize(job=job, task_count=1, attempts=1)
+
+    def test_route_help(self) -> None:
+        """Explain the live YAML requirement through the normal CLI help entry point."""
+        output = io.StringIO()
+        with (
+            patch("sys.argv", ["benchmark.py", "run", "--help"]),
+            patch("sys.stdout", output),
+        ):
+            with self.assertRaises(SystemExit) as stopped:
+                main()
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(output.getvalue().count("Dry-run only"), 5)
+        self.assertIn("required for live Hint", output.getvalue())
 
     def test_legacy_manifest_scope(self) -> None:
         """Inspect existing jobs whose manifests included whole resource tables."""

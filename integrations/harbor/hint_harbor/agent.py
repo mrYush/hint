@@ -38,7 +38,7 @@ from harbor.models.model_api_format import ModelApiFormat
 from harbor.trial.errors import AgentTimeoutError
 from pydantic import BaseModel, Field
 
-from .trace import convert, read_journal
+from .trace import EmptyTrajectoryError, JournalRecord, convert, read_journal
 
 REVISION = "53264f88ad6900abab31c8e50e1281c0381ff45f"
 HINT_VERSION: Final = f"harbor-baseline+{REVISION[:7]}"
@@ -772,44 +772,84 @@ kill -KILL "-$pid" 2>/dev/null || true
                     )
                     if sessions.is_symlink():
                         raise ValueError("Unexpected symlink in Hint sessions")
-                    for path in sessions.glob("*/*.jsonl"):
-                        if (
-                            path.parent.is_symlink()
-                            or path.is_symlink()
-                            or not path.is_file()
-                        ):
-                            continue
-                        clean = self.agent.logs_dir / "session.jsonl"
-                        clean.write_text(
-                            redact(
+                    candidates: list[Path] = []
+                    matches: list[Path] = []
+                    for index, path in enumerate(sorted(sessions.glob("*/*.jsonl"))):
+                        name = f"sessions/journal-{index:04d}.jsonl"
+                        try:
+                            if (
+                                path.parent.is_symlink()
+                                or path.is_symlink()
+                                or not path.is_file()
+                            ):
+                                raise ValueError("Unexpected session file type")
+                            clean = self.agent.logs_dir / name
+                            clean.parent.mkdir(parents=True, exist_ok=True)
+                            data = redact(
                                 value=path.read_text(encoding="utf-8"),
                                 secret=self.agent._secret,
-                            ),
-                            encoding="utf-8",
-                        )
+                            )
+                            clean.write_text(data, encoding="utf-8")
+                            candidates.append(clean)
+                            header = JournalRecord.model_validate_json(
+                                data.split("\n", 1)[0]
+                            )
+                            if (
+                                header.kind == "session"
+                                and header.id == answer.session_id
+                                and header.id
+                            ):
+                                matches.append(clean)
+                        except Exception as error:
+                            self.collection_errors[name] = type(error).__name__
+                    selected: Path | None = None
+                    if answer.session_id:
+                        if len(matches) == 1:
+                            selected = matches[0]
+                        else:
+                            self.collection_errors["session"] = (
+                                "ambiguous_session_id"
+                                if matches
+                                else "session_id_not_found"
+                            )
+                    else:
+                        self.collection_errors["session"] = "unconfirmed_session_id"
+                        if len(candidates) == 1:
+                            selected = candidates[0]
+                    if selected is not None:
+                        clean = self.agent.logs_dir / "session.jsonl"
+                        clean.write_bytes(selected.read_bytes())
                         records = read_journal(path=clean)
-                        if records:
-                            stage = "trajectory"
-                            trajectory = convert(
-                                records=records,
-                                model=self.agent.model,
-                                version=HINT_VERSION,
-                                context=context,
+                        stage = "trajectory"
+                        trajectory = convert(
+                            records=records,
+                            model=self.agent.model,
+                            version=HINT_VERSION,
+                            context=context,
+                        )
+                        if (
+                            answer.session_id
+                            and trajectory.session_id != answer.session_id
+                        ):
+                            raise ValueError(
+                                "Trajectory session ID does not match stdout"
                             )
-                            output = trajectory.model_dump_json(
-                                exclude_none=True, indent=2
-                            )
-                            type(trajectory).model_validate_json(output)
-                            (self.agent.logs_dir / "trajectory.json").write_text(
-                                output, encoding="utf-8"
-                            )
-                        break
+                        output = trajectory.model_dump_json(exclude_none=True, indent=2)
+                        type(trajectory).model_validate_json(output)
+                        (self.agent.logs_dir / "trajectory.json").write_text(
+                            output, encoding="utf-8"
+                        )
+
                 else:
                     self.collection_errors["session"] = "missing"
                 if not (self.agent.logs_dir / "trajectory.json").is_file():
                     self.collection_errors.setdefault("trajectory", "missing")
             except Exception as error:
-                self.collection_errors[stage] = type(error).__name__
+                self.collection_errors[stage] = (
+                    "empty_trajectory"
+                    if isinstance(error, EmptyTrajectoryError)
+                    else type(error).__name__
+                )
                 self.agent.logger.warning(
                     "Could not collect Hint session or trajectory (%s)",
                     type(error).__name__,

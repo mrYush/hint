@@ -75,6 +75,18 @@ This companion package supplies external evaluation evidence for WP2R.2 and keep
 - [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
   The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
 
+
+#### Review remediation plan (2026-11-11)
+
+The following review fixes remain in `feature/harbor-adapter` under #107.
+They implement the session-validation subset of #110 and the CI timeout subset of #113.
+
+1. ✅ F-04/F-05 — Match journal headers to stdout session IDs, reject ambiguous matches and empty successful trajectories, and retain sanitized partial evidence with explicit collection status.
+2. ✅ F-06 — Recover only an incomplete final JSON record without a line terminator, and reject complete malformed records and schema errors.
+3. ✅ F-11/S-17 — Propagate unexpected summary programming errors and require a complete SHA-256 image digest.
+4. ✅ CLI/C-06 — Explain dry-run-only route flags in CLI help and bound the Harbor CI job to 15 minutes.
+5. ✅ Validate the regressions, run repository checks and Docker fake-provider scenarios, and review the final diff.
+
 ## Outputs
 
 - A code and architecture findings register with dispositions and a `v0.4.1` decision.

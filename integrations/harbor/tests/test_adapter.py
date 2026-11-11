@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from harbor.models.agent.context import AgentContext
 from harbor.models.trajectories import Trajectory
 from harbor.trial.errors import AgentTimeoutError
+from pydantic import ValidationError
 
 from hint_harbor.agent import (
     REVISION,
@@ -167,6 +168,39 @@ class AdapterTests(unittest.TestCase):
         self.assertIsNone(validated.final_metrics.total_prompt_tokens)
         self.assertIsNone(validated.final_metrics.total_cost_usd)
 
+    def test_journal_tail_validation(self) -> None:
+        """Recover unfinished JSON only at EOF and reject complete corrupt records."""
+        header = '{"kind":"session","id":"test"}\n'
+        cases = [
+            ('{"kind":', True),
+            ('{"kind":\n', False),
+            ('{"kind":\n   ', False),
+            ('{"kind":\n{"kind":"compaction"}\n', False),
+            ('{"kind":42}', False),
+            ('{"kind": invalid}', False),
+            ('{"kind":"message","message":{"role":"invalid"}}', False),
+            ('{"kind":"compaction"}', True),
+            ('{"kind":"compaction"}\n', True),
+        ]
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "session.jsonl"
+            for tail, valid in cases:
+                with self.subTest(tail=tail):
+                    path.write_text(header + tail)
+                    if valid:
+                        self.assertEqual(read_journal(path=path)[0].id, "test")
+                    else:
+                        with self.assertRaises(ValidationError):
+                            read_journal(path=path)
+
+    def test_journal_invalid_utf8(self) -> None:
+        """Do not replace invalid bytes in an otherwise complete JSON record."""
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "session.jsonl"
+            path.write_bytes(b'{"kind":"session","id":"invalid-\xff"}\n')
+            with self.assertRaises(ValidationError):
+                read_journal(path=path)
+
     def test_redaction_in_plain_and_json_logs(self) -> None:
         """Check redaction in plain and json logs."""
         secret = 'key"with\\escapes'
@@ -262,6 +296,127 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(trial.collection_errors["session"], "OSError")
             self.assertNotIn("fixture-test-token", str(logs.output))
 
+    async def test_session_selection(self) -> None:
+        """Match header IDs, retain rejected evidence and mark empty trajectories."""
+        cases = [
+            (["other", "target"], "target", True, None),
+            (["target", "other"], "target", True, None),
+            (["other"], "target", True, "session_id_not_found"),
+            (["target", "target"], "target", True, "ambiguous_session_id"),
+            (["target"], None, True, "unconfirmed_session_id"),
+            (["target", "other"], None, True, "unconfirmed_session_id"),
+            (["target"], "target", False, "empty_trajectory"),
+        ]
+        for ids, expected_id, with_message, error in cases:
+            with (
+                self.subTest(ids=ids, expected_id=expected_id, error=error),
+                TemporaryDirectory() as temp,
+            ):
+                agent = AdapterTests().agent()
+                agent.logs_dir = Path(temp)
+                environment = Mock()
+                environment.exec = AsyncMock(return_value=Mock(return_code=0))
+
+                async def download_file(*, source_path: str, target_path: Path) -> None:
+                    target_path.write_text(
+                        json.dumps({"session_id": expected_id})
+                        if source_path.endswith("stdout.json")
+                        else ""
+                    )
+
+                async def download_dir(*, source_dir: str, target_dir: Path) -> None:
+                    project = target_dir / "project"
+                    project.mkdir(parents=True)
+                    for index, session_id in enumerate(ids):
+                        records: list[dict[str, object]] = [
+                            {"kind": "session", "id": session_id}
+                        ]
+                        if with_message:
+                            records.append(
+                                {
+                                    "kind": "message",
+                                    "message": {
+                                        "role": "user",
+                                        "content": [
+                                            {"kind": "text", "text": session_id}
+                                        ],
+                                    },
+                                }
+                            )
+                        (project / f"{index}.jsonl").write_text(
+                            "\n".join(map(json.dumps, records)) + "\n"
+                        )
+
+                environment.download_file = AsyncMock(side_effect=download_file)
+                environment.download_dir = AsyncMock(side_effect=download_dir)
+                trial = HintTrial(
+                    agent=agent,
+                    environment=environment,
+                    state="/tmp/test",
+                    context=AgentContext(),
+                )
+                await trial.collect()
+                self.assertEqual(
+                    len(list((agent.logs_dir / "sessions").glob("*.jsonl"))), len(ids)
+                )
+                if error is None:
+                    self.assertEqual(trial.collection_errors, {})
+                else:
+                    self.assertIn(error, trial.collection_errors.values())
+                primary = agent.logs_dir / "trajectory.json"
+                if error in {
+                    "session_id_not_found",
+                    "ambiguous_session_id",
+                    "empty_trajectory",
+                } or (expected_id is None and len(ids) > 1):
+                    self.assertFalse(primary.exists())
+                else:
+                    trace = Trajectory.model_validate_json(primary.read_text())
+                    self.assertEqual(trace.session_id, "target")
+                    self.assertEqual(bool(trace.steps), with_message)
+
+    async def test_success_rejects_empty_trajectory(self) -> None:
+        """Exercise the run boundary with an empty collected trajectory."""
+        agent = AdapterTests().agent()
+        binary = SelectedBinary(
+            path=Path("/tmp/hint"), sha256="fixture", architecture="amd64"
+        )
+        agent.__dict__["binaries"] = Mock(select=Mock(return_value=binary))
+        environment = Mock()
+        environment.exec = AsyncMock(return_value=Mock(return_code=0))
+        environment.upload_file = AsyncMock()
+
+        async def collect(trial: HintTrial) -> HintAnswer:
+            trial.collection_errors["trajectory"] = "empty_trajectory"
+            (agent.logs_dir / "trajectory.json").write_text('{"steps": []}')
+            return HintAnswer(session_id="target")
+
+        with TemporaryDirectory() as temp:
+            agent.logs_dir = Path(temp)
+            with (
+                patch.object(
+                    agent,
+                    "verify_binary",
+                    new_callable=AsyncMock,
+                    return_value=BinaryIdentity(sha256="fixture", version=REVISION),
+                ),
+                patch.object(
+                    agent,
+                    "exec_as_agent",
+                    new_callable=AsyncMock,
+                    return_value=Mock(stdout="1000"),
+                ),
+                patch.object(agent, "exec_as_root", new_callable=AsyncMock),
+                patch.object(HintTrial, "collect", new=collect),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Incomplete Hint artifacts"):
+                    await agent.run("fixture", environment, AgentContext())
+            execution = json.loads((agent.logs_dir / "execution.json").read_text())
+            self.assertEqual(execution["exit_code"], 0)
+            self.assertEqual(
+                execution["collection_errors"]["trajectory"], "empty_trajectory"
+            )
+
     async def test_partial_download(self) -> None:
         """Retain stderr and the session if stdout download fails."""
         agent = AdapterTests().agent()
@@ -301,7 +456,10 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
             with self.assertLogs(agent.logger, level="WARNING"):
                 answer = await trial.collect()
             self.assertIsNone(answer.session_id)
-            self.assertEqual(trial.collection_errors, {"stdout.json": "OSError"})
+            self.assertEqual(
+                trial.collection_errors,
+                {"stdout.json": "OSError", "session": "unconfirmed_session_id"},
+            )
             self.assertNotIn("fixture-test-token", json.dumps(trial.collection_errors))
             self.assertEqual((agent.logs_dir / "stderr.log").read_text(), "[REDACTED]")
             self.assertTrue((agent.logs_dir / "trajectory.json").exists())

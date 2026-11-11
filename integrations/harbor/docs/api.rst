@@ -13,5 +13,5 @@ Trace conversion
 ================
 
 .. automodule:: hint_harbor.trace
-   :members: JournalRecord, JournalMessage, JournalCall, JournalPart, convert, read_journal
+   :members: EmptyTrajectoryError, JournalRecord, JournalMessage, JournalCall, JournalPart, convert, read_journal
    :exclude-members: model_config

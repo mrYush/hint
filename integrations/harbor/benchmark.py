@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -249,7 +250,7 @@ def summarize(*, job: Path, task_count: int, attempts: int) -> JobSummary:
                 artifact_errors=artifact_errors,
                 result=relative,
             )
-        except (OSError, ValueError, KeyError, AttributeError):
+        except (OSError, ValueError, KeyError):
             unreadable_results.append(relative)
             continue
         for field, name in (
@@ -299,8 +300,13 @@ def task_manifest(*, dataset: Path, task_name: str | None) -> list[TaskManifestE
             "agent": agent_env["docker_image"],
             "verifier": verifier_env["docker_image"],
         }
-        if any("@sha256:" not in ref for ref in images.values()):
-            raise ValueError(f"Missing pinned image digest for {path.parent.name}")
+        if any(
+            re.fullmatch(r"[^@\s]+@sha256:[0-9a-fA-F]{64}", ref) is None
+            for ref in images.values()
+        ):
+            raise ValueError(
+                f"Invalid pinned SHA-256 image digest for {path.parent.name}"
+            )
         resource_keys = ("cpus", "memory_mb", "storage_mb", "gpus", "build_timeout_sec")
         tasks.append(
             {
@@ -536,13 +542,22 @@ def main() -> int:
         "--platform", choices=("linux/amd64", "linux/arm64"), required=True
     )
     run.add_argument("--binary-dir", type=Path)
-    run.add_argument("--route-config", type=Path)
-    run.add_argument("--model")
-    run.add_argument("--base-url")
-    run.add_argument("--context-window", type=int)
-    run.add_argument("--route", choices=("glm", "deepseek", "compatible"))
     run.add_argument(
-        "--reasoning-expectation", choices=("endpoint-default", "non-thinking")
+        "--route-config",
+        type=Path,
+        help="Route YAML with budget and trust confirmations; required for live Hint runs",
+    )
+    route_help = "Dry-run only; live Hint runs require --route-config YAML"
+    run.add_argument("--model", help=route_help)
+    run.add_argument("--base-url", help=route_help)
+    run.add_argument("--context-window", type=int, help=route_help)
+    run.add_argument(
+        "--route", choices=("glm", "deepseek", "compatible"), help=route_help
+    )
+    run.add_argument(
+        "--reasoning-expectation",
+        choices=("endpoint-default", "non-thinking"),
+        help=route_help,
     )
     inspect = sub.add_parser("inspect")
     inspect.add_argument("job", type=Path)

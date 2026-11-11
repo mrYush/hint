@@ -17,6 +17,10 @@ from harbor.models.trajectories import (
 from pydantic import BaseModel, Field, ValidationError
 
 
+class EmptyTrajectoryError(ValueError):
+    """The journal contains no messages convertible to ATIF steps."""
+
+
 class JournalPart(BaseModel):
     """Text or reasoning component of a Hint message."""
 
@@ -60,9 +64,10 @@ def convert(
     :param version: Pinned adapter-facing Hint version.
     :param context: Provider-reported aggregate usage.
     :returns: Validated ATIF trajectory.
-    :raises ValueError: If the journal is missing its session ID.
+    :raises ValueError: If the journal is missing its session header or ID.
+    :raises EmptyTrajectoryError: If no ATIF steps can be produced.
     """
-    if not records or not records[0].id:
+    if not records or records[0].kind != "session" or not records[0].id:
         raise ValueError("Hint journal is missing a session ID")
     steps: list[Step] = []
     call_steps: dict[str, Step] = {}
@@ -104,6 +109,8 @@ def convert(
         )
         steps.append(step)
         call_steps.update((call.tool_call_id, step) for call in calls)
+    if not steps:
+        raise EmptyTrajectoryError("Hint journal contains no ATIF steps")
     return Trajectory(
         schema_version="ATIF-v1.7",
         session_id=records[0].id,
@@ -123,17 +130,25 @@ def read_journal(*, path: Path) -> list[JournalRecord]:
 
     :param path: Local redacted Hint journal.
     :returns: Validated records.
-    :raises ValidationError: If an interior record is malformed.
+    :raises ValidationError: If a complete record is malformed or fails schema validation.
     """
-    lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
+    lines = path.read_bytes().split(b"\n")
     records = []
     for index, line in enumerate(lines):
         if not line:
             continue
         try:
             records.append(JournalRecord.model_validate_json(line))
-        except ValidationError:
-            if any(lines[index + 1 :]):
+        except ValidationError as error:
+            failures = error.errors(include_input=False)
+            incomplete_json = all(
+                failure["type"] == "json_invalid"
+                and str((failure.get("ctx") or {}).get("error", "")).startswith(
+                    "EOF while parsing"
+                )
+                for failure in failures
+            )
+            if index != len(lines) - 1 or not incomplete_json:
                 raise
-            # A process killed during a write can leave one torn tail record.
+            # Only an unfinished final JSON write without a newline is recoverable.
     return records
