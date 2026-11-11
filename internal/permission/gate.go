@@ -52,8 +52,9 @@ func (g *Gate) Review(ctx context.Context, call agentapi.ToolCall, t agentapi.To
 }
 
 // Authorize asks the prompter about req and records an "always" answer.
-// It returns whether the call may run; the error is non-nil only when ctx
-// ended before an answer arrived, in which case the call is not allowed.
+// It returns whether the call may run. If prompting fails, it returns an
+// error without allowing the call or recording a grant; an ended context
+// takes priority over the prompter's error.
 func (g *Gate) Authorize(ctx context.Context, req agentapi.PermissionRequest) (bool, error) {
 	if g.prompter == nil {
 		return false, nil
@@ -68,9 +69,7 @@ func (g *Gate) Authorize(ctx context.Context, req agentapi.PermissionRequest) (b
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
-		// The prompter itself failed with the context still alive: there
-		// is no answer, and no answer is a denial.
-		return false, nil
+		return false, fmt.Errorf("permission prompt: %w", err)
 	}
 	switch decision {
 	case Allow:

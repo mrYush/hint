@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 
@@ -138,6 +140,35 @@ func TestReaderPrompter_EOFDeniesAndSaysSo(t *testing.T) {
 	got, out := promptWith(t, "", permission.Ask{Request: execReq("ls")})
 	if got != permission.Deny || !strings.Contains(out, "no answer") {
 		t.Fatalf("decision = %v, output:\n%s", got, out)
+	}
+}
+
+func TestReaderPrompter_InputErrors(t *testing.T) {
+	cause := errors.New("input failed")
+	for _, tc := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"read failure", cause, cause},
+		{"wrapped read failure", fmt.Errorf("reader: %w", cause), cause},
+		{"EOF", io.EOF, nil},
+		{"wrapped EOF", fmt.Errorf("reader: %w", io.EOF), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			p := permission.NewReaderPrompter(iotest.ErrReader(tc.err), &out)
+			g := permission.New(permission.ModeAsk, p)
+			for i := 0; i < 2; i++ {
+				allowed, err := g.Authorize(context.Background(), execReq("go test"))
+				if allowed || !errors.Is(err, tc.want) {
+					t.Fatalf("prompt %d = %v, %v; want denied, %v", i, allowed, err, tc.want)
+				}
+				if tc.want != nil && strings.Contains(out.String(), "; denied") {
+					t.Fatalf("input failure reported as an ordinary denial: %s", out.String())
+				}
+			}
+		})
 	}
 }
 
