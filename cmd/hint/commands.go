@@ -27,16 +27,10 @@ func newSessionsCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			home, err := os.UserHomeDir()
-			if err != nil {
-				home = ""
-			}
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("working directory: %w", err)
-			}
-			store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
-			return listSessions(store, cwd, os.Stdout, os.Stderr)
+			env, err := processEnvironment()
+			if err != nil { return err }
+			store := session.NewStore(session.DefaultDir(env.home, env.lookup))
+			return listSessions(store, env.cwd, os.Stdout, os.Stderr)
 		},
 	}
 }
