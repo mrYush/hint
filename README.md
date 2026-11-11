@@ -197,6 +197,11 @@ note pointing at `-p`.
 ### Run modes
 
 `hint` can edit files in the working directory and run shell commands.
+The `bash` tool uses bash (or sh as a fallback) on Linux and macOS, and `cmd.exe /D /S /C` on Windows.
+On Windows, write commands in `cmd.exe` syntax; POSIX shell syntax is not translated.
+Timeouts and cancellation terminate the command's process tree.
+Windows also terminates remaining background processes when the command finishes, so use a separate terminal for a persistent server.
+
 What it may do without asking is a per-run choice:
 
 ```bash
@@ -733,6 +738,9 @@ Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs
    the exact end of a write; the next `hint -c` then fails to open it.
    Start a new session; the old file can be repaired by adding a newline
    after the last complete line.
+2. **Windows shell quoting and cancellation are broken in `v0.4.0`.**
+   A command with quotes, such as `go test -run "TestX"`, can be misquoted, and canceling a command can leave its child processes running.
+   Present since `v0.2.0-alpha`; [#35](https://github.com/mrYush/hint/issues/35) tracks the replacement with explicit `cmd.exe` quoting, Job Object supervision and Windows runtime tests.
 
 **Fixed on `develop`, not in a release yet.** `write_file` on a file `hint` cannot read showed the overwrite prompt as "too large to diff" instead of the read error.
 Present since `v0.2.0-alpha`.

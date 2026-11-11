@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrYush/hint/internal/processtree"
 	"github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -27,6 +28,8 @@ const (
 )
 
 const bashDescription = `Run a shell command in the working directory and return its output.
+
+` + shellDescription + `
 
 Use it to build, test, run linters, inspect git, or anything else the other tools do not cover; prefer read_file, list_dir, glob and grep for reading and searching files. The command runs non-interactively with no stdin, in a fresh shell each call (state such as cd or exported variables does not persist). stdout and stderr are returned separately, followed by the exit code when it is not zero. The default timeout is 60 seconds; pass timeout (in seconds, up to 600) for longer builds. Output is truncated in the middle when very long.`
 
@@ -125,7 +128,6 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 	// must not hand them to the model (WP1.7).
 	cmd.Env = t.environ()
 	cmd.WaitDelay = bashWaitDelay
-	cmd.Cancel = func() error { return killProcessTree(cmd) }
 
 	// stdout gets the larger share: it is what the model asked for, and
 	// the decorator's cap still bounds the two together.
@@ -133,7 +135,7 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 	stderr := tool.NewBoundedBuffer(t.maxOutput / 3)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 
-	runErr := cmd.Run()
+	runErr := processtree.Run(cmd)
 
 	var b strings.Builder
 	b.WriteString(stdout.String())
@@ -165,12 +167,12 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 	case ctx.Err() != nil:
 		return agentapi.ErrorResult(callID, bashName, note("[canceled]")), nil
 	case errors.Is(runErr, exec.ErrWaitDelay):
-		// The command itself exited; a child it started kept the output
-		// pipes open past the grace period and was cut loose.
+		// The command exited, but a child kept the pipes open past the grace
+		// period. Windows job cleanup terminates that child before return.
 		if text == "" {
 			text = "(no output)"
 		}
-		return agentapi.TextResult(callID, bashName, note("[a background child process was detached]")), nil
+		return agentapi.TextResult(callID, bashName, note(shellWaitDelayNote)), nil
 	case errors.As(runErr, &exit):
 		return agentapi.ErrorResult(callID, bashName, note(fmt.Sprintf("[exit code %d]", exit.ExitCode()))), nil
 	default:

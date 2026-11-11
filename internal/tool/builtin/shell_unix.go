@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"syscall"
 )
+
+const shellDescription = "Use bash syntax (sh is the fallback when bash is unavailable)."
+const shellWaitDelayNote = "[a background child process was detached]"
 
 // shellCommand builds the command that runs script through the user's
 // shell. bash is preferred for its ubiquity in the commands models write;
@@ -19,20 +21,5 @@ func shellCommand(ctx context.Context, script string) (*exec.Cmd, error) {
 			return nil, fmt.Errorf("no shell found: %w", err)
 		}
 	}
-	cmd := exec.CommandContext(ctx, shell, "-c", script)
-	// A new process group, so that a timeout kills the pipeline the shell
-	// spawned and not only the shell itself.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	return cmd, nil
-}
-
-// killProcessTree kills the command's whole process group.
-func killProcessTree(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-		return cmd.Process.Kill()
-	}
-	return nil
+	return exec.CommandContext(ctx, shell, "-c", script), nil
 }
