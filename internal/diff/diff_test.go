@@ -2,6 +2,7 @@ package diff_test
 
 import (
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 
@@ -139,6 +140,83 @@ func TestLines_RandomRoundTrip(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(new, ",") {
 			t.Fatalf("round trip: old=%v new=%v edits=%v got=%v", old, new, edits, got)
 		}
+		if added, removed := diff.Stat(edits); added+removed != editDistance(old, new) {
+			t.Fatalf("non-minimal script: old=%v new=%v edits=%v", old, new, edits)
+		}
+	}
+}
+
+// editDistance is an independent dynamic-programming oracle for small inputs.
+func editDistance(a, b []string) int {
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i, old := range a {
+		prev := row[0]
+		row[0] = i + 1
+		for j, new := range b {
+			next := row[j+1]
+			if old == new {
+				row[j+1] = prev
+			} else {
+				row[j+1] = min(row[j], row[j+1]) + 1
+			}
+			prev = next
+		}
+	}
+	return row[len(b)]
+}
+
+func TestLines_EditLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		changed    int
+		wantAnchor bool
+	}{
+		{"below", 998, true},
+		{"at", 999, true},
+		{"above", 1000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := append(slices.Repeat([]string{"old"}, tc.changed), "anchor", "old-tail")
+			new := append(slices.Repeat([]string{"new"}, tc.changed), "anchor", "new-tail")
+			edits := diff.Lines(old, new)
+			if got := apply(t, old, edits); !slices.Equal(got, new) {
+				t.Fatal("script does not reproduce new")
+			}
+			anchor := slices.Contains(edits, diff.Edit{Op: diff.Equal, Text: "anchor"})
+			if anchor != tc.wantAnchor {
+				t.Fatalf("equal anchor = %v, want %v", anchor, tc.wantAnchor)
+			}
+			want := tc.changed + 1
+			if !tc.wantAnchor {
+				want++
+			}
+			if added, removed := diff.Stat(edits); added != want || removed != want {
+				t.Fatalf("stat = +%d -%d, want +%d -%d", added, removed, want, want)
+			}
+		})
+	}
+}
+
+func BenchmarkLines(b *testing.B) {
+	for _, tc := range []struct {
+		name  string
+		lines int
+	}{
+		{"edit-limit", 1000},
+		{"fallback", 3000},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			old := slices.Repeat([]string{"old"}, tc.lines)
+			new := slices.Repeat([]string{"new"}, tc.lines)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				diff.Lines(old, new)
+			}
+		})
 	}
 }
 

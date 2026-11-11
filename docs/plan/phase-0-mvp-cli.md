@@ -582,6 +582,43 @@ depend on them:
       same seam, so fix both together
 - ✅ Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
 
+#### Permission errors and diff memory follow-up — issue #36
+
+**Branch:** `fix/permission-errors-diff-memory`
+
+The 2026-11-11 inspection of `develop` (`3a18de1`) and every current source branch found the same unresolved S3 and S33 implementations from [#36](https://github.com/mrYush/hint/issues/36).
+This follow-up belongs to WP0.6 and keeps the delivered package's original scope and status.
+The owner also requested propagation of reader failures on 2026-11-11; EOF remains an ordinary denial.
+
+Implementation plan and acceptance criteria:
+
+- ✅ Return wrapped prompter errors from `Gate.Authorize`, preserving `errors.Is`/`errors.As`, denial on failure, no remembered grant and the priority of an ended context.
+- ✅ Return wrapped non-EOF input errors from `ReaderPrompter`; retain denial for EOF, empty answers and missing prompters.
+- ✅ Store only the active `[-d, d]` frontier range at each Myers step and adjust backtracking to the per-step offset.
+  Preserve the shortest script, delete-before-insert tie-break, unified output, edit-distance cap of 2000 and full-replacement fallback.
+  Linear-space Myers and changes to the cap or tool APIs are out of scope.
+- ✅ Add regression tests for prompt errors and cancellation, reader failures versus EOF, real-gate agent failure, minimum edit distance and both sides of the diff cap.
+- ✅ Stop a client-side prompt failure from crossing the RPC boundary as silence: `shell.RunTurn` cancels the turn and returns the wrapped cause at once, instead of letting the core deny after `DefaultPermissionWait`.
+  The end-to-end regression runs the CLI's `ReaderPrompter` through the real in-process RPC server and asserts that the turn is cancelled, no tool runs and the session takes the next turn.
+- ✅ Measure allocation bytes before and after using the same high-distance and fallback benchmarks; run formatting, ordinary and race tests, vet, pinned lint and CGO-free Linux/arm64 build checks.
+- [ ] Integrate through the normal review flow before closing #36.
+  Commit, push, PR creation and issue closure require separate owner instructions.
+
+Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10): `gofmt -l .`, `git diff --check`, `go test ./...`, `go test -race ./...`, `go vet ./...`, `golangci-lint run ./...` v2.13.2 and `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` passed.
+The full test suites required execution outside the sandbox for their local HTTP servers and subprocesses; Go and lint used caches under `/private/tmp`.
+The new gate, reader, real-gate agent and shell prompt-failure regressions failed on the original implementation and passed after the fix.
+
+Allocation measurements use `go test ./internal/diff -run '^$' -bench '^BenchmarkLines$' -benchmem -count=3` with identical benchmark inputs before and after the frontier change.
+The table reports the median allocation bytes per operation, including the edit script and Go allocation rounding; these are allocated bytes, not peak resident memory.
+
+| Benchmark | Before (B/op) | After (B/op) | Reduction |
+|---|---|---|---|
+| 1000 removed and 1000 inserted lines, distance 2000 | 65,966,030 | 34,203,477 | 48.1% |
+| 3000 removed and 3000 inserted lines, capped fallback | 66,054,114 | 34,291,541 | 48.1% |
+
+Trace storage remains quadratic in the explored edit distance and bounded by the existing cap.
+The independent small-input edit-distance oracle, existing unified-output and tie-break tests, and new anchor-preservation cases below, at and above the cap verify that compact storage keeps the original diff behavior.
+
 Decisions taken while implementing, recorded here because later packages
 depend on them:
 
@@ -640,13 +677,11 @@ depend on them:
   (`tool.Truncate`, head and tail); the `PermissionRequest` on the event
   stream stays whole — how to show a long `Detail` is the client's call,
   per the contract.
-- **Fail closed.** No prompter, a prompter error with the context still
-  alive, stdin at EOF (`hint … < /dev/null`, a closed pipe), or an empty
-  answer all deny; only `y`/`yes`/`a`/`always` allow. `cmd/hint` says up
-  front when stdin is not a terminal and what will be denied, and
-  `--yolo` prints a loud warning before the first request. The model
-  reads a denial as an error result telling it not to retry the same
-  action unchanged; the turn continues.
+- **Fail closed.** No prompter, stdin at EOF (`hint … < /dev/null`, a closed pipe), or an empty answer all deny; only `y`/`yes`/`a`/`always` allow.
+  Prompter failures and non-EOF input errors propagate and abort the turn without running the call or remembering a grant (issue #36).
+  Over RPC the client's prompter is not the core's `Gate`, so `shell.RunTurn` sends `turn.cancel` and returns the cause itself rather than leaving the core to deny after `DefaultPermissionWait`; the core records the call as canceled.
+  `cmd/hint` says up front when stdin is not a terminal and what will be denied, and `--yolo` prints a loud warning before the first request.
+  The model reads an ordinary denial as an error result telling it not to retry the same action unchanged; the turn continues.
 - **Preview cost.** `Gate.Review` checks the mode before building a
   preview and the allow-list after, because a command grant needs the
   command text. Only execute-class calls can be granted and their preview
@@ -654,6 +689,9 @@ depend on them:
   then silences.
 - **No mode lifts `tool.Root`.** `--yolo` stops asking; it does not let
   `write_file ../secret` through. Pinned by `TestYoloDoesNotLiftRoot`.
+- **A client-side prompt failure cancels the turn.** The core's gate can propagate its own prompter error, but the CLI's `ReaderPrompter` runs in the shell; `shell.RunTurn` therefore cannot return that error to the core and instead sends `turn.cancel`, waits for the terminal event and reports the wrapped cause itself.
+  Treating the failure as a cancel keeps every unfinished call in the session with a "canceled" result, and `--output json` still reports `finish_reason: error` because the shell's turn failed.
+  Staying silent would leave the core waiting for `DefaultPermissionWait` and then turn a broken stdin into an ordinary denial.
 - **Cancel is classified by the context, not by the error's type.**
   `runTools` now treats any error — from a tool, or from the prompt —
   with `ctx.Err() != nil` as a cancel: the interrupted call and every
