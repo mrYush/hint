@@ -979,7 +979,9 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) erro
 			*dst = b
 		}
 	}
-	if flagValue != nil {\n\t\t*dst = *flagValue\n\t}
+	if flagValue != nil {
+		*dst = *flagValue
+	}
 	return nil
 }
 
@@ -1004,7 +1006,9 @@ func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue *int, mi
 			*dst, set = n, true
 		}
 	}
-	if flagValue != nil {\n\t\tn := *flagValue\n\t\tif n < min {
+	if flagValue != nil {
+		n := *flagValue
+		if n < min {
 			return set, fmt.Errorf("%s must be at least %d, got %d", flagName, min, n)
 		}
 		*dst, set = n, true
