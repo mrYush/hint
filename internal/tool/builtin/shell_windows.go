@@ -6,6 +6,8 @@ import (
 	"context"
 	"os/exec"
 	"syscall"
+
+	"github.com/mrYush/hint/internal/processtree"
 )
 
 const shellDescription = "On Windows, use cmd.exe syntax, not POSIX bash syntax. Remaining background processes are terminated when the command finishes."
@@ -19,4 +21,8 @@ func shellCommand(ctx context.Context, script string) (*exec.Cmd, error) {
 	// /D disables AutoRun commands from the user's registry.
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /D /S /C "` + script + `"`}
 	return cmd, nil
+}
+
+func runShellCommand(cmd *exec.Cmd) error {
+	return processtree.Run(cmd)
 }

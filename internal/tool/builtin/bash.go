@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrYush/hint/internal/processtree"
 	"github.com/mrYush/hint/internal/text"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -135,7 +134,7 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 	stderr := tool.NewBoundedBuffer(t.maxOutput / 3)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 
-	runErr := processtree.Run(cmd)
+	runErr := runShellCommand(cmd)
 
 	var b strings.Builder
 	b.WriteString(stdout.String())

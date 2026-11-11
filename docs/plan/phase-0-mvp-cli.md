@@ -365,6 +365,9 @@ Implementation plan and acceptance criteria:
 
 - ✅ Extract the existing Windows clone Job Object runner into a shared internal process-tree package and keep clone using that implementation.
   Preserve Unix process-group cancellation and keep the shared package independent of the agent and built-in tools.
+  The scope review on 2026-11-11 found that the initial shared Unix runner also gave clone the shell's single-process fallback.
+  The correction restores clone's strict error propagation in `processtree.Run` and routes bash through platform-specific `runShellCommand`: Unix retains its original fallback, while Windows uses the shared Job Object runner.
+  Regression tests inject group-kill permission errors and verify that clone's cancellation preserves them without killing the main process; a live child outside its own group verifies bash's fallback.
 - ✅ Build the Windows shell's complete `SysProcAttr.CmdLine` explicitly as `cmd.exe /D /S /C "<command>"`, preserving command text and inner quotes without `CommandLineToArgvW` escaping.
   Disable AutoRun and document the platform's shell syntax in the tool description and README.
 - ✅ Start suspended, assign the process to a kill-on-close Job Object, then resume its initial thread.
@@ -377,7 +380,7 @@ Implementation plan and acceptance criteria:
   Exercise already-canceled contexts and process-start failures.
 - ✅ Add a dedicated Windows CI job that runs the shell and shared process-tree tests with the race detector; retain the existing Linux suite and build matrix.
 - ✅ Run local formatting, unit tests, vet, pinned lint and cross-compilation checks; the verification record below distinguishes passing checks from outstanding gates.
-- [ ] Obtain a green full `go test -race ./...` run (blocked: the unchanged SQLite attempt-deadline regression also fails on clean `develop`; this is outside #35).
+- ✅ Obtain a green full `go test -race ./...` run after the Unix scope correction; no index code or test changed, and the earlier intermittent SQLite failures remain recorded below.
 - [ ] Publish through the repository's normal flow, pass the Windows runtime CI job and integrate into `develop` before closing #35.
   The owner's implementation request does not authorize a commit, push or PR.
 
@@ -392,12 +395,13 @@ Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10):
 | `GOOS=windows GOARCH={amd64,arm64} CGO_ENABLED=0 go build ./...` and `go vet ./...` | Passed |
 | Windows shell and process-tree test binaries, amd64 and arm64 | Compiled; execution requires Windows |
 | `go test -race ./cmd/hint ./internal/tool/builtin ./internal/processtree` | Passed on macOS |
-| Full `go test -race ./...` | Failed twice in unchanged `internal/index.TestPeerOpenRetriesAfterAttemptDeadline`; the same test fails on a clean archive of `develop` at `b7dbe35` |
+| Full `go test -race ./...` | Passed after the Unix scope correction; earlier runs failed twice in unchanged `internal/index.TestPeerOpenRetriesAfterAttemptDeadline`, also reproduced on clean `develop` at `b7dbe35` |
 | Windows runtime CI | Added, not run locally; outstanding acceptance gate |
 
-The SQLite race-test failure reports `context deadline exceeded` without the expected `ErrBusy` classification at `contention_test.go:199`.
-A standalone `go test -race -count=1 -run '^TestPeerOpenRetriesAfterAttemptDeadline$' ./internal/index` on clean `develop` reproduces it.
+The earlier SQLite race-test failure reported `context deadline exceeded` without the expected `ErrBusy` classification at `contention_test.go:199`.
+A standalone `go test -race -count=1 -run '^TestPeerOpenRetriesAfterAttemptDeadline$' ./internal/index` on clean `develop` reproduced it.
 No index code or test is changed by this follow-up.
+The Unix cancellation regressions were also checked against temporary copies that reintroduced clone's fallback or removed bash's fallback; each test rejected the corresponding regression.
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
