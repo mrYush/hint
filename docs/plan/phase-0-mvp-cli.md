@@ -379,10 +379,13 @@ Implementation plan and acceptance criteria:
   Observe descendant process handles to prove termination, including descendants that do not inherit output pipes and a child created immediately after startup.
   Exercise already-canceled contexts and process-start failures.
 - ✅ Add a dedicated Windows CI job that runs the shell and shared process-tree tests with the race detector; retain the existing Linux suite and build matrix.
+  The first Windows run on the published merge with `develop` reached the runtime assertions but failed during temporary-directory cleanup because the shared `newRoot` test helper left its `os.Root` handle open.
+  Register `root.Close` with `t.Cleanup` after `t.TempDir` so the directory handle closes before removal; a successful Windows rerun remains required.
 - ✅ Run local formatting, unit tests, vet, pinned lint and cross-compilation checks; the verification record below distinguishes passing checks from outstanding gates.
 - ✅ Obtain a green full `go test -race ./...` run after the Unix scope correction; no index code or test changed, and the earlier intermittent SQLite failures remain recorded below.
 - [ ] Publish through the repository's normal flow, pass the Windows runtime CI job and integrate into `develop` before closing #35.
-  The owner's implementation request does not authorize a commit, push or PR.
+  `origin/fix/windows-bash` is published at `938194f` (implementation `4b786ff`, Unix correction `b1c753e`, then merge with `develop`), and [PR #121](https://github.com/mrYush/hint/pull/121) is open against `develop`.
+  The [Windows runtime job](https://github.com/mrYush/hint/actions/runs/42975444728/job/130373352063) ran and failed on test-root cleanup; the local helper correction and documentation updates await publication and a green rerun before integration.
 
 Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10):
 
@@ -396,7 +399,12 @@ Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10):
 | Windows shell and process-tree test binaries, amd64 and arm64 | Compiled; execution requires Windows |
 | `go test -race ./cmd/hint ./internal/tool/builtin ./internal/processtree` | Passed on macOS |
 | Full `go test -race ./...` | Passed after the Unix scope correction; earlier runs failed twice in unchanged `internal/index.TestPeerOpenRetriesAfterAttemptDeadline`, also reproduced on clean `develop` at `b7dbe35` |
-| Windows runtime CI | Added, not run locally; outstanding acceptance gate |
+| Windows runtime CI at `938194f` | Failed on temporary-directory cleanup with open test-root handles; local `newRoot` cleanup correction awaits publication and a green rerun |
+
+The published merge with `develop` at `938194f` passed the Linux race suite, lint, Harbor checks and all six build/vet targets in [CI run 42975444728](https://github.com/mrYush/hint/actions/runs/42975444728).
+The Windows process-tree package passed; the built-in shell tests reported only temporary-directory cleanup failures, including tests that never start a shell.
+The owner also verified the merged tree locally with a full race run, native and Windows lint/vet, and CGO-free Linux/arm64 and Windows/amd64+arm64 builds on 2026-11-11.
+The local test-root cleanup correction passed formatting, the full ordinary and race suites, native vet, native and Windows lint v2.13.2, and compilation plus focused vet of the Windows tests for amd64 and arm64.
 
 The earlier SQLite race-test failure reported `context deadline exceeded` without the expected `ErrBusy` classification at `contention_test.go:199`.
 A standalone `go test -race -count=1 -run '^TestPeerOpenRetriesAfterAttemptDeadline$' ./internal/index` on clean `develop` reproduced it.

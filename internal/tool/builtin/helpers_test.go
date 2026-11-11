@@ -31,6 +31,12 @@ func newRoot(t *testing.T, files map[string]string) tool.Root {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Close the directory handle before TempDir removes it on Windows.
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	return root
 }
 

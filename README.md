@@ -730,15 +730,12 @@ your convenience.
 
 ### Known issues
 
-One confirmed bug from `v0.4.0` is still open.
-The others this list tracked are fixed; the notes below say when.
+The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
-1. **Windows shell quoting and cancellation are broken in `v0.4.0`.**
-   A command with quotes, such as `go test -run "TestX"`, can be misquoted.
-   Canceling a command can leave its child processes running.
-   Present since `v0.2.0-alpha`.
-   [#35](https://github.com/mrYush/hint/issues/35) tracks the replacement with explicit `cmd.exe` quoting, Job Object supervision and Windows runtime tests.
+**Fixed on `develop`, not in a release yet.** Windows shell quoting and cancellation were broken in `v0.4.0`: a command with quotes, such as `go test -run "TestX"`, could be misquoted, and canceling a command could leave its child processes running.
+`bash` now passes the command line to `cmd.exe /D /S /C` itself and supervises the process tree with a Job Object, and CI runs the Windows shell and process-tree tests.
+Present since `v0.2.0-alpha`.
 
 **Fixed on `develop`, not in a release yet.** A session file could become
 unreadable when `hint` was interrupted at the exact end of a write: a
