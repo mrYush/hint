@@ -162,6 +162,18 @@ func LoadFrom(opts Options) (*Config, error) {
 
 	if !opts.Draft {
 		if err := l.validate(cfg); err != nil {
+			// Warnings would otherwise be lost when LoadFrom returns nil.
+			// Include only missing-variable diagnostics in the error;
+			// never include expanded values or credentials.
+			var missing []string
+			for _, warning := range l.warnings {
+				if strings.Contains(warning, ": environment variable ") && strings.HasSuffix(warning, " is not set") {
+					missing = append(missing, warning)
+				}
+			}
+			if len(missing) > 0 {
+				return nil, fmt.Errorf("%w (%s)", err, strings.Join(missing, "; "))
+			}
 			return nil, err
 		}
 	}
