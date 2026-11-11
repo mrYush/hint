@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -133,8 +134,17 @@ func TestGoldenFormat(t *testing.T) {
 	}
 
 	// The committed file, not the one just written, is what a user's disk
-	// holds: load that.
-	loaded, err := store.Open(goldenPath)
+	// holds: load that. Copy it first, so the test never writes in
+	// testdata: it may be a read-only module cache.
+	committed, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("reading golden file (run with -update to create it): %v", err)
+	}
+	committedCopy := filepath.Join(t.TempDir(), "golden_v1.jsonl")
+	if err := os.WriteFile(committedCopy, committed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Open(committedCopy)
 	if err != nil {
 		t.Fatalf("Open golden: %v", err)
 	}
@@ -267,6 +277,112 @@ func TestLoadIgnoresUnterminatedLastLine(t *testing.T) {
 	defer func() { _ = again.Close() }()
 	if msgs := again.Messages(); len(msgs) != 4 || msgs[3].Text() != "after the crash" {
 		t.Fatalf("messages after append = %+v", msgs)
+	}
+}
+
+// TestLoadDropsUnterminatedTail covers every shape a crash can leave after
+// the last newline: a cut record, JSON that parses but is not a record, and
+// a complete record missing only its newline. None of them is a record, so
+// Open drops it and leaves a file the next append can extend.
+func TestLoadDropsUnterminatedTail(t *testing.T) {
+	const header = `{"kind":"session","at":"2026-09-06T12:00:00Z","version":1,"wire_version":1,"id":"0123456789abcdef","cwd":"/p"}` + "\n"
+	tails := map[string]string{
+		"partial record":         `{"kind":"message","at":"2026-09-06T12:01:00Z","message":{"role":"user","con`,
+		"empty object":           `{}`,
+		"record without payload": `{"kind":"message"}`,
+		"complete record":        `{"kind":"message","at":"2026-09-06T12:01:00Z","message":{"role":"user","content":[{"kind":"text","text":"tail"}]}}`,
+	}
+	for name, tail := range tails {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "s.jsonl")
+			if err := os.WriteFile(path, []byte(header+tail), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			sess, err := session.NewStore(filepath.Dir(path)).Open(path)
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			if sess.Len() != 0 {
+				t.Errorf("Len = %d, want 0: an unterminated tail is not a record", sess.Len())
+			}
+			if w := sess.Warnings(); len(w) != 1 || !strings.Contains(w[0], "unterminated") {
+				t.Errorf("warnings = %v, want one unterminated-tail warning", w)
+			}
+			if err := sess.Close(); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != header {
+				t.Errorf("file after open = %q, want the header alone", data)
+			}
+		})
+	}
+}
+
+// TestOpenAppendsAfterCompleteUnterminatedRecord is the B3 acceptance:
+// a record whose bytes are complete but whose newline is missing is the
+// torn tail, and the next append must still start a clean, readable line.
+func TestOpenAppendsAfterCompleteUnterminatedRecord(t *testing.T) {
+	store := newStore(t, "dddd")
+	sess := writeGolden(t, store, "/p")
+	path := sess.Path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data[:len(data)-1], 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := store.Open(path)
+	if err != nil {
+		t.Fatalf("Open a complete unterminated record: %v", err)
+	}
+	if loaded.Len() != 2 {
+		t.Fatalf("Len = %d, want 2 (the checkpoint; the unterminated record is dropped)", loaded.Len())
+	}
+	if w := loaded.Warnings(); len(w) != 1 || !strings.Contains(w[0], "unterminated") {
+		t.Errorf("warnings = %v, want one unterminated-tail warning", w)
+	}
+	if err := loaded.AppendMessage(agentapi.UserMessage("after the crash")); err != nil {
+		t.Fatal(err)
+	}
+	if err := loaded.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := store.Open(path)
+	if err != nil {
+		t.Fatalf("Open after append: %v", err)
+	}
+	defer func() { _ = again.Close() }()
+	if w := again.Warnings(); len(w) != 0 {
+		t.Errorf("warnings after the repaired read: %v", w)
+	}
+	msgs := again.Messages()
+	if len(msgs) != 3 || msgs[2].Text() != "after the crash" {
+		t.Fatalf("messages after append = %+v", msgs)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) == 0 || data[len(data)-1] != '\n' {
+		t.Fatalf("file after append does not end with a newline:\n%s", data)
+	}
+	// Every line is one record: with the old criterion the appended record
+	// would have glued onto the unterminated one on line 6.
+	lines := bytes.Split(data[:len(data)-1], []byte("\n"))
+	if got, want := len(lines), 6; got != want {
+		t.Fatalf("file has %d lines, want %d:\n%s", got, want, data)
+	}
+	for i, line := range lines {
+		if !json.Valid(line) {
+			t.Errorf("line %d is not one record: %q", i+1, line)
+		}
 	}
 }
 
@@ -588,9 +704,16 @@ func TestAge(t *testing.T) {
 // user message through the Recorder, send the run's preamble followed by
 // the Recorder's conversation, then feed the agent's events back to it.
 func ExampleRecorder() {
-	store := session.NewStore(os.TempDir(), session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
-	sess, _ := store.Create("/p")
-	defer func() { _ = os.Remove(sess.Path()) }()
+	dir, err := os.MkdirTemp("", "hint-session-")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	store := session.NewStore(dir, session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
+	sess, err := store.Create("/p")
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer func() { _ = sess.Close() }()
 
 	preamble := []agentapi.Message{agentapi.SystemMessage("system prompt")}

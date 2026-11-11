@@ -108,6 +108,10 @@ type rpcEngine struct {
 	// listModels stands in for provider.Models in tests.
 	listModels func(context.Context, config.Profile) ([]provider.Model, error)
 
+	// attachMu serializes looking a session up and opening it, so two
+	// connections attaching one session do not open its file twice: the
+	// second open would collide with this process's own lock.
+	attachMu    sync.Mutex
 	mu          sync.Mutex
 	live        map[string]*rpcSession
 	workspace   *workspace.Registry
@@ -461,17 +465,50 @@ func (e *rpcEngine) Open(_ context.Context, opts rpc.OpenOptions) (rpc.Session, 
 }
 
 func (e *rpcEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
-	e.mu.Lock()
-	if live := e.live[id]; live != nil {
-		e.mu.Unlock()
+	if live := e.liveSession(id); live != nil {
 		return live, nil
 	}
-	e.mu.Unlock()
-	sess, err := e.store.Find(e.cwd, id)
+	e.attachMu.Lock()
+	defer e.attachMu.Unlock()
+	if live := e.liveSession(id); live != nil {
+		return live, nil
+	}
+	// Resolve picks the file without opening it. Only the live session
+	// with that exact full id answers for it: a prefix must never reach a
+	// different conversation because an ephemeral session happens to
+	// share the first characters.
+	info, err := e.store.Resolve(e.cwd, id)
 	if err != nil {
-		return nil, err
+		return nil, sessionLookupError(err, id)
+	}
+	if live := e.liveSession(info.ID); live != nil {
+		return live, nil
+	}
+	sess, err := e.store.Open(info.Path)
+	if err != nil {
+		return nil, sessionLookupError(err, id)
 	}
 	return e.adopt(sess, sess.ID()), nil
+}
+
+// liveSession returns the live session with exactly id.
+func (e *rpcEngine) liveSession(id string) *rpcSession {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.live[id]
+}
+
+// sessionLookupError maps the store's errors onto the engine's: a missing
+// session is not found, and one another hint process records is busy.
+func sessionLookupError(err error, id string) error {
+	switch {
+	case errors.Is(err, session.ErrLocked):
+		return fmt.Errorf("%w: session %s is open in another hint process", rpc.ErrBusy, id)
+	case errors.Is(err, session.ErrNoSessions), errors.Is(err, session.ErrUnknownSession):
+		return fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "session: "))
+	default:
+		return err
+	}
 }
 
 // adopt registers sess under id, or returns the session already
