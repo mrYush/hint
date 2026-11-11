@@ -835,7 +835,6 @@ kill -KILL "-$pid" 2>/dev/null || true
                                 "Trajectory session ID does not match stdout"
                             )
                         output = trajectory.model_dump_json(exclude_none=True, indent=2)
-                        type(trajectory).model_validate_json(output)
                         (self.agent.logs_dir / "trajectory.json").write_text(
                             output, encoding="utf-8"
                         )

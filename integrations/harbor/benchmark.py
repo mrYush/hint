@@ -441,7 +441,7 @@ def launch(*, args: RunArgs) -> int:
             context_window=context_window,
             route=route,
             reasoning_expectation=reasoning,
-            extra_env={key_name: env[key_name]} if key_name in env else None,
+            extra_env={key_name: env[key_name]},
         )
         manifest.hint = HintManifest(
             binary_sha256={
@@ -461,6 +461,8 @@ def launch(*, args: RunArgs) -> int:
             if route_config
             else False,
         )
+        # Do not retain the temporary validation agent while Harbor runs.
+        del agent
         command.extend(
             (
                 "-a",
@@ -576,5 +578,5 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (ValueError, OSError, KeyError, yaml.YAMLError) as error:
+    except (ValueError, OSError, KeyError) as error:
         sys.exit(str(error))

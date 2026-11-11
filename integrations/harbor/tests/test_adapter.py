@@ -193,6 +193,110 @@ class AdapterTests(unittest.TestCase):
                         with self.assertRaises(ValidationError):
                             read_journal(path=path)
 
+    def test_tool_trajectory_round_trip(self) -> None:
+        """Validate serialized tool observations while tolerating future journal kinds."""
+        records = [
+            {"kind": "session", "id": "tool-session"},
+            {
+                "kind": "message",
+                "message": {
+                    "role": "user",
+                    "content": [{"kind": "text", "text": "Inspect and write. α"}],
+                },
+            },
+            {
+                "kind": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"kind": "thinking", "text": "Inspect first."},
+                        {"kind": "future-content", "text": "ignored"},
+                    ],
+                    "tool_calls": [
+                        {"id": "probe", "name": "bash", "arguments": {"command": "pwd"}}
+                    ],
+                },
+            },
+            {
+                "kind": "message",
+                "message": {
+                    "role": "tool",
+                    "tool_call_id": "probe",
+                    "content": [{"kind": "text", "text": "/app\n"}],
+                },
+            },
+            {"kind": "compaction"},
+            {"kind": "future-record"},
+            {
+                "kind": "message",
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "write",
+                            "name": "write_file",
+                            "arguments": {"path": "answer.txt", "content": "α\n"},
+                        }
+                    ],
+                },
+            },
+            {
+                "kind": "message",
+                "message": {
+                    "role": "tool",
+                    "tool_call_id": "write",
+                    "content": [{"kind": "text", "text": "written"}],
+                },
+            },
+            {
+                "kind": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"kind": "text", "text": "Done."}],
+                },
+            },
+        ]
+        with TemporaryDirectory() as temp:
+            journal = Path(temp) / "session.jsonl"
+            journal.write_text("\n".join(map(json.dumps, records)) + "\n")
+            trace = convert(
+                records=read_journal(path=journal),
+                model="fixture/model",
+                version="test",
+                context=AgentContext(),
+            )
+        validated = Trajectory.model_validate_json(
+            trace.model_dump_json(exclude_none=True, indent=2)
+        )
+        self.assertEqual(validated.session_id, "tool-session")
+        self.assertEqual([step.step_id for step in validated.steps], [1, 2, 3, 4])
+        self.assertEqual(validated.steps[0].message, "Inspect and write. α")
+        self.assertEqual(validated.steps[1].reasoning_content, "Inspect first.")
+        for step, call_id, name, result in (
+            (validated.steps[1], "probe", "bash", "/app\n"),
+            (validated.steps[2], "write", "write_file", "written"),
+        ):
+            self.assertIsNotNone(step.tool_calls)
+            self.assertIsNotNone(step.observation)
+            assert step.tool_calls is not None and step.observation is not None
+            self.assertEqual(step.tool_calls[0].tool_call_id, call_id)
+            self.assertEqual(step.tool_calls[0].function_name, name)
+            self.assertEqual(step.observation.results[0].source_call_id, call_id)
+            self.assertEqual(step.observation.results[0].content, result)
+        assert validated.final_metrics is not None
+        self.assertEqual(validated.final_metrics.total_steps, 4)
+        self.assertIsNone(validated.final_metrics.total_prompt_tokens)
+        self.assertIsNone(validated.final_metrics.total_cost_usd)
+
+    def test_future_provider_values(self) -> None:
+        """Preserve provider values outside today's known finish and error kinds."""
+        answer = HintAnswer.model_validate_json(
+            '{"finish_reason":"future-stop","error":{"kind":"future-error"}}'
+        )
+        self.assertEqual(answer.finish_reason, "future-stop")
+        assert answer.error is not None
+        self.assertEqual(answer.error.kind, "future-error")
+
     def test_journal_invalid_utf8(self) -> None:
         """Do not replace invalid bytes in an otherwise complete JSON record."""
         with TemporaryDirectory() as temp:

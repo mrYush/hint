@@ -83,6 +83,20 @@ This focused part of [#115](https://github.com/mrYush/hint/issues/115) uses its 
 - ✅ Remove the declared amount and provider budget confirmation from route configuration, live-run validation and new manifests.
 - ✅ Update the reproduction instructions and regression coverage while retaining trusted-environment confirmation.
 
+#### Complete Harbor review cleanup (#115)
+
+**Branch:** `dev/harbor-review-cleanup`
+
+The owner requested completion of [#115](https://github.com/mrYush/hint/issues/115) on 2026-11-11.
+The [implementation plan and findings register](harbor-review-cleanup.md) records the complete review scope, retained decisions and verification requirements.
+This follow-up completes review cleanup without absorbing the real-route acceptance in #107 or the separate #109–#114 work.
+
+- ✅ Remove unreachable YAML exception handling and the redundant credential-overlay branch.
+- ✅ Release the runner's temporary validation agent before starting Harbor while reusing the existing route and auth validation.
+- ✅ Remove repeated production ATIF parsing and verify serialized tool trajectories against Harbor's schema in regression tests.
+- ✅ Record a disposition and evidence or rationale for every finding named in #115.
+- ✅ Run Python, Docker fake-provider and repository checks, then prepare the branch for review into `develop`.
+
 
 #### Review remediation plan (2026-11-11)
 
