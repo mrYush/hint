@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -74,7 +75,9 @@ func main() {
 	root := newRootCommand()
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "hint:", err)
-		os.Exit(1)
+		code := 1
+		if errors.Is(err, context.Canceled) { code = 130 }
+		os.Exit(code)
 	}
 }
 
@@ -121,6 +124,8 @@ func newRootCommand() *cobra.Command {
 		Use:     "hint [flags] [-p \"question\"]",
 		Version: buildVersion(),
 		Short:   "A developer assistant that reads, edits and runs your project",
+		SilenceErrors: true,
+		SilenceUsage: true,
 		Long: `hint is an agent for the directory you run it in. Without arguments it
 starts an interactive session: type a question, read the answer, ask the
 next one; the conversation is recorded and can be continued later with
@@ -148,8 +153,6 @@ keeps the line REPL.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// A run-time failure is printed once, by main; cobra keeps
 			// reporting flag errors itself, since those never reach here.
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
 			if indexMaxBytes < 512<<10 {
 				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
 			}
