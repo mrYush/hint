@@ -253,13 +253,13 @@ func (c *Config) Profile(name string) (Profile, error) {
 			return p, nil
 		}
 	}
-	return Profile{}, fmt.Errorf("config: unknown provider profile %q", name)
+	return Profile{}, &ValidationError{Key: "providers", Err: fmt.Errorf("%w: %q", ErrUnknownProfile, name)}
 }
 
 // Default returns the profile selected as default_provider.
 func (c *Config) Default() (Profile, error) {
 	if c.DefaultProvider == "" {
-		return Profile{}, fmt.Errorf("config: no default provider configured")
+		return Profile{}, &ValidationError{Key: "default_provider", Err: ErrNoProvider}
 	}
 	return c.Profile(c.DefaultProvider)
 }
@@ -361,6 +361,18 @@ func FilterEnviron(environ, names, values []string) []string {
 	}
 	return out
 }
+
+// ErrUnknownProfile identifies a reference to a provider that is not configured.
+var ErrUnknownProfile = errors.New("unknown provider profile")
+
+// ValidationError identifies the configuration field responsible for a failure.
+type ValidationError struct {
+	Key string
+	Err error
+}
+
+func (e *ValidationError) Error() string { return fmt.Sprintf("%s: %v", e.Key, e.Err) }
+func (e *ValidationError) Unwrap() error { return e.Err }
 
 // ErrNoProvider is what loading returns when nothing says which provider
 // to use: no file, no key in the environment, no flag. A shell that can
