@@ -967,9 +967,8 @@ func validCompletionMode(v string) bool {
 }
 
 // overlayBool applies the environment variable and then the flag to *dst,
-// each when set, with the same tolerance as HINT_DEBUG: a variable that
-// is not a boolean is a warning that leaves *dst alone, a flag that is
-// not one is an error.
+// each when set. Invalid environment booleans produce warnings; CLI values
+// have already been parsed and type-checked by Cobra.
 func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) error {
 	if v, ok := l.env(envName); ok {
 		b, err := strconv.ParseBool(v)
@@ -990,7 +989,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) erro
 // refused: the flag as an error, the variable as a warning that leaves
 // *dst alone. The file value already in *dst (named key in messages) is
 // checked against min too, since a file can say -1 as easily; a file's 0
-// is left for the defaults to fill.
+// is left for the defaults to fill. CLI values are already parsed by Cobra.
 func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue *int, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
 		return false, fmt.Errorf("%s must be at least %d, got %d", key, min, *dst)
