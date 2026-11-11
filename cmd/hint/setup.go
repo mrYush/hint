@@ -49,11 +49,12 @@ func (s *setupInfo) needsKey() bool {
 // newSetupInfo describes the configuration cfg was loaded from. cfg may
 // be nil (loading failed): setup then starts from nothing.
 func newSetupInfo(cfg *config.Config, cwd string, flags config.Flags) *setupInfo {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
-	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv), cwd: cwd, flags: flags, store: config.StoreAuto, keyring: config.OSKeyring{}}
+ home, _ := os.UserHomeDir()
+ return newSetupInfoWithEnvironment(cfg, flags, environment{home:home, cwd:cwd, lookupEnv:os.LookupEnv})
+}
+
+func newSetupInfoWithEnvironment(cfg *config.Config, flags config.Flags, env environment) *setupInfo {
+ s := &setupInfo{locs: config.Locate(env.home, env.cwd, env.lookup), cwd: env.cwd, flags: flags, store: config.StoreAuto, keyring: config.OSKeyring{}}
 	if cfg != nil {
 		if p, err := cfg.Default(); err == nil {
 			s.profile = p
@@ -477,13 +478,12 @@ in a repository.`,
 			if !isTerminal(os.Stdin) {
 				return errors.New("setup asks questions; stdin is not a terminal")
 			}
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			// A config that does not load yet is the reason to run setup.
-			cfg, _ := config.LoadDraft(*flags)
-			info := newSetupInfo(cfg, cwd, *flags)
+			env, err := processEnvironment()
+			if err != nil { return err }
+			configOpts, err := env.configOptions(*flags, true)
+			if err != nil { return err }
+			cfg, _ := config.LoadFrom(configOpts)
+			info := newSetupInfoWithEnvironment(cfg, *flags, env)
 			fmt.Fprintln(os.Stderr, info.describe())
 			_, err = askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
 			return err
