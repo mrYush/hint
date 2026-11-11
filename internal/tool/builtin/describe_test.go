@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -78,6 +79,32 @@ func TestWriteFile_DescribeBinaryTarget(t *testing.T) {
 	}
 }
 
+func TestWriteFile_DescribeReportsReadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a file mode does not make a file unreadable on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-0 file")
+	}
+	root := newRoot(t, map[string]string{"secret.txt": "hello\n"})
+	path := filepath.Join(root.Dir(), "secret.txt")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err := describe(t, builtin.NewWriteFile(root), `{"path":"secret.txt","content":"x"}`)
+	if err == nil {
+		t.Fatal("an unreadable file was previewed as an overwrite")
+	}
+	if strings.Contains(err.Error(), "too large to diff") {
+		t.Fatalf("err = %v, want the read error", err)
+	}
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("err = %v, want the permission error in the chain", err)
+	}
+}
+
 func TestWriteFile_DescribeRefusesEscape(t *testing.T) {
 	root := newRoot(t, nil)
 	_, err := describe(t, builtin.NewWriteFile(root), `{"path":"../outside.txt","content":"x"}`)
@@ -147,6 +174,37 @@ func TestEditFile_DescribeReportsRunsErrors(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: err = %v, want %q", args, err, want)
 		}
+	}
+}
+
+func TestEditFile_DescribeRefusesEscape(t *testing.T) {
+	root := newRoot(t, nil)
+	_, err := describe(t, builtin.NewEditFile(root), `{"path":"../outside.txt","old_str":"a","new_str":"b"}`)
+	if !errors.Is(err, tool.ErrOutsideRoot) {
+		t.Fatalf("err = %v, want ErrOutsideRoot", err)
+	}
+}
+
+func TestEditFile_DescribeReportsReadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a file mode does not make a file unreadable on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-0 file")
+	}
+	root := newRoot(t, map[string]string{"secret.txt": "hello\n"})
+	path := filepath.Join(root.Dir(), "secret.txt")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err := describe(t, builtin.NewEditFile(root), `{"path":"secret.txt","old_str":"hello","new_str":"bye"}`)
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("err = %v, want the permission error in the chain", err)
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("err = %v, want the read message", err)
 	}
 }
 

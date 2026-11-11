@@ -61,7 +61,7 @@ SDK — [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go
 - ✅ Security tests: project-server consent resets on config change, cross-origin redirects and a direct off-origin request do not receive credentials, and a bare `${VAR}` token is redacted
 - ✅ Integration test with a reference MCP server for tools, resources and prompts: moved to WP2.9
 
-Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
+Decisions (2026-11-03, Q6):
 
 - **SDK and spec.**
   Pin the official `go-sdk` at `v1.8.0` and target the `2026-07-28` revision.
@@ -96,6 +96,35 @@ Decisions (2026-11-03, from the [Q6 spike](mcp-client-spike.md)):
 Progress (2026-11-03/04, [#86](https://github.com/mrYush/hint/issues/86), [PR #87](https://github.com/mrYush/hint/pull/87)): the first slice landed on `dev/wp2.1-mcp-client` — the `internal/mcp` client, manager, tool adapter, schema budget and tool registration under `<server>.<tool>`, lazy start on the first turn, the `ping` health check, and `hint mcp list|status|enable`.
 MCP resources and prompts, the live reference-server integration test, and the final acceptance pass moved to WP2.9.
 
+#### MCP SDK and catalog evidence
+
+Q6 was resolved on 2026-11-03; its accepted decisions are recorded above and its implementation is tracked in WP2.1 and WP2.9.
+The [dated research and complete probe tables](https://github.com/mrYush/hint/blob/1c45765d1126898cb467c9c847ba1f1b9b63cdb8/docs/plan/mcp-client-spike.md) remain available in repository history.
+The probe used macOS arm64, Go 1.26.10, Node 26.13, npm 11.20 and `uvx`, serializing tools in the compact OpenAI wire shape with `<server>.<tool>` names and counting `o200k_base` tokens.
+It was a one-shot engineering probe, not CI or an authenticated OAuth compatibility claim; the fetch tool failed and OAuth-gated endpoints were not exercised successfully.
+
+| Measured set | Tools | Tokens | Bytes |
+| --- | ---: | ---: | ---: |
+| Seven reference servers | 61 | 8,356 | 38,290 |
+| Three reachable public servers | 7 | 1,625 | 7,385 |
+| Ten reachable servers | 68 | 9,981 | 45,675 |
+| Built-ins | 8 | 1,589 | 7,479 |
+| Ten servers plus built-ins | 76 | 11,570 | 53,154 |
+| Archived legacy GitHub server | 26 | 3,773 | 16,998 |
+
+The ten-server catalog plus built-ins occupied 35.3% of a 32k window before the conversation and preamble.
+Full MCP descriptors cost 14,242 tokens; mapping only provider name, description and parameters reduced that to 9,981.
+Dropping `$schema`/`$id` saved 850 tokens; capping descriptions at 200 characters saved 1,686 but removed useful tool instructions, so description truncation was not selected as a default.
+The 48 KiB global and 20 KiB per-server byte caps avoid adding a tokenizer and fit the measured compact catalog.
+`everything` supplied tools, seven resources and four prompts; missing optional features must not become fatal connection failures.
+The probe exercised modern `2026-07-28` negotiation and archived legacy `2024-11-05` negotiation through the same SDK.
+
+The official SDK was chosen over a thin client and the then-evaluated alternatives because it covered both protocol eras, transport lifecycle and negotiation, built without CGO and added about 6 MB to the release binary in the probe.
+Keep SDK imports inside `internal/mcp`; upgrades require a specification review and probe rerun rather than a floating dependency.
+HTTP+SSE, OAuth browser flows, elicitation/MRTR, progress/tasks and sampling/roots/logging were outside WP2.1; resources/prompts acceptance moved to WP2.9 and lazy disclosure to WP2.8.
+Do not mutate the registry mid-turn or automatically retry a write/execute call whose server-side outcome is ambiguous.
+The [pinned SDK source](https://github.com/modelcontextprotocol/go-sdk/tree/v1.8.0) and [pinned specification](https://modelcontextprotocol.io/specification/2026-07-28.md) are the research baseline, not a claim about the newest releases.
+
 ### WP2.2 — Repo map
 
 **Branch:** `dev/wp2.2-repo-map`
@@ -106,7 +135,7 @@ The owner authorized implementation to readiness in this existing branch on 2026
 The owner accepted the remediation on 2026-11-07, subject to correcting the FIFO-test coverage and synchronizing the documents.
 The owner accepted the branch for merge on 2026-11-07; the manual workspace/code-map smoke and the repo-map measurements were assigned to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95).
 The remediation checklist below records the acceptance work and its evidence for this branch.
-The [remediation record](evidence/wp2.2-remediation-20261107/README.md) is the current review handoff; the [original corpus measurements](evidence/wp2.2-mac-20261106/README.md) and [catalog scaling evidence](evidence/wp2.2-mac-20261106/metadata.md) remain historical measurements.
+The [remediation record](evidence/wp2.2-remediation-20261107/README.md) is the current review handoff; the [original corpus measurements](evidence/wp2.2-mac-20261106/README.md) and [catalog scaling evidence](evidence/wp2.2-mac-20261106/README.md#metadata-catalog-scaling) remain historical measurements.
 Local Mac checks do not satisfy the Pi 4/local-model 8k/32k gates; those measurements moved to the [v0.4.0 release gate](https://github.com/mrYush/hint/issues/95) on 2026-11-07.
 
 Give the agent an on-demand view of code structure across explicitly attached roots, backed by the shared incremental index.
@@ -389,7 +418,7 @@ Slice 1 implementation and local verification are complete; owner review passed,
 - ✅ Run formatting, whole tests, race checks, vet, pinned lint and all six CGO-disabled builds after the FIFO-test correction (2026-11-07).
   The [verification artifact](evidence/wp2.2-remediation-20261107/verification.json) preserves the stable source SHA-256 inventory, before/after source diff and Git status, exact commands/results, lint version and production helper smoke checks.
 - ✅ Repeat the affected real-corpus cold/warm/query measurements and a 10k catalog smoke; retain historical 100k/1m measurements as historical only (2026-11-07).
-  The [measurement report](evidence/wp2.2-remediation-20261107/measurements.md) records three successful corpus pairs and the rejected ignored-directory fixture attempt.
+  The [measurement report](evidence/wp2.2-remediation-20261107/README.md#affected-local-measurement-reruns) records three successful corpus pairs and the rejected ignored-directory fixture attempt.
   Actual contention, frontier exhaustion and recovery are covered by regressions rather than inferred from metadata scaling.
 - ✅ Summarize the reviewed remediation commits in the [handoff](evidence/wp2.2-remediation-20261107/README.md) and submit the combined result for final owner review, without pushing or closing #93 (2026-11-07).
 
@@ -581,7 +610,7 @@ Approval of WP2.2 does not imply that the later document/notes implementation or
 - [ ] With real services, cover Git and ordinary folders, dirty/untracked files, separate worktrees, failed/interrupted clones, nested repositories/submodules, symlink aliases, duplicate names, detach/reattach and source changes; only explicitly authorized roots become available.
 - [ ] Exercise `/repos`, the paginated text tree and agent navigation in both shells through RPC; root changes occur between turns, instructions precede edits, and revocation suppresses queued/in-flight cached publications to the affected session.
 - [ ] In the index foundation, test 10k/100k/1m metadata entries, wide/deep trees, many roots and a tiny root competing with a huge one; assert bounded batches, queues, active streams/FDs, caches and staging disk, plus tail progress whenever capacity is available.
-  The [Mac catalog measurements](evidence/wp2.2-mac-20261106/metadata.md) complete the synthetic 10k/100k/1m cases, and manager tests cover tiny/wide-root progress, eight-stream capacity, blocked-child priority and retained-tail completion without repeated frontier scans.
+  The [Mac catalog measurements](evidence/wp2.2-mac-20261106/README.md#metadata-catalog-scaling) complete the synthetic 10k/100k/1m cases, and manager tests cover tiny/wide-root progress, eight-stream capacity, blocked-child priority and retained-tail completion without repeated frontier scans.
   This does not establish million-file filesystem traversal latency, peak staging disk under all workloads or hardware/model acceptance; the full phase gate remains open.
 - [ ] Cover watcher loss/overflow, external same-stat changes, offline/unreadable directories, interrupted enumeration, generation/cursor eviction, crash/restart and disk exhaustion; unfinished scans never imply deletion, and partial status never implies full coverage.
 - [ ] Index English/Russian text and DOCX with source locators, plus text-layer PDF through a connected local module; test absent modules, malformed/oversized inputs and optional OCR admission/cancellation without blocking live file access.

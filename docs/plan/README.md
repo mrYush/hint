@@ -10,7 +10,6 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `why-hint.md` | Why the project is worth building: the claims it rests on, what they cost, and the conditions that would end it |
 | `architecture.md` | Core architecture, package layout, key interfaces, platform/provider matrices |
 | `subscription-access.md` | Design spike: how a subscription-gated model credential can be made useless outside the product (Q9, WP7.6) |
-| `mcp-client-spike.md` | Design spike: MCP specification and SDK choice, transport/auth surface and context budget (Q6, WP2.1) |
 | `repo-map-contract.md` | Supporting contract for WP2.2: requests, bounded output, freshness, consumed workspace/scheduler interfaces and context-cost evaluation; phase-2 owns scope and status |
 | `repo-map-evaluation.md` | WP2.2 manual device/model evaluation: reproducible Pi 4 and 8k/32k runs, paired baselines, process-family resource accounting and explicit unmeasured gates |
 | `phase-2r-review.md` | Inserted review phase after `v0.4.0` (target `v0.4.1`, conditional): code, architecture and efficiency audit, product research, scorecard, roadmap reset and the ATE design |
@@ -18,20 +17,22 @@ The top-level roadmap lives in [`../../PLAN.md`](../../PLAN.md).
 | `adaptive-tuning.md` | Design spike: the Adaptive Tuning Effect (Q12) — terminology, signals, preference model, guardrails, metrics and evaluation for local in-context adaptation |
 | `risks.md` | Cross-cutting risks and mitigations |
 | `review-2026-09-28-go-practices.md` | Go-practices audit of `release/v0.2`: release blockers, must/should/nit findings with locations and fixes, the issue list they map to |
-| `completion-quality-eval.md` | How to measure what WP1.6's completion is worth on small models: acceptance rate, latency, cost, residency, and the pass criteria for a README recommendation or a default. Backlog as of 2026-10-19; does not gate `v0.3` |
-| Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `completion-quality-eval.md`, `delegation.md`, `mcp-client-spike.md` and `adaptive-tuning.md` (Q12) |
+| Design spikes | Files that settle one question on paper before code: `Status: Design spike`, a Q number in `PLAN.md` instead of a branch, the alternatives and their price. Today `subscription-access.md`, `delegation.md` and `adaptive-tuning.md` (Q12) |
 | `evidence/pi-4-20261011-105151/` | Recorded Pi 4 `pi-bench` (commit `b2aee40`) that is the linux/arm64 hardware record for `v0.2.0`. Not a product guide |
 | [`evidence/wp2.2-remediation-20261107/README.md`](evidence/wp2.2-remediation-20261107/README.md) | WP2.2 remediation dispositions, local commits, final source verification and the v0.4.0 release verification gate |
 | [`../raspberry-pi-4-4gb.md`](../raspberry-pi-4-4gb.md) | Product guide: offline fallback on Pi 4 4 GB — devices, use cases, why `llama-server`, launch recipe |
 
 Product documentation under `docs/` is limited to launch instructions, examples, rationale for chosen solutions, device coverage, and use cases.
 Chronological field / incident logs for a later article are kept out of this index and are not part of the product doc set.
+Completed spikes keep their accepted decisions in the owning phase file; an unfinished evaluation stays with the work package it gates.
+Keep each evidence run's results, methods and review dispositions together in its summary or README, with raw measurements and executable reproduction helpers beside it.
+Keep separate documents for active contracts, user workflows and unresolved designs with substantial unique content.
 
 ### Design spikes
 
 A question that is answered on paper before any code — a design spike — gets a file here once its row in `PLAN.md` is no longer enough.
 The file carries `Status: Design spike`, the Q number it settles, the alternatives considered and what each costs; it has no branch and no checkboxes, because there is no work package yet.
-`subscription-access.md` (Q9, WP7.6), `completion-quality-eval.md`, `delegation.md` (Q11), `mcp-client-spike.md` (Q6, WP2.1) and `adaptive-tuning.md` (Q12, settled in Phase 2R) are the existing examples.
+`subscription-access.md` (Q9, WP7.6), `delegation.md` (Q11) and `adaptive-tuning.md` (Q12, settled in Phase 2R) are the existing examples.
 When work starts, the spike becomes a work package with a branch and the status moves to that branch; until then the Q row in `PLAN.md` is the only status, and a spike with no file remains a Q row.
 
 ## Source of truth and issue tracking

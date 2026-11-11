@@ -69,25 +69,37 @@ const (
 	editAppend
 )
 
+// previewError carries the message a run would report while keeping the
+// cause, so a caller can tell an escape from a bad edit with errors.Is.
+type previewError struct {
+	msg string
+	err error
+}
+
+func (e previewError) Error() string { return e.msg }
+
+func (e previewError) Unwrap() error { return e.err }
+
 // plan validates args and computes the edit without touching the file.
 // A failure of the action (bad path, old_str not found) comes back as an
-// error result the model should see; a machinery failure is impossible
-// here, so the returned result is always populated when ok is false.
-func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res agentapi.ToolResult, ok bool) {
+// error result the model should see. cause is set when a typed error is
+// behind the failure — a path outside the root, an unreadable file — so
+// Describe can keep the chain instead of flattening the message.
+func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res agentapi.ToolResult, cause error, ok bool) {
 	var in editFileArgs
 	if err := tool.DecodeArgs(args, &in); err != nil {
-		return p, tool.InvalidArgs(callID, editFileName, err), false
+		return p, tool.InvalidArgs(callID, editFileName, err), nil, false
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return p, tool.InvalidArgs(callID, editFileName, errors.New("path is required")), false
+		return p, tool.InvalidArgs(callID, editFileName, errors.New("path is required")), nil, false
 	}
 	if in.OldStr == in.NewStr {
-		return p, tool.InvalidArgs(callID, editFileName, errors.New("old_str and new_str are identical; nothing to change")), false
+		return p, tool.InvalidArgs(callID, editFileName, errors.New("old_str and new_str are identical; nothing to change")), nil, false
 	}
 
 	abs, err := t.root.Resolve(in.Path)
 	if err != nil {
-		return p, agentapi.ErrorResult(callID, editFileName, err.Error()), false
+		return p, agentapi.ErrorResult(callID, editFileName, err.Error()), err, false
 	}
 	p = editPlan{abs: abs, rel: t.root.Rel(abs)}
 
@@ -97,9 +109,10 @@ func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res ag
 		// The empty-old_str case of the edit-block convention: a
 		// missing file is created with the new text.
 		p.kind, p.after, p.n = editCreate, in.NewStr, len(in.NewStr)
-		return p, agentapi.ToolResult{}, true
+		return p, agentapi.ToolResult{}, nil, true
 	case err != nil:
-		return p, agentapi.ErrorResult(callID, editFileName, pathError(t.root, abs, err)), false
+		msg := pathError(t.root, abs, err)
+		return p, agentapi.ErrorResult(callID, editFileName, msg), previewError{msg: msg, err: err}, false
 	}
 	p.before = string(data)
 
@@ -110,23 +123,23 @@ func (t *editFile) plan(callID string, args json.RawMessage) (p editPlan, res ag
 			content += "\n"
 		}
 		p.kind, p.after, p.at, p.n = editAppend, content+in.NewStr, len(content), len(in.NewStr)
-		return p, agentapi.ToolResult{}, true
+		return p, agentapi.ToolResult{}, nil, true
 	}
 
 	updated, at, note, err := replaceUnique(p.before, in.OldStr, in.NewStr)
 	if err != nil {
-		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: %v", p.rel, err)), false
+		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: %v", p.rel, err)), nil, false
 	}
 	if updated == p.before {
-		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: the edit produced no change", p.rel)), false
+		return p, agentapi.ErrorResult(callID, editFileName, fmt.Sprintf("%s: the edit produced no change", p.rel)), nil, false
 	}
 	p.after, p.at, p.n, p.note = updated, at, len(in.NewStr), note
-	return p, agentapi.ToolResult{}, true
+	return p, agentapi.ToolResult{}, nil, true
 }
 
 // Run implements agentapi.Tool.
 func (t *editFile) Run(_ context.Context, callID string, args json.RawMessage) (agentapi.ToolResult, error) {
-	p, res, ok := t.plan(callID, args)
+	p, res, _, ok := t.plan(callID, args)
 	if !ok {
 		return res, nil
 	}
@@ -163,8 +176,11 @@ func (t *editFile) Run(_ context.Context, callID string, args json.RawMessage) (
 // produce. An edit that cannot be planned — old_str not found, ambiguous
 // — reports the same message Run would, as the preview's error.
 func (t *editFile) Describe(_ context.Context, args json.RawMessage) (tool.Description, error) {
-	p, res, ok := t.plan("preview", args)
+	p, res, cause, ok := t.plan("preview", args)
 	if !ok {
+		if cause != nil {
+			return tool.Description{}, cause
+		}
 		return tool.Description{}, errors.New(res.Text())
 	}
 	var summary string
