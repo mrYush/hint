@@ -346,7 +346,7 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - ✅ `todo(items[])` — current-task plan, shown to the user
 - ✅ Tool registry + schema generation for the provider layer
 - ✅ Per-tool unit tests incl. truncation and timeout behavior
-- [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
+- ✅ Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file) ([#97](https://github.com/mrYush/hint/pull/97) fixed the code; [#34](https://github.com/mrYush/hint/issues/34) added the single-file regression test)
 - [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 

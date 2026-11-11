@@ -71,12 +71,26 @@ func TestGrep_CapsMatches(t *testing.T) {
 		fmt.Fprintf(&sb, "needle %d\n", i)
 	}
 	root := newRoot(t, map[string]string{"hay.txt": sb.String()})
-	got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep("")), `{"pattern":"needle"}`))
-	if !strings.Contains(got, "showing the first 200 matches") {
-		t.Fatalf("cap note missing: %s", got[len(got)-80:])
+	tests := []struct {
+		name string
+		args string
+	}{
+		{"directory", `{"pattern":"needle"}`},
+		// A single file is visited directly instead of walked, so the cap
+		// must still end in a truncated list rather than the walk's stop
+		// sentinel.
+		{"single file", `{"pattern":"needle","path":"hay.txt"}`},
 	}
-	if n := strings.Count(got, "hay.txt:"); n != 200 {
-		t.Fatalf("%d matches shown, want 200", n)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep("")), tt.args))
+			if !strings.Contains(got, "showing the first 200 matches") {
+				t.Fatalf("cap note missing: %s", got[len(got)-80:])
+			}
+			if n := strings.Count(got, "hay.txt:"); n != 200 {
+				t.Fatalf("%d matches shown, want 200", n)
+			}
+		})
 	}
 }
 
