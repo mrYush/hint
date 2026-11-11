@@ -2,6 +2,8 @@ package main
 
 import (
  "fmt"
+ "path/filepath"
+ "github.com/mrYush/hint/internal/config"
  "os"
   "time"
 )
@@ -25,7 +27,8 @@ func processEnvironment() (environment, error) {
   // relative paths inside the current project.
   return environment{}, fmt.Errorf("home directory is unavailable: %w", errHomeUnavailable(err))
  }
- return environment{home:home, cwd:cwd, lookupEnv:os.LookupEnv, args:append([]string(nil),os.Args...), now:time.Now}, nil
+ env := environment{home:home, cwd:cwd, lookupEnv:os.LookupEnv, args:append([]string(nil),os.Args...), now:time.Now}
+ return env, env.validate()
 }
 
 func (e environment) lookup(name string) (string,bool) {
@@ -36,4 +39,20 @@ func (e environment) lookup(name string) (string,bool) {
 func errHomeUnavailable(err error) error {
  if err != nil { return err }
  return fmt.Errorf("no home directory configured")
+}
+
+func (e environment) validate() error {
+ if e.cwd == "" || !filepath.IsAbs(e.cwd) { return fmt.Errorf("working directory must be absolute") }
+ if e.home == "" || !filepath.IsAbs(e.home) { return fmt.Errorf("home directory must be absolute") }
+ return nil
+}
+
+// configOptions resolves configuration using the same process snapshot
+// as the command, rather than reading a second set of global values.
+func (e environment) configOptions(flags config.Flags, draft bool) (config.Options, error) {
+ if err := e.validate(); err != nil { return config.Options{}, err }
+ return config.Options{
+  HomeDir:e.home, WorkingDir:e.cwd, LookupEnv:e.lookup,
+  Flags:flags, Draft:draft, Keyring:config.OSKeyring{},
+ }, nil
 }
