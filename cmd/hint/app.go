@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"time"
 
 	"github.com/mrYush/hint/internal/console"
