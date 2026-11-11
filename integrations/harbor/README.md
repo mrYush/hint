@@ -67,7 +67,7 @@ CPU-only tasks can still exceed available memory, and separate verification can 
 
 ## Model route and runs
 
-Copy the [route configuration example](route.example.yaml) and fill in the exact model ID, Chat Completions base URL, context window, credential environment variable name and approved smoke budget.
+Copy the [route configuration example](route.example.yaml) and fill in the exact model ID, Chat Completions base URL, context window and credential environment variable name.
 Export the named variable from your secret manager before a real run.
 The YAML rejects inline keys.
 The base URL must omit credentials and query strings.
@@ -83,15 +83,11 @@ For GLM, use `route: glm` and `reasoning_expectation: endpoint-default`.
 For DeepSeek, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying the gateway setting for the exact model ID.
 The manifest records `reasoning_enforced: false` because the adapter sends no reasoning or output-token override.
 Direct DeepSeek API and reasoning-enabled DeepSeek tool turns require the [provider dependency](#deepseek-provider-dependency).
-Enforce the approved smoke budget at the provider using a dedicated restricted key.
-Set `provider_budget_confirmed: true` only after configuring a spending cap at or below `smoke_budget_usd`.
 Set `trusted_environment_confirmed: true` only after reviewing the task images and accepting the trust boundary below.
-Live `benchmark.py` runs require both declarations in `--route-config`; dry runs can inspect unconfirmed settings.
+Live `benchmark.py` runs require this declaration in `--route-config`; dry runs can inspect unconfirmed settings.
 Individual route flags (`--model`, `--base-url`, `--context-window`, `--route`, `--reasoning-expectation`) are available only with `--dry-run`.
-These declarations record operator confirmation; the adapter cannot verify or enforce the provider cap.
 HTTPS is required by default.
 Direct Harbor invocation can explicitly set `--ak allow_insecure_http=true` for a local fake provider with a fake credential.
-The manifest records the amount with `smoke_budget_enforced: false` because Hint has no reliable local cost cap.
 
 Use this Bash function to keep the one-task and full-suite configuration identical.
 Each job needs a fresh output directory.
@@ -108,7 +104,7 @@ hint_bench() {
 hint_bench "$work/jobs/plan-wal" --task wal-recovery-ordering --attempts 1 --dry-run
 cat "$work/jobs/plan-wal/manifest.json"
 
-# Run one paid attempt only after agreeing the smoke budget.
+# Run one paid attempt.
 hint_bench "$work/jobs/hint-wal" --task wal-recovery-ordering --attempts 1
 
 # Validate all 63 tasks and the 126-trial plan without calling the model.
@@ -153,7 +149,7 @@ Harbor timeouts cancel the invocation, and the adapter sends TERM followed by KI
 Use this integration with trusted benchmark environments since the agent process needs access to the inference credential.
 Tools running under the same UID can potentially read the process credential and modify session files and logs.
 File permissions and log redaction do not isolate those tools from Hint.
-Review task images and instructions, use a dedicated restricted credential with a provider-side spending cap, and keep other secrets outside the task environment.
+Review task images and instructions, use a dedicated restricted credential, and keep other secrets outside the task environment.
 Untrusted workloads require the credential and process isolation tracked in [#111](https://github.com/mrYush/hint/issues/111).
 `execution.json` records collection failures by artifact and safe error category, without raw exception messages or tracebacks.
 Missing, invalid and unreadable evidence is retained alongside the original Hint failure classification.

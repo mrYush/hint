@@ -69,11 +69,33 @@ This companion package supplies external evaluation evidence for WP2R.2 and keep
 
 - ✅ Pin Harbor and Hint, run the production headless loop in isolated Docker trials, and preserve Harbor's verifier and task settings.
 - ✅ Record effective configuration, artifacts, ATIF, available usage and exceptions, with a deterministic tool-using Docker regression.
-- [ ] Validate real model routes within an agreed smoke budget.
-  GLM and DeepSeek gateway runs require operator-confirmed model IDs, endpoints and budget.
+- [ ] Validate real model routes with an explicitly selected scope and number of attempts.
+  GLM and DeepSeek gateway runs require operator-confirmed model IDs and endpoints.
 - ✅ Add offline Python CI for option validation, partial log recovery, result accounting, static typing and API documentation.
 - [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
   The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
+
+#### Remove declarative monetary budgets (2026-11-11)
+
+The owner requested removal of monetary budget declarations because the adapter neither calculates costs nor enforces spending limits.
+This focused part of [#115](https://github.com/mrYush/hint/issues/115) uses its assigned branch, `dev/harbor-review-cleanup`.
+
+- ✅ Remove the declared amount and provider budget confirmation from route configuration, live-run validation and new manifests.
+- ✅ Update the reproduction instructions and regression coverage while retaining trusted-environment confirmation.
+
+#### Complete Harbor review cleanup (#115)
+
+**Branch:** `dev/harbor-review-cleanup`
+
+The owner requested completion of [#115](https://github.com/mrYush/hint/issues/115) on 2026-11-11.
+The [implementation plan and findings register](harbor-review-cleanup.md) records the complete review scope, retained decisions and verification requirements.
+This follow-up completes review cleanup without absorbing the real-route acceptance in #107 or the separate #109–#114 work.
+
+- ✅ Remove unreachable YAML exception handling and the redundant credential-overlay branch.
+- ✅ Release the runner's temporary validation agent before starting Harbor while reusing the existing route and auth validation.
+- ✅ Remove repeated production ATIF parsing and verify serialized tool trajectories against Harbor's schema in regression tests.
+- ✅ Record a disposition and evidence or rationale for every finding named in #115.
+- ✅ Run Python, Docker fake-provider and repository checks, then prepare the branch for review into `develop`.
 
 
 #### Review remediation plan (2026-11-11)

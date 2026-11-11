@@ -1,12 +1,15 @@
 """Check the benchmark runner's accounting and configuration validation."""
 
+import hashlib
 import io
 import json
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
+from weakref import ReferenceType, ref
 
 from harbor.models.trial.error_policy import FailureCause, policy_for
 from pydantic import ValidationError
@@ -61,7 +64,7 @@ class BenchmarkTests(TestCase):
                     launch(args=replace(args, **{field: value}))
                 run.assert_not_called()
 
-    def test_live_run_requires_confirmed_budget_and_environment(self) -> None:
+    def test_live_run_requires_confirmed_environment(self) -> None:
         """Reject unconfirmed live jobs before credential access and subprocess launch."""
         args = RunArgs(
             dataset=Path("/missing"),
@@ -88,26 +91,168 @@ class BenchmarkTests(TestCase):
             route="glm",
             reasoning_expectation="endpoint-default",
             api_key_env="KEY",
-            smoke_budget_usd=1,
         )
-        for budget, trusted in ((False, False), (False, True), (True, False)):
+        for path in (None, Path("route.yaml")):
             with (
-                self.subTest(budget=budget, trusted=trusted),
+                self.subTest(route_config=path),
                 patch("benchmark.task_manifest", return_value=[]),
                 patch(
                     "benchmark.read_route_config",
-                    return_value=route.model_copy(
-                        update={
-                            "provider_budget_confirmed": budget,
-                            "trusted_environment_confirmed": trusted,
-                        }
-                    ),
+                    return_value=route,
                 ),
                 patch("benchmark.subprocess.run") as run,
             ):
                 with self.assertRaisesRegex(ValueError, "Live runs require"):
-                    launch(args=args)
+                    launch(args=replace(args, route_config=path))
                 run.assert_not_called()
+
+    def test_route_launch_releases_validation_agent(self) -> None:
+        """Validate routes without budgets and release the agent before invoking Harbor."""
+        for dry_run in (False, True):
+            with self.subTest(dry_run=dry_run), TemporaryDirectory() as temp:
+                self.check_route_launch(directory=Path(temp), dry_run=dry_run)
+
+    def check_route_launch(self, *, directory: Path, dry_run: bool) -> None:
+        """Check real route validation with disposable binaries and a subprocess stub."""
+        route = directory / "route.yaml"
+        route.write_text("""
+model: gateway/model
+base_url: https://example.invalid/v1
+context_window: 32768
+route: glm
+reasoning_expectation: endpoint-default
+api_key_env: KEY
+trusted_environment_confirmed: true
+""")
+        binary_dir = directory / "bin"
+        binary_dir.mkdir()
+        checksums = []
+        for architecture in ("amd64", "arm64"):
+            binary = binary_dir / f"hint-linux-{architecture}"
+            payload = architecture.encode()
+            binary.write_bytes(payload)
+            checksums.append(f"{hashlib.sha256(payload).hexdigest()}  {binary.name}")
+        (binary_dir / "SHA256SUMS").write_text("\n".join(checksums))
+        args = RunArgs(
+            dataset=directory / "dataset",
+            job=directory / "job",
+            task="one",
+            all=False,
+            oracle=False,
+            dry_run=dry_run,
+            attempts=1,
+            concurrent=1,
+            platform="linux/amd64",
+            binary_dir=binary_dir,
+            model=None,
+            base_url=None,
+            context_window=None,
+            route=None,
+            reasoning_expectation=None,
+            route_config=route,
+        )
+        validation_agent: ReferenceType[HintAgent] | None = None
+
+        def validate_agent(
+            *, logs_dir: Path, extra_env: dict[str, str], **kwargs: object
+        ) -> HintAgent:
+            nonlocal validation_agent
+            agent = HintAgent(
+                logs_dir=logs_dir,
+                extra_env=extra_env,
+                version=None,
+                prompt_template_path=None,
+                config=None,
+                **kwargs,
+            )
+            validation_agent = ref(agent)
+            return agent
+
+        def run_harbor(command: list[str], *, env: dict[str, str]) -> SimpleNamespace:
+            self.assertIsNotNone(validation_agent)
+            assert validation_agent is not None
+            self.assertIsNone(validation_agent())
+            expected_key = "hint-dry-run-placeholder" if dry_run else "secret-canary"
+            self.assertEqual(env["KEY"], expected_key)
+            self.assertNotIn(expected_key, " ".join(command))
+            self.assertEqual("--dry-run" in command, dry_run)
+            if not dry_run:
+                trial = args.job / "one"
+                trial.mkdir()
+                (trial / "result.json").write_text(
+                    json.dumps(
+                        {
+                            "trial_name": "one",
+                            "task_name": "one",
+                            "task_id": {"path": "one"},
+                            "task_checksum": "hash",
+                            "verifier_result": {"rewards": {"reward": 0.0}},
+                        }
+                    )
+                )
+            return SimpleNamespace(returncode=0)
+
+        with (
+            patch(
+                "benchmark.task_manifest",
+                return_value=[
+                    {
+                        "directory": "one",
+                        "name": "one",
+                        "images": {},
+                        "agent_resources": {},
+                        "verifier_resources": {},
+                    }
+                ],
+            ),
+            patch.dict(
+                "benchmark.os.environ",
+                {} if dry_run else {"KEY": "secret-canary"},
+                clear=True,
+            ),
+            patch("benchmark.HintAgent", side_effect=validate_agent),
+            patch("benchmark.subprocess.run", side_effect=run_harbor) as run,
+        ):
+            self.assertEqual(launch(args=args), 0)
+            run.assert_called_once()
+        manifest = json.loads((args.job / "manifest.json").read_text())
+        self.assertEqual(manifest["hint"]["model"], "gateway/model")
+        self.assertEqual(manifest["hint"]["base_url"], "https://example.invalid/v1")
+        self.assertEqual(manifest["hint"]["context_window"], 32768)
+        self.assertEqual(set(manifest["hint"]["binary_sha256"]), {"amd64", "arm64"})
+        self.assertTrue(manifest["hint"]["trusted_environment_confirmed"])
+        for field in (
+            "smoke_budget_usd",
+            "smoke_budget_enforced",
+            "provider_budget_confirmed",
+        ):
+            self.assertNotIn(field, manifest["hint"])
+        self.assertNotIn("secret-canary", json.dumps(manifest))
+        self.assertNotIn("hint-dry-run-placeholder", json.dumps(manifest))
+        if not dry_run:
+            summary = json.loads((args.job / "summary.json").read_text())
+            self.assertEqual(summary["expected_attempts"], 1)
+            self.assertEqual(summary["recorded_attempts"], 1)
+            self.assertEqual(summary["missing_attempts"], 0)
+
+    def test_dataset_export_contract(self) -> None:
+        """Reject partial exports before lookup and distinguish a missing named task."""
+        with TemporaryDirectory() as temp:
+            directory = Path(temp)
+            for count in (0, 1, 62, 63, 64):
+                for index in range(count):
+                    task = directory / str(index)
+                    task.mkdir(exist_ok=True)
+                    (task / "task.toml").touch()
+                with self.subTest(count=count):
+                    if count == 63:
+                        with self.assertRaisesRegex(
+                            ValueError, "Task not found: absent"
+                        ):
+                            task_manifest(dataset=directory, task_name="absent")
+                    else:
+                        with self.assertRaisesRegex(ValueError, "Expected 63 exported"):
+                            task_manifest(dataset=directory, task_name=None)
 
     def test_summary(self) -> None:
         """Retain verifier outcomes and exception rows despite missing or corrupt evidence."""
@@ -238,7 +383,9 @@ SECRET = "canary"
                 main()
         self.assertEqual(stopped.exception.code, 0)
         self.assertEqual(output.getvalue().count("Dry-run only"), 5)
-        self.assertIn("required for live Hint", output.getvalue())
+        help_text = " ".join(output.getvalue().split())
+        self.assertIn("required for live Hint", help_text)
+        self.assertIn("confirming a trusted environment", help_text)
 
     def test_legacy_manifest_scope(self) -> None:
         """Inspect existing jobs whose manifests included whole resource tables."""
@@ -293,7 +440,6 @@ SECRET = "canary"
             "route": "glm",
             "reasoning_expectation": "endpoint-default",
             "api_key_env": "GATEWAY_API_KEY",
-            "smoke_budget_usd": 1.0,
         }
         self.assertEqual(
             RouteConfig.model_validate(data).api_key_env, "GATEWAY_API_KEY"

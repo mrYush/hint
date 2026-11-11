@@ -725,19 +725,19 @@ your convenience.
 
 ### Known issues
 
-`v0.3.2` ships with these confirmed bugs. They are backlog (decided
-2026-10-11) and did not block this patch.
-Details and the full audit:
-[`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+`v0.4.0` ships with these confirmed bugs.
+They are backlog (decided 2026-10-11) and did not block this release.
+Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
 1. **A session file can become unreadable** if `hint` is interrupted at
    the exact end of a write; the next `hint -c` then fails to open it.
    Start a new session; the old file can be repaired by adding a newline
    after the last complete line.
-2. `grep` on a single file with more than 200 matches reports an error
-   instead of a truncated list; search a directory or narrow the pattern.
-3. `write_file` on a file `hint` cannot read shows the overwrite prompt
+2. `write_file` on a file `hint` cannot read shows the overwrite prompt
    as "too large to diff" instead of the read error.
+
+**Fixed in `v0.4.0`.** `grep` on a single file with more than 200 matches returned the walk's internal stop sentinel (`hay.txt: skip everything and stop the walk`) as a tool error instead of the first 200 matches.
+Present since `v0.2.0-alpha`.
 
 **Fixed in `v0.3.2`.** Two agent-loop bugs, both present since
 `v0.2.0-alpha`. A compaction summary was erased by the next rebuild of the

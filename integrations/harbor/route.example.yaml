@@ -6,9 +6,5 @@ context_window: 32768
 route: glm
 reasoning_expectation: endpoint-default
 api_key_env: HINT_API_KEY
-# Record the approved amount in USD. Enforce it at the provider.
-smoke_budget_usd: 1.00
-# Set true only after configuring a provider-side spending cap at or below the budget.
-provider_budget_confirmed: false
 # Set true after reviewing the task images and accepting the documented trust boundary.
 trusted_environment_confirmed: false
