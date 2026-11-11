@@ -39,7 +39,7 @@ class TaskManifestEntry(TypedDict):
 
 
 class RouteConfig(BaseModel):
-    """Operator-supplied route and budget for a paid smoke."""
+    """Operator-supplied route for a model run."""
 
     model_config = ConfigDict(extra="forbid")
     model: str
@@ -48,8 +48,6 @@ class RouteConfig(BaseModel):
     route: Route
     reasoning_expectation: Reasoning
     api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    smoke_budget_usd: float = Field(gt=0, allow_inf_nan=False)
-    provider_budget_confirmed: bool = False
     trusted_environment_confirmed: bool = False
 
 
@@ -111,9 +109,6 @@ class HintManifest(BaseModel):
     reasoning_enforced: bool = False
     context_window: int
     api_key_env: str
-    smoke_budget_usd: float | None
-    smoke_budget_enforced: bool = False
-    provider_budget_confirmed: bool = False
     trusted_environment_confirmed: bool = False
     fallback: None = None
     output_token_override: None = None
@@ -409,12 +404,10 @@ def launch(*, args: RunArgs) -> int:
                 raise ValueError("Use either --route-config or individual route flags")
             route_config = read_route_config(path=args.route_config)
         if not args.dry_run and (
-            route_config is None
-            or not route_config.provider_budget_confirmed
-            or not route_config.trusted_environment_confirmed
+            route_config is None or not route_config.trusted_environment_confirmed
         ):
             raise ValueError(
-                "Live runs require route YAML confirming a provider-side budget and trusted environment"
+                "Live runs require route YAML confirming a trusted environment"
             )
         model = route_config.model if route_config else args.model
         endpoint = route_config.base_url if route_config else args.base_url
@@ -464,10 +457,6 @@ def launch(*, args: RunArgs) -> int:
             reasoning_expectation=reasoning,
             context_window=context_window,
             api_key_env=key_name,
-            smoke_budget_usd=route_config.smoke_budget_usd if route_config else None,
-            provider_budget_confirmed=route_config.provider_budget_confirmed
-            if route_config
-            else False,
             trusted_environment_confirmed=route_config.trusted_environment_confirmed
             if route_config
             else False,
@@ -545,7 +534,7 @@ def main() -> int:
     run.add_argument(
         "--route-config",
         type=Path,
-        help="Route YAML with budget and trust confirmations; required for live Hint runs",
+        help="Route YAML confirming a trusted environment; required for live Hint runs",
     )
     route_help = "Dry-run only; live Hint runs require --route-config YAML"
     run.add_argument("--model", help=route_help)

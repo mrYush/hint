@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -61,7 +62,7 @@ class BenchmarkTests(TestCase):
                     launch(args=replace(args, **{field: value}))
                 run.assert_not_called()
 
-    def test_live_run_requires_confirmed_budget_and_environment(self) -> None:
+    def test_live_run_requires_confirmed_environment(self) -> None:
         """Reject unconfirmed live jobs before credential access and subprocess launch."""
         args = RunArgs(
             dataset=Path("/missing"),
@@ -88,26 +89,79 @@ class BenchmarkTests(TestCase):
             route="glm",
             reasoning_expectation="endpoint-default",
             api_key_env="KEY",
-            smoke_budget_usd=1,
         )
-        for budget, trusted in ((False, False), (False, True), (True, False)):
+        for path in (None, Path("route.yaml")):
             with (
-                self.subTest(budget=budget, trusted=trusted),
+                self.subTest(route_config=path),
                 patch("benchmark.task_manifest", return_value=[]),
                 patch(
                     "benchmark.read_route_config",
-                    return_value=route.model_copy(
-                        update={
-                            "provider_budget_confirmed": budget,
-                            "trusted_environment_confirmed": trusted,
-                        }
-                    ),
+                    return_value=route,
                 ),
                 patch("benchmark.subprocess.run") as run,
             ):
                 with self.assertRaisesRegex(ValueError, "Live runs require"):
-                    launch(args=args)
+                    launch(args=replace(args, route_config=path))
                 run.assert_not_called()
+
+    def test_live_run_without_monetary_budget(self) -> None:
+        """Launch a trusted route without budget declarations and omit them from manifests."""
+        with TemporaryDirectory() as temp:
+            directory = Path(temp)
+            route = directory / "route.yaml"
+            route.write_text("""
+model: gateway/model
+base_url: https://example.invalid/v1
+context_window: 32768
+route: glm
+reasoning_expectation: endpoint-default
+api_key_env: KEY
+trusted_environment_confirmed: true
+""")
+            args = RunArgs(
+                dataset=directory / "dataset",
+                job=directory / "job",
+                task="one",
+                all=False,
+                oracle=False,
+                dry_run=False,
+                attempts=1,
+                concurrent=1,
+                platform="linux/amd64",
+                binary_dir=directory / "bin",
+                model=None,
+                base_url=None,
+                context_window=None,
+                route=None,
+                reasoning_expectation=None,
+                route_config=route,
+            )
+            with (
+                patch("benchmark.task_manifest", return_value=[]),
+                patch.dict("benchmark.os.environ", {"KEY": "secret-canary"}),
+                patch("benchmark.HintAgent") as agent,
+                patch(
+                    "benchmark.subprocess.run",
+                    return_value=SimpleNamespace(returncode=0),
+                ) as run,
+            ):
+                agent.return_value.model = "gateway/model"
+                agent.return_value.endpoint = "https://example.invalid/v1"
+                agent.return_value.binaries.select.side_effect = [
+                    SimpleNamespace(architecture=arch, sha256="a" * 64)
+                    for arch in ("amd64", "arm64")
+                ]
+                self.assertEqual(launch(args=args), 0)
+                run.assert_called_once()
+            manifest = json.loads((args.job / "manifest.json").read_text())
+        self.assertTrue(manifest["hint"]["trusted_environment_confirmed"])
+        for field in (
+            "smoke_budget_usd",
+            "smoke_budget_enforced",
+            "provider_budget_confirmed",
+        ):
+            self.assertNotIn(field, manifest["hint"])
+        self.assertNotIn("secret-canary", json.dumps(manifest))
 
     def test_summary(self) -> None:
         """Retain verifier outcomes and exception rows despite missing or corrupt evidence."""
@@ -238,7 +292,9 @@ SECRET = "canary"
                 main()
         self.assertEqual(stopped.exception.code, 0)
         self.assertEqual(output.getvalue().count("Dry-run only"), 5)
-        self.assertIn("required for live Hint", output.getvalue())
+        help_text = " ".join(output.getvalue().split())
+        self.assertIn("required for live Hint", help_text)
+        self.assertIn("confirming a trusted environment", help_text)
 
     def test_legacy_manifest_scope(self) -> None:
         """Inspect existing jobs whose manifests included whole resource tables."""
@@ -293,7 +349,6 @@ SECRET = "canary"
             "route": "glm",
             "reasoning_expectation": "endpoint-default",
             "api_key_env": "GATEWAY_API_KEY",
-            "smoke_budget_usd": 1.0,
         }
         self.assertEqual(
             RouteConfig.model_validate(data).api_key_env, "GATEWAY_API_KEY"
