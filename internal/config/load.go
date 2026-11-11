@@ -14,29 +14,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Flags carries the values of the CLI configuration flags. An empty string
-// means "flag not passed" — flag defaults must stay empty so a value from a
-// config file is not silently overridden (the old --model=gpt-4 bug).
-//
-// The numeric knobs are strings for the same reason: a cobra int flag
-// cannot tell "not passed" from an explicit 0, and 0 is a legal value for
-// --overview-depth. The loader parses them and reports a bad number as an
-// error naming the flag.
+// Flags carries CLI overrides. Nil numeric/bool pointers mean the flag was
+// not provided; explicit zero and false remain distinguishable from absence.
 type Flags struct {
-	Provider string // --provider: profile to use as default for this run
-	APIURL   string // --api-url: overrides base_url of the selected profile
-	APIKey   string // --api-key: overrides api_key of the selected profile
-	Model    string // --model: overrides model of the selected profile
-
-	ContextWindow     string // --context-window: overrides context_window of the selected profile
-	InstructionBudget string // --instruction-budget: bytes for all instruction files
-	OverviewDepth     string // --overview-depth: directory levels in the overview, 0 for none
-	OverviewEntries   string // --overview-entries: cap on overview entries
-
-	// SummarizeInstructions is --summarize-instructions: "true" or "false",
-	// a string so that an unset flag stays distinct from an explicit false.
-	SummarizeInstructions string
-	// Completion is --completion: a completion mode for this run.
+	Provider string
+	APIURL string
+	APIKey string
+	Model string
+	ContextWindow *int
+	InstructionBudget *int
+	OverviewDepth *int
+	OverviewEntries *int
+	SummarizeInstructions *bool
 	Completion string
 }
 
@@ -981,7 +970,7 @@ func validCompletionMode(v string) bool {
 // each when set, with the same tolerance as HINT_DEBUG: a variable that
 // is not a boolean is a warning that leaves *dst alone, a flag that is
 // not one is an error.
-func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) error {
+func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) error {
 	if v, ok := l.env(envName); ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
@@ -990,13 +979,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) err
 			*dst = b
 		}
 	}
-	if flagValue != "" {
-		b, err := strconv.ParseBool(flagValue)
-		if err != nil {
-			return fmt.Errorf("%s: %q is not a boolean", flagName, flagValue)
-		}
-		*dst = b
-	}
+	if flagValue != nil {\n\t\t*dst = *flagValue\n\t}
 	return nil
 }
 
@@ -1006,7 +989,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) err
 // *dst alone. The file value already in *dst (named key in messages) is
 // checked against min too, since a file can say -1 as easily; a file's 0
 // is left for the defaults to fill.
-func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, min int) (set bool, err error) {
+func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue *int, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
 		return false, fmt.Errorf("%s must be at least %d, got %d", key, min, *dst)
 	}
@@ -1021,12 +1004,7 @@ func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, 
 			*dst, set = n, true
 		}
 	}
-	if flagValue != "" {
-		n, err := strconv.Atoi(flagValue)
-		if err != nil {
-			return set, fmt.Errorf("%s: %q is not a number", flagName, flagValue)
-		}
-		if n < min {
+	if flagValue != nil {\n\t\tn := *flagValue\n\t\tif n < min {
 			return set, fmt.Errorf("%s must be at least %d, got %d", flagName, min, n)
 		}
 		*dst, set = n, true
