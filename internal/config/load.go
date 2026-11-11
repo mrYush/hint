@@ -600,18 +600,32 @@ func (l *loader) mergeFiles(global, project fileConfig) fileConfig {
 	return out
 }
 
+// expandWarn expands a file value and reports missing references without
+// exposing their values. A missing reference still expands to an empty string.
+func (l *loader) expandWarn(field, value string) string {
+	seen := make(map[string]bool)
+	return os.Expand(value, func(name string) string {
+		v, ok := l.opts.LookupEnv(name)
+		if !ok && !seen[name] {
+			l.warnf("%s: environment variable %s is not set", field, name)
+			seen[name] = true
+		}
+		return v
+	})
+}
+
 // expand resolves $VAR/${VAR} references in file-sourced values. Flag and
 // environment overlays are deliberately NOT expanded: their values come from
 // the shell, which has already done its own expansion.
 func (l *loader) expand(fc *fileConfig) {
 	for i := range fc.Providers {
 		p := &fc.Providers[i]
-		p.BaseURL = expandValue(p.BaseURL, l.opts.LookupEnv)
+		p.BaseURL = l.expandWarn("providers."+p.Name+".base_url", p.BaseURL)
 		p.APIKey, p.keyFrom, p.keyRef, p.keyErr = l.resolveKey(p.Name, p.APIKey)
-		p.Model = expandValue(p.Model, l.opts.LookupEnv)
+		p.Model = l.expandWarn("providers."+p.Name+".model", p.Model)
 	}
-	fc.DefaultProvider = expandValue(fc.DefaultProvider, l.opts.LookupEnv)
-	fc.FallbackProvider = expandValue(fc.FallbackProvider, l.opts.LookupEnv)
+	fc.DefaultProvider = l.expandWarn("default_provider", fc.DefaultProvider)
+	fc.FallbackProvider = l.expandWarn("fallback_provider", fc.FallbackProvider)
 	l.expandMCP(fc)
 }
 
@@ -638,9 +652,9 @@ func (l *loader) expandMCP(fc *fileConfig) {
 			out = append(out, s)
 			continue
 		}
-		s.Command = expandValue(s.Command, l.opts.LookupEnv)
+		s.Command = l.expandWarn("mcp_servers."+s.Name+".command", s.Command)
 		for i := range s.Args {
-			s.Args[i] = expandValue(s.Args[i], l.opts.LookupEnv)
+			s.Args[i] = l.expandWarn(fmt.Sprintf("mcp_servers.%s.args.%d", s.Name, i), s.Args[i])
 		}
 		s.URL = l.expandMCPRefs(s.Name, "url", s.URL)
 		for i := range s.Resources {
@@ -735,7 +749,7 @@ func (l *loader) resolveKey(profile, value string) (key, from, ref string, err e
 		for _, m := range names {
 			l.keyEnv = append(l.keyEnv, m[1])
 		}
-		return expandValue(value, l.opts.LookupEnv), KeyFromEnv, value, nil
+		return l.expandWarn("providers."+profile+".api_key", value), KeyFromEnv, value, nil
 	}
 	return value, KeyFromFile, "", nil
 }
