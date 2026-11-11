@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -48,7 +49,7 @@ type Ask struct {
 // Prompt blocks until there is an answer. It returns ctx.Err() when the
 // context ends first, so that Ctrl-C at a prompt cancels the turn the same
 // way it does anywhere else. Any other error means the prompter itself
-// broke; the gate treats that as a denial.
+// broke; the gate propagates it without allowing the call.
 type Prompter interface {
 	Prompt(ctx context.Context, ask Ask) (Decision, error)
 }
@@ -105,9 +106,11 @@ func (p *ReaderPrompter) Prompt(ctx context.Context, ask Ask) (Decision, error) 
 				fmt.Fprintln(p.out)
 				return Deny, ctx.Err()
 			}
-			// EOF or a broken pipe: nobody is there to answer.
-			fmt.Fprintf(p.out, "\nhint: no answer (%v); denied\n", err)
-			return Deny, nil
+			if errors.Is(err, io.EOF) {
+				fmt.Fprintf(p.out, "\nhint: no answer (%v); denied\n", err)
+				return Deny, nil
+			}
+			return Deny, fmt.Errorf("read permission answer: %w", err)
 		}
 		// "н" is "y" typed in a Cyrillic layout; it means the same.
 		switch console.Answer(text) {

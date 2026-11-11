@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/internal/tool"
@@ -94,21 +97,58 @@ func TestGate_NilPrompterDenies(t *testing.T) {
 	}
 }
 
-type errPrompter struct{ err error }
+type errPrompter struct {
+	err      error
+	decision permission.Decision
+}
 
 func (p errPrompter) Prompt(ctx context.Context, _ permission.Ask) (permission.Decision, error) {
 	if p.err != nil {
-		return permission.Deny, p.err
+		return p.decision, p.err
 	}
 	<-ctx.Done()
 	return permission.Deny, ctx.Err()
 }
 
-func TestGate_PrompterErrorWithLiveContextDenies(t *testing.T) {
-	g := permission.New(permission.ModeAsk, errPrompter{err: errors.New("tty gone")})
-	allowed, err := g.Authorize(context.Background(), execReq("ls"))
-	if err != nil || allowed {
-		t.Fatalf("= %v, %v; a broken prompter is a denial, not an abort", allowed, err)
+func TestGate_PrompterErrorPropagatesWithoutGrant(t *testing.T) {
+	cause := &os.PathError{Op: "read", Path: "tty", Err: errors.New("tty gone")}
+	for _, decision := range []permission.Decision{permission.Deny, permission.Allow, permission.AllowAlways} {
+		t.Run(fmt.Sprint(decision), func(t *testing.T) {
+			g := permission.New(permission.ModeAsk, errPrompter{err: cause, decision: decision})
+			allowed, err := g.Authorize(context.Background(), execReq("go test ./..."))
+			if allowed || !errors.Is(err, cause) || errors.Unwrap(err) == nil {
+				t.Fatalf("= %v, %v; want denied with a wrapped cause", allowed, err)
+			}
+			var pathErr *os.PathError
+			if !errors.As(err, &pathErr) || pathErr != cause {
+				t.Fatalf("error lost its type: %v", err)
+			}
+			tl := fakeTool{class: agentapi.ClassExecute, desc: execReq("go test ./...")}
+			if _, ask := g.Review(context.Background(), reqCall(tl.desc), tl); !ask {
+				t.Fatal("failed prompt granted permission for a later call")
+			}
+		})
+	}
+}
+
+func TestGate_EndedContextTakesPriorityOverPrompterError(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(fmt.Sprint(deadline), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			want := context.Canceled
+			if deadline {
+				cancel()
+				ctx, cancel = context.WithDeadline(context.Background(), time.Time{})
+				want = context.DeadlineExceeded
+			} else {
+				cancel()
+			}
+			defer cancel()
+			g := permission.New(permission.ModeAsk, errPrompter{err: errors.New("tty gone")})
+			if allowed, err := g.Authorize(ctx, execReq("ls")); allowed || !errors.Is(err, want) {
+				t.Fatalf("= %v, %v; want denied, %v", allowed, err, want)
+			}
+		})
 	}
 }
 

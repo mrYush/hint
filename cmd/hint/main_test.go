@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/mrYush/hint/internal/config"
@@ -30,6 +31,7 @@ import (
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
+	"github.com/mrYush/hint/internal/shell"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -833,6 +835,69 @@ func TestPermissionOverRPC(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "hint: bash {") || strings.Contains(stderr.String(), "[a]lways") {
 		t.Errorf("an allowed echo should run, with no always option for an unscoped command:\n%s", stderr.String())
+	}
+}
+
+// TestPermissionPromptFailureCancelsTurn is the end-to-end half of the
+// prompt-failure fix: the question crosses RPC to termSink, whose line
+// reader fails, and shell.RunTurn must cancel the turn at once instead of
+// leaving the core to wait out DefaultPermissionWait and then report an
+// ordinary denial.
+func TestPermissionPromptFailureCancelsTurn(t *testing.T) {
+	cause := errors.New("stdin read failed")
+	chat := &fakeChat{
+		reply: func(int) string { return "the second answer" },
+		call: func(n int) *agentapi.ToolCall {
+			if n != 1 {
+				return nil
+			}
+			return &agentapi.ToolCall{
+				ID:        "call-1",
+				Name:      "bash",
+				Arguments: json.RawMessage(`{"command":"echo ok"}`),
+			}
+		},
+	}
+	as, sio, _, stderr := testAssembly(t, chat, "")
+	a, err := assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.close()
+
+	sink := termSink{err: stderr, prompter: permission.NewReaderPrompter(iotest.ErrReader(cause), stderr)}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := shell.RunTurn(ctx, a.client, a.sessionID, "run the tests", sink)
+
+	if !errors.Is(err, cause) {
+		t.Fatalf("RunTurn = %v; want the reader failure, not a cancel or an ordinary denial", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("RunTurn only returned after the context ended: %v; it must not wait for DefaultPermissionWait", ctx.Err())
+	}
+	if res.Finish != agentapi.FinishError || !errors.Is(res.Err, cause) {
+		t.Fatalf("result = %+v; want FinishError carrying the reader failure", res)
+	}
+	if strings.Contains(stderr.String(), "hint: bash") {
+		t.Fatalf("a call ran after its permission prompt failed:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "denied") {
+		t.Fatalf("a prompt failure was reported as an ordinary denial:\n%s", stderr.String())
+	}
+	if reqs := chat.seen(); len(reqs) != 1 {
+		t.Fatalf("provider called %d times; a cancelled turn must not continue", len(reqs))
+	}
+
+	// The turn was cancelled, so the session is free to take the next
+	// one instead of still waiting on the permission question.
+	next, err := shell.RunTurn(context.Background(), a.client, a.sessionID, "continue",
+		termSink{err: stderr, prompter: permission.NewReaderPrompter(strings.NewReader(""), io.Discard)})
+	if err != nil {
+		t.Fatalf("turn after the cancelled one: %v", err)
+	}
+	if next.Answer != "the second answer" {
+		t.Errorf("next answer = %q", next.Answer)
 	}
 }
 

@@ -109,13 +109,31 @@ func RunTurn(ctx context.Context, cl *rpc.Client, sessionID, text string, sink S
 	// closes with FinishError.
 	var lastErr *agentapi.Error
 	var runErr error
+	// promptErr is a client-side failure that stopped the turn: either the
+	// question could not be put to the user, or the answer could not reach
+	// the core. The turn is cancelled rather than left for the core's
+	// PermissionWait to deny, and this error becomes the turn's outcome.
+	var promptErr error
 	for ev := range t.Events() {
 		switch ev.Kind {
 		case agentapi.EventTextDelta:
 			answer.WriteString(ev.Text)
 			sink.Text(ev.Text)
 		case agentapi.EventPermission:
-			reply(ctx, t, *ev.Permission, sink)
+			if promptErr != nil {
+				// The turn is already being cancelled; a question that
+				// follows the failed one is not put to the user again.
+				continue
+			}
+			if err := reply(ctx, t, *ev.Permission, sink); err != nil {
+				if ctx.Err() != nil {
+					// The cancel watcher ends the turn; a context error
+					// is not a prompt failure the shell reports.
+					continue
+				}
+				promptErr = err
+				cancelTurn(t)
+			}
 		case agentapi.EventToolStart:
 			sink.ToolStart(*ev.Call)
 		case agentapi.EventToolEnd:
@@ -152,26 +170,44 @@ func RunTurn(ctx context.Context, cl *rpc.Client, sessionID, text string, sink S
 			// the sum of deltas already shown.
 		}
 	}
-	if err := t.Err(); err != nil {
+	if err := t.Err(); err != nil && promptErr == nil {
 		// The stream ended without turn.done: the connection to the core
 		// is gone, and so is whatever the turn still had to say.
 		return res, fmt.Errorf("lost the connection to the core: %w", err)
 	}
 	res.Answer = answer.String()
+	if promptErr != nil {
+		// The core cancelled the turn, so its terminal event says
+		// "canceled"; from the shell's side the turn failed, and a JSON
+		// consumer must see it as an error with the cause attached.
+		res.Finish = agentapi.FinishError
+		res.Err = agentapi.WrapError(agentapi.KindOf(promptErr), promptErr, "permission prompt")
+		return res, res.Err
+	}
 	return res, runErr
 }
 
 // reply puts a permission question to the sink and sends the decision
-// back. ctx ending at the question is not answered at all: the cancel
-// watcher in RunTurn ends the turn, and the server denies.
-func reply(ctx context.Context, t *rpc.Turn, req agentapi.PermissionRequest, sink Sink) {
+// back. It returns an error when no answer could be obtained or delivered:
+// the caller then cancels the turn, so the core does not wait out
+// PermissionWait for an answer that will never come. A context that ends
+// at the question is not such a failure: the cancel watcher in RunTurn
+// ends the turn, and the server cancels it.
+func reply(ctx context.Context, t *rpc.Turn, req agentapi.PermissionRequest, sink Sink) error {
 	decision, err := sink.Permission(ctx, req)
 	if err != nil {
-		return
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
 	}
-	if err := t.Reply(ctx, req.CallID, decision); err != nil && ctx.Err() == nil {
-		sink.Notice(fmt.Sprintf("warning: the answer did not reach the core: %v", err))
+	if err := t.Reply(ctx, req.CallID, decision); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("sending the permission answer: %w", err)
 	}
+	return nil
 }
 
 // cancelTurn asks the server to stop t. A turn that has already ended

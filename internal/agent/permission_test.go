@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/mrYush/hint/internal/agent"
+	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -234,22 +237,45 @@ func TestRunTurn_CancelAtPromptEndsCanceled(t *testing.T) {
 }
 
 func TestRunTurn_AuthorizerFailureAbortsTurn(t *testing.T) {
-	auth := &fakeAuthorizer{ask: map[string]bool{"write": true}, err: errors.New("prompt channel broke")}
-	runs := 0
-	p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "write", `{}`))}}
-	a := agent.New(p, agent.WithTools(writeTool{runs: &runs}), agent.WithAuthorizer(auth))
+	cause := errors.New("prompt channel broke")
+	for _, tc := range []struct {
+		name string
+		auth agent.Authorizer
+	}{
+		{"fake", &fakeAuthorizer{ask: map[string]bool{"write": true}, err: cause}},
+		{"gate", permission.New(permission.ModeAsk, failingPrompter{err: cause})},
+		{"reader gate", permission.New(permission.ModeAsk, permission.NewReaderPrompter(iotest.ErrReader(cause), io.Discard))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runs := 0
+			p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "write", `{}`))}}
+			a := agent.New(p, agent.WithTools(writeTool{runs: &runs}), agent.WithAuthorizer(tc.auth))
 
-	events := collect(t, a.RunTurn(context.Background(), question("q")))
+			events := collect(t, a.RunTurn(context.Background(), question("q")))
 
-	if end := lastEvent(events, agentapi.EventTurnEnd); end == nil || end.FinishReason != agentapi.FinishError {
-		t.Fatalf("turn_end = %+v, want FinishError", end)
+			if end := lastEvent(events, agentapi.EventTurnEnd); end == nil || end.FinishReason != agentapi.FinishError {
+				t.Fatalf("turn_end = %+v, want FinishError", end)
+			}
+			if runs != 0 {
+				t.Fatal("tool ran without an answer")
+			}
+			if e := lastEvent(events, agentapi.EventError); e == nil || !strings.Contains(e.Err.Message, "prompt channel broke") {
+				t.Fatalf("error event = %+v", e)
+			}
+			if countEvents(events, agentapi.EventToolStart) != 0 || countEvents(events, agentapi.EventToolEnd) != 0 {
+				t.Fatal("failed prompt started a tool or reported an ordinary denial")
+			}
+			if len(p.calls) != 1 {
+				t.Fatalf("provider called %d times after prompt failure, want 1", len(p.calls))
+			}
+		})
 	}
-	if runs != 0 {
-		t.Fatal("tool ran without an answer")
-	}
-	if e := lastEvent(events, agentapi.EventError); e == nil || !strings.Contains(e.Err.Message, "prompt channel broke") {
-		t.Fatalf("error event = %+v", e)
-	}
+}
+
+type failingPrompter struct{ err error }
+
+func (p failingPrompter) Prompt(context.Context, permission.Ask) (permission.Decision, error) {
+	return permission.AllowAlways, p.err
 }
 
 func TestRunTurn_ToolPassingThroughCancelEndsCanceled(t *testing.T) {
