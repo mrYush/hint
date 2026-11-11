@@ -444,6 +444,7 @@ func TestManagerWideDirectoriesAdvanceWithoutBlockedQueueChurn(t *testing.T) {
 
 func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *testing.T) {
 	m, space, path := managerFixture(t, &managerTestExtractor{run: extract.Extract})
+	stopManagerTestScheduler(t, m)
 	if err := m.acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -458,9 +459,39 @@ func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *te
 	m.mu.Lock()
 	work := *m.roots[roots[0].ID]
 	m.mu.Unlock()
-	// Explicit queue order makes this independent of filesystem enumeration
-	// order: the blocked child precedes a ready file and the retained parent.
-	for _, path := range []string{"child-000", "ready.go"} {
+	// Choose a child from the parent's first page. Rediscovering a prequeued
+	// child on a later page advances its revision and prevents that visit's
+	// rotation, so a fixed child name cannot guarantee this three-step fixture.
+	lease, err := space.Resolve(work.info.ID, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := lease.OpenDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := &directoryStream{lease: lease, file: directory}
+	m.streams[work.info.ID+"\x00."] = stream
+	stream.item, err = m.store.QueueLookup(context.Background(), work.info.ID, []byte("."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream.pending, stream.readErr = directory.ReadDir(32)
+	if stream.readErr != nil {
+		t.Fatal(stream.readErr)
+	}
+	blockedChild := ""
+	for _, entry := range stream.pending {
+		if entry.IsDir() {
+			blockedChild = entry.Name()
+			break
+		}
+	}
+	if blockedChild == "" {
+		t.Fatal("fixture has no child directory in the first page")
+	}
+	// The first step consumes this exact page before the blocked child visit.
+	for _, path := range []string{blockedChild, "ready.go"} {
 		if err := m.store.Enqueue(context.Background(), work.info.ID, []byte(path)); err != nil {
 			t.Fatal(err)
 		}

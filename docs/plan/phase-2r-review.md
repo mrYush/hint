@@ -87,6 +87,25 @@ They implement the session-validation subset of #110 and the CI timeout subset o
 4. ✅ CLI/C-06 — Explain dry-run-only route flags in CLI help and bound the Harbor CI job to 15 minutes.
 5. ✅ Validate the regressions, run repository checks and Docker fake-provider scenarios, and review the final diff.
 
+
+#### Scope exception — repomap test fixture (#116)
+
+At the owner's request, `feature/harbor-adapter` also carries the focused test fix for [#116](https://github.com/mrYush/hint/issues/116), which blocked PR #108.
+This follows the existing exception for scope discovered during review and avoids a separate branch for the small test-only correction.
+The PR description should carry this scope note when updated.
+
+- ✅ Isolate the manually driven scheduler and choose the blocked child from the exact first directory page consumed by the fixture.
+- ✅ Preserve the three-step assertion and the requirement that the parent stream remains open.
+- ✅ Verify repeated race/coverage runs, Linux execution and all repository Go checks.
+
+The original test passed 100 macOS race/coverage repetitions and 10 Linux arm64 repetitions.
+Forcing the prequeued child into the second enumeration page reproduced `state=pending` even with the background scheduler stopped.
+Rediscovery increments the queued revision, so rotating the older blocked item intentionally leaves the newer revision in place.
+The fix controls the fixture's discovery order while retaining production queue behavior.
+
+Validation passed with 100 targeted race/coverage repetitions on macOS arm64, 100 targeted Linux arm64 container repetitions, the full race/coverage suite, ordinary tests, vet, golangci-lint and Linux arm64 compilation.
+Remote CI verification remains pending publication of this correction.
+
 ## Outputs
 
 - A code and architecture findings register with dispositions and a `v0.4.1` decision.
