@@ -76,10 +76,13 @@ func main() {
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "hint:", err)
 		code := 1
+		if errors.Is(err, errFlagUsage) { code = 2 }
 		if errors.Is(err, context.Canceled) { code = 130 }
 		os.Exit(code)
 	}
 }
+
+var errFlagUsage = errors.New("invalid command-line flags")
 
 // outputFormat is how a one-shot answer is printed.
 type outputFormat string
@@ -204,6 +207,8 @@ keeps the line REPL.`,
 			return run(ctx, opts, inv, stdio{in: os.Stdin, out: os.Stdout, err: os.Stderr, tty: isTerminal(os.Stdin)})
 		},
 	}
+
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %v", errFlagUsage, err) })
 
 	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
 	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
