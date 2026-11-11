@@ -261,6 +261,7 @@ error, no confirmation prompt.
   the shell (no Job Object). All bash tests skip on Windows
   (`bash_test.go:16`). Fix via `CmdLine` + Job Object, or declare Windows
   unsupported for `bash` in README. WP0.5.
+  Follow-up (2026-11-11): [#35](https://github.com/mrYush/hint/issues/35) selected full support; the [WP0.5 implementation plan](phase-0-mvp-cli.md#windows-shell-follow-up--issue-35) records the shared runner, explicit quoting, regression coverage and Windows CI acceptance gate.
 - **S16 — `TestBash_TimeoutKillsProcessGroup` does not test the kill.**
   [`internal/tool/builtin/bash_test.go:58`](../../internal/tool/builtin/bash_test.go#L58)
   only asserts `Run` returned within 5 s; `WaitDelay=2s` would release

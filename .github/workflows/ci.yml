@@ -1,7 +1,7 @@
 # The pull-request gate: lint, test (with the race detector) and a
-# cross-compilation matrix of every release target. Tests run on Linux
-# only; the other targets are checked by building them, and by the
-# Raspberry Pi acceptance run before a release.
+# cross-compilation matrix of every release target. The full suite runs on
+# Linux; Windows also executes the shell/process-tree regressions. Other
+# targets are checked by building them and by the Pi acceptance run.
 name: CI
 
 on:
@@ -56,6 +56,18 @@ jobs:
       - run: go test -race -coverprofile=coverage.out ./...
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -n 1
+
+  windows-shell:
+    name: Windows shell and process trees
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test Windows shell and process-tree lifetime
+        run: go test -race -count=1 -timeout=3m -run 'Test(WindowsBash|Bash|Run)' ./internal/tool/builtin ./internal/processtree
 
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}

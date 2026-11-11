@@ -197,6 +197,11 @@ note pointing at `-p`.
 ### Run modes
 
 `hint` can edit files in the working directory and run shell commands.
+The `bash` tool uses bash (or sh as a fallback) on Linux and macOS, and `cmd.exe /D /S /C` on Windows.
+On Windows, write commands in `cmd.exe` syntax; POSIX shell syntax is not translated.
+Timeouts and cancellation terminate the command's process tree.
+Windows also terminates remaining background processes when the command finishes, so use a separate terminal for a persistent server.
+
 What it may do without asking is a per-run choice:
 
 ```bash
@@ -727,6 +732,10 @@ your convenience.
 
 The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+
+**Fixed on `develop`, not in a release yet.** Windows shell quoting and cancellation were broken in `v0.4.0`: a command with quotes, such as `go test -run "TestX"`, could be misquoted, and canceling a command could leave its child processes running.
+`bash` now passes the command line to `cmd.exe /D /S /C` itself and supervises the process tree with a Job Object, and CI runs the Windows shell and process-tree tests.
+Present since `v0.2.0-alpha`.
 
 **Fixed on `develop`, not in a release yet.** A session file could become
 unreadable when `hint` was interrupted at the exact end of a write: a
