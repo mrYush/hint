@@ -873,7 +873,7 @@ overview:
 			"HINT_OVERVIEW_ENTRIES":   "50",
 			"HINT_CONTEXT_WINDOW":     "16000",
 		})
-		opts.Flags = Flags{InstructionBudget: "3000", ContextWindow: "32000"}
+		opts.Flags = Flags{InstructionBudget: intPtr(3000), ContextWindow: intPtr(32000)}
 		cfg, err := LoadFrom(opts)
 		if err != nil {
 			t.Fatalf("LoadFrom: %v", err)
@@ -900,7 +900,7 @@ overview:
 			t.Errorf("bad env changed the limits: %+v / %+v", cfg.Instructions, cfg.Overview)
 		}
 
-		for _, flags := range []Flags{{OverviewDepth: "deep"}, {OverviewDepth: "-1"}, {InstructionBudget: "0"}, {ContextWindow: "-1"}} {
+		for _, flags := range []Flags{{OverviewDepth: intPtr(-1)}, {InstructionBudget: intPtr(0)}, {ContextWindow: intPtr(-1)}} {
 			opts.LookupEnv = lookup(nil)
 			opts.Flags = flags
 			if _, err := LoadFrom(opts); err == nil {
@@ -1237,4 +1237,26 @@ func TestTypedProfileErrors(t *testing.T) {
  _, err = cfg.Profile("missing")
  if !errors.Is(err, ErrUnknownProfile) { t.Fatalf("Profile error = %v", err) }
  if !errors.As(err, &ve) || ve.Key != "providers" { t.Fatalf("Profile validation = %v", err) }
+}
+
+func intPtr(v int) *int { return &v }
+func boolPtr(v bool) *bool { return &v }
+
+func TestExplicitTypedFlagOverrides(t *testing.T) {
+ opts := dirs(t)
+ writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: local
+    kind: ollama
+    model: qwen
+overview:
+  depth: 3
+instructions:
+  summarize: true
+`)
+ opts.Flags = Flags{OverviewDepth: intPtr(0), SummarizeInstructions: boolPtr(false)}
+ cfg, err := LoadFrom(opts)
+ if err != nil { t.Fatal(err) }
+ if cfg.Overview.Depth != 0 { t.Errorf("explicit depth 0 became %d", cfg.Overview.Depth) }
+ if cfg.Instructions.Summarize { t.Error("explicit false did not override file true") }
 }
