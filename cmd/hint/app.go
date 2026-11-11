@@ -33,6 +33,7 @@ const connectAuto = "auto"
 // is in this process unless --connect names a running `hint serve`;
 // either way the shell only ever speaks the RPC protocol to it.
 func run(ctx context.Context, opts options, inv invocation, sio stdio) error {
+ if err := opts.env.validate(); err != nil { return fmt.Errorf("run environment: %w", err) }
 	var a *app
 	var err error
 	if opts.connect != "" {
