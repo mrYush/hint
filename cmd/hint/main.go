@@ -116,6 +116,8 @@ func newRootCommand() *cobra.Command {
 	var sessionID, prompt, output, rpcMode, connect string
 	var debug, tuiMode, plain bool
 	var indexMaxBytes int64
+	var contextWindow, instructionBudget, overviewDepth, overviewEntries int
+	var summarizeInstructions bool
 
 	rootCmd := &cobra.Command{
 		Use:     "hint [flags] [-p \"question\"]",
@@ -246,16 +248,26 @@ keeps the line REPL.`,
 	pf.StringVar(&flags.APIURL, "api-url", "", "Base URL of the provider API (overrides the selected profile)")
 	pf.StringVar(&flags.APIKey, "api-key", "", "API key (overrides the selected profile)")
 	pf.StringVar(&flags.Model, "model", "", "Model name (overrides the selected profile)")
-	pf.StringVar(&flags.ContextWindow, "context-window", "", "Context window of the model in tokens (overrides the selected profile)")
-	pf.StringVar(&flags.InstructionBudget, "instruction-budget", "", "Bytes all HINT.md-style instruction files may take together (default 32768)")
-	pf.StringVar(&flags.OverviewDepth, "overview-depth", "", "Directory levels listed in the system prompt; 0 for none (default 2)")
-	pf.StringVar(&flags.OverviewEntries, "overview-entries", "", "Cap on the entries listed in the system prompt (default 100)")
-	pf.StringVar(&flags.SummarizeInstructions, "summarize-instructions", "", "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
+	pf.IntVar(&contextWindow, "context-window", 0, "Context window of the model in tokens (overrides the selected profile)")
+	pf.IntVar(&instructionBudget, "instruction-budget", 0, "Bytes all HINT.md-style instruction files may take together (default 32768)")
+	pf.IntVar(&overviewDepth, "overview-depth", 0, "Directory levels listed in the system prompt; 0 for none (default 2)")
+	pf.IntVar(&overviewEntries, "overview-entries", 0, "Cap on the entries listed in the system prompt (default 100)")
+	pf.BoolVar(&summarizeInstructions, "summarize-instructions", false, "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
 	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	// A bare --summarize-instructions means true; =false still turns a
 	// config file's setting off for one run.
-	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
+
+	// Cobra parses typed values; Changed preserves explicit 0 and false.
+	// The persistent hook also applies to subcommands sharing config.Flags.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if pf.Changed("context-window") { flags.ContextWindow = &contextWindow }
+		if pf.Changed("instruction-budget") { flags.InstructionBudget = &instructionBudget }
+		if pf.Changed("overview-depth") { flags.OverviewDepth = &overviewDepth }
+		if pf.Changed("overview-entries") { flags.OverviewEntries = &overviewEntries }
+		if pf.Changed("summarize-instructions") { flags.SummarizeInstructions = &summarizeInstructions }
+		return nil
+	}
 
 	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags, &indexMaxBytes), newSetupCommand(&flags), newConfigCommand(&flags), newMCPCommand(&flags), extractionCommand())
 	return rootCmd
