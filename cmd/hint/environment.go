@@ -3,8 +3,7 @@ package main
 import (
  "fmt"
  "os"
- "path/filepath"
- "time"
+  "time"
 )
 
 // environment contains process inputs that must be replaceable in tests.
@@ -24,9 +23,7 @@ func processEnvironment() (environment, error) {
  if err != nil || home == "" {
   // Never allow an empty home to turn session and log paths into
   // relative paths inside the current project.
-  if xdg, ok := os.LookupEnv("XDG_DATA_HOME"); !ok || !filepath.IsAbs(xdg) {
-   return environment{}, fmt.Errorf("home directory is unavailable: set HOME or an absolute XDG_DATA_HOME")
-  }
+  return environment{}, fmt.Errorf("home directory is unavailable: %w", errHomeUnavailable(err))
  }
  return environment{home:home, cwd:cwd, lookupEnv:os.LookupEnv, args:append([]string(nil),os.Args...), now:time.Now}, nil
 }
@@ -34,4 +31,9 @@ func processEnvironment() (environment, error) {
 func (e environment) lookup(name string) (string,bool) {
  if e.lookupEnv == nil { return "",false }
  return e.lookupEnv(name)
+}
+
+func errHomeUnavailable(err error) error {
+ if err != nil { return err }
+ return fmt.Errorf("no home directory configured")
 }
