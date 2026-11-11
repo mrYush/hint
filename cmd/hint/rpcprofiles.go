@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -178,19 +177,13 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 // from the live session when it is open here, else from its file. An id
 // may be a unique prefix, as for session.attach.
 func (e *rpcEngine) source(id string) ([]agentapi.Message, session.ProfileRef, error) {
-	e.mu.Lock()
-	live := e.live[id]
-	e.mu.Unlock()
-	if live != nil {
+	if live := e.liveSession(id); live != nil {
 		ref := live.Asked()
 		return live.rec.Messages(), session.ProfileRef{Name: ref.Profile, Model: ref.Model}, nil
 	}
-	sess, err := e.store.Find(e.cwd, id)
+	sess, err := e.store.Peek(e.cwd, id)
 	if err != nil {
-		if errors.Is(err, session.ErrNoSessions) || errors.Is(err, session.ErrUnknownSession) {
-			return nil, session.ProfileRef{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "session: "))
-		}
-		return nil, session.ProfileRef{}, err
+		return nil, session.ProfileRef{}, sessionLookupError(err, id)
 	}
 	defer func() { _ = sess.Close() }()
 	return sess.Messages(), sess.Profile(), nil

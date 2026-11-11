@@ -677,7 +677,9 @@ depend on them:
       travels inside its assistant message), `compaction` (checkpoint)
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
-- [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
+- ✅ Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
+- ✅ Backlog (audit 2026-09-28, S17): an open session holds an exclusive lock; a second run gets `ErrLocked` instead of interleaving records — [review](review-2026-09-28-go-practices.md#persistence-and-files) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
+- ✅ Backlog (audit 2026-09-28, S19): the golden file is loaded from a copy; `ExampleRecorder` uses a temporary directory — [review](review-2026-09-28-go-practices.md#persistence-and-files) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
@@ -729,13 +731,24 @@ depend on them:
   `DiscardPending` and a sticky terminal error included — and
   `permission.NewLinePrompter` and `session.Choose` share one instance
   built in `cmd/hint`. WP0.9's REPL takes its input through it as well.
-- **A torn tail is truncated on open, like a journal.** A crash mid-write
-  leaves a partial last line; readers ignore it with a warning, and
-  `Store.Open` truncates the file back to the last complete record
-  before appending, since the bytes can never parse and the next record
-  would otherwise garble with them. That is the only time bytes are
-  removed from a session file. `List` is read-only and skips a file it
-  cannot read, so one damaged session does not hide the others.
+- **A torn tail is truncated on open, like a journal.** A record is one
+  line that ends in a newline: the writer appends the newline in the same
+  write as the record, so an unterminated tail is an interrupted append,
+  not a committed record, whether or not its bytes parse. Readers ignore
+  it with a warning, and `Store.Open` truncates the file back to the last
+  terminated record before appending, so the next record starts a clean
+  line. That is the only time bytes are removed from a session file.
+  `List` is read-only and skips a file it cannot read, so one damaged
+  session does not hide the others.
+- **An open session holds an exclusive lock.** `Store.Open` locks a
+  sidecar file beside the session before loading it and keeps the lock
+  until `Close`, so two `hint -c` runs cannot interleave two histories;
+  the second gets `ErrLocked`, which the RPC layer reports as busy. The
+  lock is a sidecar rather than the session file because a Windows
+  byte-range lock on the session would also hide it from readers;
+  `Store.Peek` reads without locking, which is what listing and forking
+  another run's session need. `syscall.Flock` takes it on Unix and
+  `LockFileEx` on Windows, so a crashed process releases it.
 - **Forward compatibility follows the wire types' rule.** An unknown
   record kind, or a message carrying an unknown part kind
   (`agentapi.ErrUnknownKind`), is skipped with a warning the CLI prints

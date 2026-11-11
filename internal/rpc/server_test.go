@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -644,7 +643,7 @@ func (e *fakeEngine) Attach(_ context.Context, id string) (Session, error) {
 	if s := e.find(id); s != nil {
 		return s, nil
 	}
-	return nil, errors.New("no such session")
+	return nil, fmt.Errorf("%w: session %q", ErrNotFound, id)
 }
 
 type fakeSession struct {

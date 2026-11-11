@@ -198,10 +198,7 @@ func (s *rpcSession) restoreWorkspaceRef(ref session.WorkspaceRef) {
 }
 
 func (e *rpcEngine) sourceWorkspace(id string, turn int) ([]session.WorkspaceRef, error) {
-	e.mu.Lock()
-	live := e.live[id]
-	e.mu.Unlock()
-	if live != nil {
+	if live := e.liveSession(id); live != nil {
 		if !live.reposMu.TryLock() {
 			return nil, rpc.ErrBusy
 		}
@@ -211,9 +208,9 @@ func (e *rpcEngine) sourceWorkspace(id string, turn int) ([]session.WorkspaceRef
 		}
 		return session.WorkspaceHistoryForTurn(live.repoHistory, live.repoTurns, session.Turns(live.rec.Messages()), turn), nil
 	}
-	file, err := e.store.Find(e.cwd, id)
+	file, err := e.store.Peek(e.cwd, id)
 	if err != nil {
-		return nil, err
+		return nil, sessionLookupError(err, id)
 	}
 	defer func() { _ = file.Close() }()
 	return file.WorkspaceHistoryAtTurn(turn), nil
