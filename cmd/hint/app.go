@@ -135,11 +135,9 @@ func serveInProcess(ctx context.Context, eng *rpcEngine, opts options, sio stdio
 // endpoint and token are in the runtime directory, or an explicit
 // unix:/path or tcp:host:port with the token from the same directory.
 func connect(ctx context.Context, opts options, sio stdio) (*app, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
-	dir := rpc.RuntimeDir(home, os.LookupEnv)
+	home := opts.env.home
+	if home == "" { return nil, fmt.Errorf("home directory is unavailable") }
+	dir := rpc.RuntimeDir(home, opts.env.lookup)
 	var network, addr string
 	if opts.connect == connectAuto {
 		network, addr, err = rpc.ReadEndpoint(dir)
