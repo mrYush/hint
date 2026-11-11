@@ -22,8 +22,9 @@ const wireVersion = agentapi.WireVersion
 // [Session.Messages] is always the history a run should hand to the agent
 // (after its own preamble). Records are appended one per line with a
 // single write each; a complete record is never rewritten, and the only
-// bytes ever removed are a torn last line left by a crash. Close when
-// done.
+// bytes ever removed are a torn last line left by a crash. An open
+// Session holds the session's lock, so two runs cannot append to one
+// file. Close when done.
 type Session struct {
 	path    string
 	id      string
@@ -49,8 +50,11 @@ type Session struct {
 	validLen int64
 	torn     bool
 
-	f   *os.File
-	now func() time.Time
+	f *os.File
+	// lock is the open lock file whose exclusive lock this Session holds;
+	// closing it lets the next run continue the session.
+	lock *os.File
+	now  func() time.Time
 }
 
 // ID returns the session id.
@@ -173,22 +177,31 @@ func (s *Session) write(r Record) error {
 	return nil
 }
 
-// Close flushes the file to disk and closes it. The Session can still be
-// read afterwards; appending fails.
+// Close flushes the file to disk, closes it and releases the session's
+// lock. The Session can still be read afterwards; appending fails.
 func (s *Session) Close() error {
-	if s.f == nil {
+	if s.f == nil && s.lock == nil {
 		return nil
 	}
-	f := s.f
-	s.f = nil
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("session: sync %s: %w", s.path, err)
+	var errs []error
+	if f := s.f; f != nil {
+		s.f = nil
+		if err := f.Sync(); err != nil {
+			_ = f.Close()
+			errs = append(errs, fmt.Errorf("session: sync %s: %w", s.path, err))
+		} else if err := f.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("session: close %s: %w", s.path, err))
+		}
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("session: close %s: %w", s.path, err)
+	// The lock goes last: no other run may append between this one's last
+	// write and its sync.
+	if l := s.lock; l != nil {
+		s.lock = nil
+		if err := l.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("session: unlock %s: %w", s.path, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // load reads a session file into a Session without opening it for
@@ -203,7 +216,9 @@ func load(path string) (*Session, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	sess := &Session{path: path}
+	// A loaded snapshot is never appended to (f is nil), but it keeps a
+	// clock so an append fails as closed instead of dereferencing nil.
+	sess := &Session{path: path, now: time.Now}
 	r := bufio.NewReader(f)
 	for n := 1; ; n++ {
 		line, err := r.ReadBytes('\n')

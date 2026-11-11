@@ -108,6 +108,10 @@ type rpcEngine struct {
 	// listModels stands in for provider.Models in tests.
 	listModels func(context.Context, config.Profile) ([]provider.Model, error)
 
+	// attachMu serializes looking a session up and opening it, so two
+	// connections attaching one session do not open its file twice: the
+	// second open would collide with this process's own lock.
+	attachMu    sync.Mutex
 	mu          sync.Mutex
 	live        map[string]*rpcSession
 	workspace   *workspace.Registry
@@ -461,17 +465,70 @@ func (e *rpcEngine) Open(_ context.Context, opts rpc.OpenOptions) (rpc.Session, 
 }
 
 func (e *rpcEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
-	e.mu.Lock()
-	if live := e.live[id]; live != nil {
-		e.mu.Unlock()
+	if live := e.liveSession(id); live != nil {
 		return live, nil
 	}
-	e.mu.Unlock()
+	e.attachMu.Lock()
+	defer e.attachMu.Unlock()
+	if live := e.liveSession(id); live != nil {
+		return live, nil
+	}
 	sess, err := e.store.Find(e.cwd, id)
 	if err != nil {
-		return nil, err
+		// A prefix of a session this engine already holds names that
+		// session: Find tried to open its file and met this process's own
+		// lock. A lock held by another process falls through to busy.
+		if errors.Is(err, session.ErrLocked) {
+			if live := e.livePrefix(id); live != nil {
+				return live, nil
+			}
+		}
+		return nil, sessionLookupError(err, id)
 	}
 	return e.adopt(sess, sess.ID()), nil
+}
+
+// liveSession returns the live session with exactly id.
+func (e *rpcEngine) liveSession(id string) *rpcSession {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.live[id]
+}
+
+// livePrefix returns the live session id is a unique prefix of, or nil.
+// A file lookup has already resolved the prefix to one file before this
+// runs, so a second match would mean the two disagree; nil then lets the
+// caller report the lookup's own result.
+func (e *rpcEngine) livePrefix(id string) *rpcSession {
+	if id == "" {
+		return nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var match *rpcSession
+	for full, live := range e.live {
+		if !strings.HasPrefix(full, id) {
+			continue
+		}
+		if match != nil {
+			return nil
+		}
+		match = live
+	}
+	return match
+}
+
+// sessionLookupError maps the store's errors onto the engine's: a missing
+// session is not found, and one another hint process records is busy.
+func sessionLookupError(err error, id string) error {
+	switch {
+	case errors.Is(err, session.ErrLocked):
+		return fmt.Errorf("%w: session %s is open in another hint process", rpc.ErrBusy, id)
+	case errors.Is(err, session.ErrNoSessions), errors.Is(err, session.ErrUnknownSession):
+		return fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "session: "))
+	default:
+		return err
+	}
 }
 
 // adopt registers sess under id, or returns the session already

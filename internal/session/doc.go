@@ -37,7 +37,10 @@
 // mid-write, not a committed record. A reader ignores it with a warning,
 // since every record before it is complete on its own, and opening the
 // file for appending truncates it away first, the way a journal discards
-// a torn tail, so the next record starts a clean line.
+// a torn tail, so the next record starts a clean line. While a session is
+// open for appending, an empty `<file>.lock` beside it carries the lock
+// that keeps a second run out; it is not part of the format, and a
+// listing of sessions ignores it.
 //
 // The layout — header line, typed entries, a retained tail on compaction —
 // is reduced to what a linear conversation needs: no entry ids or branching.

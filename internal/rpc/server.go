@@ -343,7 +343,7 @@ func (c *conn) sessionAttach(req request) {
 	}
 	sess, err := c.srv.Engine.Attach(c.ctx, p.ID)
 	if err != nil {
-		_ = c.writeError(req.ID, errCode(CodeNotFound, "%v", err))
+		_ = c.writeError(req.ID, engineError(err))
 		return
 	}
 	sess = c.srv.hold(sess)
