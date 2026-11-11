@@ -1,6 +1,6 @@
 // Package debuglog writes the --debug trace: the requests and responses
 // of a run, the tool calls it made and the failures it met, to one file
-// per run under the state directory. Every line passes through
+// per run under the state directory. Traces are retained for seven days.\n// They contain full prompts, responses, tool calls, and project-file content.\n// Every line passes through
 // [config.Redact] on its way to the disk, so a configured API key cannot
 // reach the file even when a caller forgets to mask it — the client's own
 // masking of its key is the first layer, this writer the last.
@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mrYush/hint/internal/config"
@@ -53,6 +54,7 @@ func Open(dir string, now time.Time, secrets []string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("debuglog: %w", err)
 	}
+	if err := prune(dir, now); err != nil { return nil, fmt.Errorf("debuglog: prune: %w", err) }
 	path := filepath.Join(dir, fmt.Sprintf("%s-%d.log", now.Format("20060102-150405"), os.Getpid()))
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -98,4 +100,28 @@ func (r redactor) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return len(p), nil
+}
+
+// retentionDays limits exposure of prompt, response and project-file content
+// written to debug traces. Only Hint's timestamped .log files are pruned.
+const retentionDays = 7
+
+func prune(dir string, now time.Time) error {
+ entries, err := os.ReadDir(dir)
+ if err != nil { return err }
+ cutoff := now.AddDate(0, 0, -retentionDays)
+ for _, entry := range entries {
+  if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") { continue }
+  name := entry.Name()
+  if len(name) < len("20060102-150405-1.log") { continue }
+  stamp, err := time.ParseInLocation("20060102-150405", name[:15], now.Location())
+  if err != nil || name[15] != '-' { continue }
+  pid := strings.TrimSuffix(name[16:], ".log")
+  if pid == "" { continue }
+  valid := true
+  for _, c := range pid { if c < '0' || c > '9' { valid = false; break } }
+  if !valid || !stamp.Before(cutoff) { continue }
+  if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) { return err }
+ }
+ return nil
 }
