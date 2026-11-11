@@ -141,11 +141,13 @@ func numberLines(ctx context.Context, r io.Reader, offset, limit int) (text stri
 	var b strings.Builder
 	for sc.Scan() {
 		total++
-		if total < offset || shown >= limit {
-			continue
-		}
+		// Check before the window test: counting past offset and limit to
+		// report the total must still stop when the caller cancels.
 		if total%1000 == 0 && ctx.Err() != nil {
 			return "", 0, 0, ctx.Err()
+		}
+		if total < offset || shown >= limit {
+			continue
 		}
 		line := strings.TrimSuffix(sc.Text(), "\r")
 		if len(line) > maxLineLength {

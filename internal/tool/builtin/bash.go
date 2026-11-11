@@ -30,6 +30,11 @@ const bashDescription = `Run a shell command in the working directory and return
 
 Use it to build, test, run linters, inspect git, or anything else the other tools do not cover; prefer read_file, list_dir, glob and grep for reading and searching files. The command runs non-interactively with no stdin, in a fresh shell each call (state such as cd or exported variables does not persist). stdout and stderr are returned separately, followed by the exit code when it is not zero. The default timeout is 60 seconds; pass timeout (in seconds, up to 600) for longer builds. Output is truncated in the middle when very long.`
 
+// errBashTimeout marks the deadline bash sets from the call's own timeout
+// argument, so a deadline inherited from the caller is not reported as the
+// command's timeout.
+var errBashTimeout = errors.New("bash: own timeout")
+
 type bashArgs struct {
 	Command string   `json:"command" jsonschema_description:"The shell command to run"`
 	Timeout tool.Int `json:"timeout,omitempty" jsonschema_description:"Timeout in seconds (default 60, maximum 600)"`
@@ -108,7 +113,7 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 	}
 	timeout = min(timeout, maxBashTimeout)
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, timeout, errBashTimeout)
 	defer cancel()
 
 	cmd, err := shellCommand(ctx, in.Command)
@@ -155,7 +160,7 @@ func (t *bash) Run(ctx context.Context, callID string, args json.RawMessage) (ag
 			text = "(no output)"
 		}
 		return agentapi.TextResult(callID, bashName, text), nil
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+	case errors.Is(context.Cause(ctx), errBashTimeout):
 		return agentapi.ErrorResult(callID, bashName, note(fmt.Sprintf("[timed out after %s; process killed]", timeout))), nil
 	case ctx.Err() != nil:
 		return agentapi.ErrorResult(callID, bashName, note("[canceled]")), nil

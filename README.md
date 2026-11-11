@@ -733,8 +733,9 @@ Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs
    the exact end of a write; the next `hint -c` then fails to open it.
    Start a new session; the old file can be repaired by adding a newline
    after the last complete line.
-2. `write_file` on a file `hint` cannot read shows the overwrite prompt
-   as "too large to diff" instead of the read error.
+
+**Fixed on `develop`, not in a release yet.** `write_file` on a file `hint` cannot read showed the overwrite prompt as "too large to diff" instead of the read error.
+Present since `v0.2.0-alpha`.
 
 **Fixed in `v0.4.0`.** `grep` on a single file with more than 200 matches returned the walk's internal stop sentinel (`hay.txt: skip everything and stop the walk`) as a tool error instead of the first 200 matches.
 Present since `v0.2.0-alpha`.

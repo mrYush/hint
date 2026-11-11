@@ -18,6 +18,15 @@ import (
 // search/replace edit should be applied to blindly.
 const maxEditSize = 10 << 20
 
+// errTooLarge reports a file above the size a whole-file edit may load.
+// Callers that can still preview an overwrite check for it with errors.Is
+// instead of guessing from the returned FileInfo.
+var errTooLarge = errors.New("file is too large to edit")
+
+// errIsDirectory reports a path that names a directory where a file was
+// expected.
+var errIsDirectory = errors.New("is a directory")
+
 // binaryProbe is how many leading bytes are inspected for a NUL byte to
 // classify a file as binary — the heuristic git and grep use.
 const binaryProbe = 8192
@@ -147,10 +156,10 @@ func readWhole(root tool.Root, abs string, limit int64) ([]byte, os.FileInfo, er
 		return nil, nil, err
 	}
 	if info.IsDir() {
-		return nil, info, fmt.Errorf("is a directory")
+		return nil, info, errIsDirectory
 	}
 	if info.Size() > limit {
-		return nil, info, fmt.Errorf("file is too large (%d bytes, limit %d)", info.Size(), limit)
+		return nil, info, fmt.Errorf("%w (%d bytes, limit %d)", errTooLarge, info.Size(), limit)
 	}
 	data, err := root.ReadFile(abs)
 	if err != nil {

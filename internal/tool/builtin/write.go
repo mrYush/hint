@@ -106,7 +106,7 @@ func (t *writeFile) Describe(_ context.Context, args json.RawMessage) (tool.Desc
 			Detail:  diff.Unified(rel, "", in.Content),
 			Path:    rel,
 		}, nil
-	case err != nil && info != nil && !info.IsDir():
+	case errors.Is(err, errTooLarge):
 		// Too large to diff: still a legitimate overwrite to confirm.
 		return tool.Description{
 			Summary: fmt.Sprintf("overwrite %s (%d bytes, was %d; too large to diff)", rel, len(in.Content), info.Size()),

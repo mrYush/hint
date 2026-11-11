@@ -94,6 +94,37 @@ func TestGrep_CapsMatches(t *testing.T) {
 	}
 }
 
+func TestGrep_ReportsLineTooLongToScan(t *testing.T) {
+	long := "needle " + strings.Repeat("x", 2<<20) + "\n"
+	root := newRoot(t, map[string]string{
+		"huge.txt": long,
+		"a.go":     "needle here\n",
+	})
+	got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep("")), `{"pattern":"needle"}`))
+	if !strings.Contains(got, "some matches may be missing") {
+		t.Fatalf("truncation note missing: %q", got)
+	}
+	if !strings.Contains(got, "a.go:1: needle here") {
+		t.Fatalf("other files were not searched: %q", got)
+	}
+}
+
+func TestGrep_RipgrepReportsLineTooLongToScan(t *testing.T) {
+	rg := ripgrep(t)
+	long := "needle " + strings.Repeat("x", 5<<20) + "\n"
+	root := newRoot(t, map[string]string{
+		"huge.txt": long,
+		"a.go":     "needle here\n",
+	})
+	got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep(rg)), `{"pattern":"needle"}`))
+	if !strings.Contains(got, "some matches may be missing") {
+		t.Fatalf("truncation note missing: %q", got)
+	}
+	if !strings.Contains(got, "a.go:1: needle here") {
+		t.Fatalf("matches from other files were dropped: %q", got)
+	}
+}
+
 func TestGrep_TruncatesLineOnRuneBoundary(t *testing.T) {
 	long := "needle " + strings.Repeat("Привет", 200)
 	root := newRoot(t, map[string]string{"a.txt": long + "\n"})

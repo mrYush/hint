@@ -30,6 +30,18 @@ const (
 	maxGrepLine = 500
 )
 
+// grepTruncatedNote tells the model that a search ended early because a
+// line did not fit a reader's buffer.
+const grepTruncatedNote = "(some matches may be missing: a line is longer than the read limit)"
+
+// grepResult is what one search found, plus whether a line stopped the
+// scan: a reader that runs out of buffer before the end of a line cannot
+// know what follows it.
+type grepResult struct {
+	matches   []grepMatch
+	truncated bool
+}
+
 const grepDescription = `Search file contents under the working directory for a regular expression. Returns "path:line: text" for each matching line.
 
 Use it to find where something is defined or used before reading the file. The pattern is a regular expression (RE2 syntax: no backreferences or lookaround); set literal to true to search for the text as-is. Restrict the search with path (a file or directory) and include (a file-name glob such as "*.go"). Hidden files, dependency directories, binary files and, inside a git repository, anything .gitignore excludes are skipped. Results are cut at 200 matches.`
@@ -102,14 +114,14 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		return agentapi.ErrorResult(callID, grepName, pathError(t.root, target, err)), nil
 	}
 
-	var matches []grepMatch
+	var found grepResult
 	if t.rg != "" {
-		matches, err = t.grepRipgrep(ctx, target, in)
+		found, err = t.grepRipgrep(ctx, target, in)
 	}
 	if t.rg == "" || err != nil {
 		// See listDir.Run for why a git failure is not reported here.
 		ig, _ := t.rules.Ignorer(ctx, target)
-		matches, err = grepWalk(ctx, t.root, target, re, include, ig)
+		found, err = grepWalk(ctx, t.root, target, re, include, ig)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -118,11 +130,16 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		return agentapi.ErrorResult(callID, grepName, pathError(t.root, target, err)), nil
 	}
 
+	matches := found.matches
 	if len(matches) == 0 {
-		return agentapi.TextResult(callID, grepName, "No matches found"), nil
+		text := "No matches found"
+		if found.truncated {
+			text += "\n" + grepTruncatedNote
+		}
+		return agentapi.TextResult(callID, grepName, text), nil
 	}
-	truncated := len(matches) > maxGrepMatches
-	if truncated {
+	capped := len(matches) > maxGrepMatches
+	if capped {
 		matches = matches[:maxGrepMatches]
 	}
 	var b strings.Builder
@@ -133,8 +150,11 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 		}
 		fmt.Fprintf(&b, "%s:%d: %s\n", t.root.Rel(m.path), m.line, line)
 	}
-	if truncated {
+	if capped {
 		fmt.Fprintf(&b, "\n(showing the first %d matches; narrow the pattern, path or include to see others)", maxGrepMatches)
+	}
+	if found.truncated {
+		b.WriteString("\n" + grepTruncatedNote)
 	}
 	return agentapi.TextResult(callID, grepName, strings.TrimRight(b.String(), "\n")), nil
 }
@@ -148,7 +168,7 @@ func (t *grepTool) Run(ctx context.Context, callID string, args json.RawMessage)
 // to rg's cwd: this is what makes `include: "cmd/**/*.go"` mean the same
 // thing here as in the pure-Go walk, which matches it against the path
 // relative to the root.
-func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) ([]grepMatch, error) {
+func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) (grepResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -170,10 +190,10 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return grepResult{}, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return grepResult{}, err
 	}
 
 	var matches []grepMatch
@@ -194,25 +214,36 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 		}
 		matches = append(matches, boundedGrepMatch(filepath.Join(t.root.Dir(), path), line, text))
 	}
-	if len(matches) > maxGrepMatches {
-		cancel() // enough; stop rg early
+	capped := len(matches) > maxGrepMatches
+	scanErr := sc.Err()
+	if capped || scanErr != nil {
+		cancel() // enough, or the scan cannot continue
 	}
 	_, _ = io.Copy(io.Discard, stdout)
 
 	if err := cmd.Wait(); err != nil {
 		var exit *exec.ExitError
 		switch {
-		case len(matches) > maxGrepMatches:
+		case capped:
 			// Killed by us after the cap; the matches gathered are valid.
+		case scanErr != nil:
+			// The scan stopped before the exit status could mean anything.
+			return grepResult{}, fmt.Errorf("rg: %w", scanErr)
 		case errors.As(err, &exit) && exit.ExitCode() == 1:
-			return nil, nil // no matches
+			return grepResult{}, nil // no matches
 		case errors.As(err, &exit) && exit.ExitCode() == 2:
-			return nil, fmt.Errorf("rg: %s", strings.TrimSpace(stderr.String()))
+			return grepResult{}, fmt.Errorf("rg: %s", strings.TrimSpace(stderr.String()))
 		default:
-			return nil, fmt.Errorf("rg: %w", err)
+			return grepResult{}, fmt.Errorf("rg: %w", err)
 		}
 	}
-	return matches, nil
+	if scanErr != nil && !capped {
+		// A line longer than the scanner's buffer, or a read error: the
+		// caller retries with the pure-Go walk, which flags the truncation
+		// instead of losing the tail of the output.
+		return grepResult{}, fmt.Errorf("rg: %w", scanErr)
+	}
+	return grepResult{matches: matches}, nil
 }
 
 // grepWalk is the pure-Go search: walk target (or read it, if a file), skip
@@ -220,21 +251,22 @@ func (t *grepTool) grepRipgrep(ctx context.Context, target string, in grepArgs) 
 // matched against the path relative to the root, so a slash-free pattern
 // selects by file name anywhere and a path pattern is anchored to the
 // working directory — the same reading ripgrep gives it.
-func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *glob.Matcher, ig project.Ignorer) ([]grepMatch, error) {
-	var matches []grepMatch
+func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Regexp, include *glob.Matcher, ig project.Ignorer) (grepResult, error) {
+	var res grepResult
 	visit := func(path string) error {
 		if include != nil && !include.Match(filepath.ToSlash(root.Rel(path))) {
 			return nil
 		}
-		found, err := grepFile(ctx, root, path, re, maxGrepMatches+1-len(matches))
+		found, truncated, err := grepFile(ctx, root, path, re, maxGrepMatches+1-len(res.matches))
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			return nil //nolint:nilerr // unreadable or binary: skip the file, keep searching
 		}
-		matches = append(matches, found...)
-		if len(matches) > maxGrepMatches {
+		res.truncated = res.truncated || truncated
+		res.matches = append(res.matches, found...)
+		if len(res.matches) > maxGrepMatches {
 			return filepath.SkipAll
 		}
 		return nil
@@ -242,14 +274,14 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 
 	info, err := root.Stat(target)
 	if err != nil {
-		return nil, err
+		return grepResult{}, err
 	}
 	if !info.IsDir() {
 		err := visit(target)
 		if errors.Is(err, filepath.SkipAll) {
 			err = nil
 		}
-		return matches, err
+		return res, err
 	}
 	err = root.WalkDirBatch(target, func(parent string, entries []fs.DirEntry) error {
 		return project.PrepareIgnore(ig, relSlash(target, parent), entries)
@@ -278,22 +310,23 @@ func grepWalk(ctx context.Context, root tool.Root, target string, re *regexp.Reg
 	if err == nil {
 		err = project.IgnoreError(ig)
 	}
-	return matches, err
+	return res, err
 }
 
 // grepFile returns up to limit matching lines of one file, or an error for
-// a binary or unreadable one.
-func grepFile(ctx context.Context, root tool.Root, path string, re *regexp.Regexp, limit int) ([]grepMatch, error) {
+// a binary or unreadable one. truncated is true when a line was longer
+// than the scanner's buffer, so the file was not searched to its end.
+func grepFile(ctx context.Context, root tool.Root, path string, re *regexp.Regexp, limit int) ([]grepMatch, bool, error) {
 	f, err := root.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = f.Close() }()
 	if bin, err := isBinary(f); err != nil || bin {
-		return nil, errors.New("binary")
+		return nil, false, errors.New("binary")
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	var out []grepMatch
@@ -302,17 +335,20 @@ func grepFile(ctx context.Context, root tool.Root, path string, re *regexp.Regex
 	line := 0
 	for sc.Scan() && len(out) < limit {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		line++
 		if re.Match(sc.Bytes()) {
 			out = append(out, boundedGrepMatch(path, line, strings.TrimRight(sc.Text(), "\r")))
 		}
 	}
-	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
-		return nil, err
+	if err := sc.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return out, true, nil
+		}
+		return nil, false, err
 	}
-	return out, nil
+	return out, false, nil
 }
 
 func boundedGrepMatch(path string, line int, content string) grepMatch {
