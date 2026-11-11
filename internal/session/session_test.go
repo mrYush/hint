@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -133,8 +134,17 @@ func TestGoldenFormat(t *testing.T) {
 	}
 
 	// The committed file, not the one just written, is what a user's disk
-	// holds: load that.
-	loaded, err := store.Open(goldenPath)
+	// holds: load that. Copy it first, so the test never writes in
+	// testdata: it may be a read-only module cache.
+	committed, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("reading golden file (run with -update to create it): %v", err)
+	}
+	committedCopy := filepath.Join(t.TempDir(), "golden_v1.jsonl")
+	if err := os.WriteFile(committedCopy, committed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Open(committedCopy)
 	if err != nil {
 		t.Fatalf("Open golden: %v", err)
 	}
@@ -694,9 +704,16 @@ func TestAge(t *testing.T) {
 // user message through the Recorder, send the run's preamble followed by
 // the Recorder's conversation, then feed the agent's events back to it.
 func ExampleRecorder() {
-	store := session.NewStore(os.TempDir(), session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
-	sess, _ := store.Create("/p")
-	defer func() { _ = os.Remove(sess.Path()) }()
+	dir, err := os.MkdirTemp("", "hint-session-")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	store := session.NewStore(dir, session.WithClock(fixedClock()), session.WithIDs(fixedIDs("example")))
+	sess, err := store.Create("/p")
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer func() { _ = sess.Close() }()
 
 	preamble := []agentapi.Message{agentapi.SystemMessage("system prompt")}

@@ -625,6 +625,7 @@ depend on them:
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
 - ✅ Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
+- ✅ Backlog (audit 2026-09-28, S19): the golden file is loaded from a copy; `ExampleRecorder` uses a temporary directory — [review](review-2026-09-28-go-practices.md#persistence-and-files) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
