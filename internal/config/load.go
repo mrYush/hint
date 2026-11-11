@@ -88,7 +88,7 @@ func processOptions(flags Flags) (Options, error) {
 	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return Options{}, fmt.Errorf("config: resolving working directory: %w", err)
+		return Options{}, fmt.Errorf("resolving working directory: %w", err)
 	}
 	return Options{
 		HomeDir:    home,
@@ -452,19 +452,19 @@ func (l *loader) readFile(path string) (fileConfig, bool, error) {
 		return fileConfig{}, false, nil
 	}
 	if err != nil {
-		return fileConfig{}, false, fmt.Errorf("config: reading %s: %w", path, err)
+		return fileConfig{}, false, fmt.Errorf("reading %s: %w", path, err)
 	}
 	var fc fileConfig
 	if err := yaml.Unmarshal(data, &fc); err != nil {
-		return fileConfig{}, false, fmt.Errorf("config: parsing %s: %w", path, err)
+		return fileConfig{}, false, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	seen := make(map[string]struct{}, len(fc.Providers))
 	for _, p := range fc.Providers {
 		if p.Name == "" {
-			return fileConfig{}, false, fmt.Errorf("config: %s: provider profile without a name", path)
+			return fileConfig{}, false, fmt.Errorf("%s: provider profile without a name", path)
 		}
 		if _, dup := seen[p.Name]; dup {
-			return fileConfig{}, false, fmt.Errorf("config: %s: duplicate provider profile %q", path, p.Name)
+			return fileConfig{}, false, fmt.Errorf("%s: duplicate provider profile %q", path, p.Name)
 		}
 		seen[p.Name] = struct{}{}
 	}
@@ -917,7 +917,7 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 		cfg.SecretStore.Store = StoreAuto
 	case StoreAuto, StoreKeyring, StoreFile:
 	default:
-		return fmt.Errorf("config: secrets.store must be auto, keyring or file, not %q", cfg.SecretStore.Store)
+		return fmt.Errorf("secrets.store must be auto, keyring or file, not %q", cfg.SecretStore.Store)
 	}
 	return nil
 }
@@ -947,7 +947,7 @@ func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
 	}
 	if v := l.opts.Flags.Completion; v != "" {
 		if !validCompletionMode(v) {
-			return fmt.Errorf("config: --completion must be off, tab, idle or both, not %q", v)
+			return fmt.Errorf("--completion must be off, tab, idle or both, not %q", v)
 		}
 		c.Mode = CompletionMode(v)
 	}
@@ -955,14 +955,14 @@ func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
 	case c.Mode == "":
 		c.Mode = CompletionOff
 	case !validCompletionMode(string(c.Mode)):
-		return fmt.Errorf("config: completion.mode must be off, tab, idle or both, not %q", c.Mode)
+		return fmt.Errorf("completion.mode must be off, tab, idle or both, not %q", c.Mode)
 	}
 	if c.IdleAfter <= 0 || c.WarnAfter <= 0 {
-		return errors.New("config: completion.idle_after and completion.warn_after must be positive durations")
+		return errors.New("completion.idle_after and completion.warn_after must be positive durations")
 	}
 	if c.Profile != "" && c.Mode != CompletionOff {
 		if _, err := cfg.Usable(c.Profile, "completion"); err != nil {
-			l.warnf("completion is off: %s", strings.TrimPrefix(err.Error(), "config: "))
+			l.warnf("completion is off: %s", strings.TrimPrefix(err.Error(), ""))
 			c.Mode = CompletionOff
 		}
 	}
@@ -993,7 +993,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) err
 	if flagValue != "" {
 		b, err := strconv.ParseBool(flagValue)
 		if err != nil {
-			return fmt.Errorf("config: %s: %q is not a boolean", flagName, flagValue)
+			return fmt.Errorf("%s: %q is not a boolean", flagName, flagValue)
 		}
 		*dst = b
 	}
@@ -1008,7 +1008,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue string) err
 // is left for the defaults to fill.
 func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
-		return false, fmt.Errorf("config: %s must be at least %d, got %d", key, min, *dst)
+		return false, fmt.Errorf("%s must be at least %d, got %d", key, min, *dst)
 	}
 	if v, ok := l.env(envName); ok {
 		n, err := strconv.Atoi(v)
@@ -1024,10 +1024,10 @@ func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue string, 
 	if flagValue != "" {
 		n, err := strconv.Atoi(flagValue)
 		if err != nil {
-			return set, fmt.Errorf("config: %s: %q is not a number", flagName, flagValue)
+			return set, fmt.Errorf("%s: %q is not a number", flagName, flagValue)
 		}
 		if n < min {
-			return set, fmt.Errorf("config: %s must be at least %d, got %d", flagName, min, n)
+			return set, fmt.Errorf("%s must be at least %d, got %d", flagName, min, n)
 		}
 		*dst, set = n, true
 	}
@@ -1069,31 +1069,31 @@ func (l *loader) validate(cfg *Config) error {
 		switch p.Kind {
 		case KindOpenAI, KindOllama:
 		default:
-			return fmt.Errorf("config: profile %q: unknown kind %q (want %q or %q)", p.Name, p.Kind, KindOpenAI, KindOllama)
+			return fmt.Errorf("profile %q: unknown kind %q (want %q or %q)", p.Name, p.Kind, KindOpenAI, KindOllama)
 		}
 		if p.HeaderTimeout < 0 {
-			return fmt.Errorf("config: profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
+			return fmt.Errorf("profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
 		}
 		switch p.MaxTokensField {
 		case "", FieldMaxTokens, FieldMaxCompletionTokens:
 		default:
-			return fmt.Errorf("config: profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
+			return fmt.Errorf("profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
 		}
 	}
 	for _, s := range cfg.MCPServers {
 		if err := validateMCPServer(s); err != nil {
-			return fmt.Errorf("config: %w", err)
+			return fmt.Errorf("%w", err)
 		}
 	}
 	if cfg.DefaultProvider == "" {
-		return errors.New("config: default_provider must be set when more than one profile is defined")
+		return errors.New("default_provider must be set when more than one profile is defined")
 	}
 	if _, err := cfg.Profile(cfg.DefaultProvider); err != nil {
-		return fmt.Errorf("config: default_provider: %w", err)
+		return fmt.Errorf("default_provider: %w", err)
 	}
 	if cfg.FallbackProvider != "" {
 		if _, err := cfg.Profile(cfg.FallbackProvider); err != nil {
-			return fmt.Errorf("config: fallback_provider: %w", err)
+			return fmt.Errorf("fallback_provider: %w", err)
 		}
 		if cfg.FallbackProvider == cfg.DefaultProvider {
 			l.warnf("fallback_provider %q equals default_provider and was ignored", cfg.FallbackProvider)
