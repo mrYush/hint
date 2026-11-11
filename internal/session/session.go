@@ -41,11 +41,11 @@ type Session struct {
 	// warnings collects what load skipped or repaired, for the CLI to show.
 	warnings []string
 	// validLen is the byte length of the file up to and including the last
-	// complete record; torn is set when bytes follow it — a crash
-	// mid-write left a partial line. Open truncates the file back to
+	// newline-terminated record; torn is set when bytes follow it — a crash
+	// mid-write left an unterminated tail. Open truncates the file back to
 	// validLen before appending, the way a journal discards a torn tail:
-	// the bytes can never parse, and leaving them would make the next
-	// record garble with them.
+	// the tail is an interrupted append, and leaving it would make the next
+	// record garble with it.
 	validLen int64
 	torn     bool
 
@@ -213,17 +213,18 @@ func load(path string) (*Session, error) {
 		if len(line) == 0 && errors.Is(err, io.EOF) {
 			break
 		}
-		terminated := len(line) > 0 && line[len(line)-1] == '\n'
+		if line[len(line)-1] != '\n' {
+			// The writer puts the record and its newline in one write, so a
+			// line without one is an append a crash interrupted — never a
+			// committed record, whether or not its bytes happen to parse.
+			// Every record before it is intact on its own.
+			sess.warnings = append(sess.warnings, fmt.Sprintf("line %d is unterminated and was ignored", n))
+			sess.torn = true
+			break
+		}
 
 		var rec Record
 		if uerr := json.Unmarshal(line, &rec); uerr != nil {
-			if !terminated {
-				// A crash mid-write leaves an unfinished last line; every
-				// record before it is intact on its own.
-				sess.warnings = append(sess.warnings, fmt.Sprintf("line %d is unterminated and was ignored", n))
-				sess.torn = true
-				break
-			}
 			return nil, fmt.Errorf("session: %s line %d: %w", path, n, uerr)
 		}
 		if verr := rec.Validate(); verr != nil {
