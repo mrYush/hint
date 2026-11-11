@@ -38,7 +38,10 @@ this process's stdin. Another terminal joins with hint --connect.`,
 			if *indexMaxBytes < 512<<10 {
 				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
 			}
+			env, err := processEnvironment()
+			if err != nil { return err }
 			opts := options{
+				env: env,
 				indexMaxBytes: *indexMaxBytes,
 				flags:         *flags,
 				mode:          runMode(ask, autoEdit, yolo),
@@ -83,11 +86,8 @@ func serveListen(ctx context.Context, opts options, listen string) error {
 	defer cleanup()
 	warnYolo(opts.mode)
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
-	lis, token, err := publish(rpc.RuntimeDir(home, os.LookupEnv), listen, os.Stderr)
+	if opts.env.home == "" { return fmt.Errorf("home directory is unavailable") }
+	lis, token, err := publish(rpc.RuntimeDir(opts.env.home, opts.env.lookup), listen, os.Stderr)
 	if err != nil {
 		return err
 	}
