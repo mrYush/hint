@@ -94,3 +94,24 @@ func TestPeekReadsWhileSessionIsOpen(t *testing.T) {
 		t.Errorf("List = %d sessions, want 1: the lock file is not a session", len(infos))
 	}
 }
+
+// TestResolveFindsASessionWhileItIsOpen: resolving reads the directory
+// and the headers without taking the lock, so an attach can learn the
+// full id of a session another run holds.
+func TestResolveFindsASessionWhileItIsOpen(t *testing.T) {
+	store := newStore(t, "4444")
+	sess := writeGolden(t, store, "/p")
+	held, err := store.Open(sess.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Close() }()
+
+	info, err := store.Resolve("/p", "444")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if info.ID != "4444" || info.Path != sess.Path() {
+		t.Errorf("Resolve = %s at %s, want 4444 at %s", info.ID, info.Path, sess.Path())
+	}
+}

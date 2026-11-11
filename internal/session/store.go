@@ -256,33 +256,35 @@ func (s *Store) Latest(cwd string) (*Session, error) {
 // a prefix that names several. The message says which.
 var ErrUnknownSession = errors.New("session: no such session")
 
-// Find opens the session of cwd whose id is id, or the one id is an
-// unambiguous prefix of — the same rule the interactive picker applies to
-// a typed id. It is [ErrNoSessions] when the directory has none and
-// [ErrUnknownSession] otherwise when nothing (or more than one thing)
-// matches.
+// Find opens the session [Store.Resolve] names for appending.
 func (s *Store) Find(cwd, id string) (*Session, error) {
-	info, err := s.find(cwd, id)
+	info, err := s.Resolve(cwd, id)
 	if err != nil {
 		return nil, err
 	}
 	return s.Open(info.Path)
 }
 
-// Peek loads the session [Store.Find] would open, but for reading only:
-// it takes no lock and the returned Session cannot be appended to. A
-// session another hint process is recording can still be read, which is
-// what a fork of it needs.
+// Peek loads the session [Store.Resolve] names, but for reading only: it
+// takes no lock and the returned Session cannot be appended to. A session
+// another hint process is recording can still be read, which is what a
+// fork of it needs.
 func (s *Store) Peek(cwd, id string) (*Session, error) {
-	info, err := s.find(cwd, id)
+	info, err := s.Resolve(cwd, id)
 	if err != nil {
 		return nil, err
 	}
 	return load(info.Path)
 }
 
-// find resolves id against cwd's session files.
-func (s *Store) find(cwd, id string) (Info, error) {
+// Resolve returns the session of cwd whose id is id, or the one id is an
+// unambiguous prefix of — the same rule the interactive picker applies to
+// a typed id. It reads the directory and the session files, but opens
+// nothing for appending and takes no lock, so it resolves a session
+// another hint process is recording. It is [ErrNoSessions] when the
+// directory has none and [ErrUnknownSession] otherwise when nothing (or
+// more than one thing) matches.
+func (s *Store) Resolve(cwd, id string) (Info, error) {
 	infos, err := s.List(cwd)
 	if err != nil {
 		return Info{}, err

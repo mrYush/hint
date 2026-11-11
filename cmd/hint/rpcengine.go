@@ -473,16 +473,19 @@ func (e *rpcEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
 	if live := e.liveSession(id); live != nil {
 		return live, nil
 	}
-	sess, err := e.store.Find(e.cwd, id)
+	// Resolve picks the file without opening it. Only the live session
+	// with that exact full id answers for it: a prefix must never reach a
+	// different conversation because an ephemeral session happens to
+	// share the first characters.
+	info, err := e.store.Resolve(e.cwd, id)
 	if err != nil {
-		// A prefix of a session this engine already holds names that
-		// session: Find tried to open its file and met this process's own
-		// lock. A lock held by another process falls through to busy.
-		if errors.Is(err, session.ErrLocked) {
-			if live := e.livePrefix(id); live != nil {
-				return live, nil
-			}
-		}
+		return nil, sessionLookupError(err, id)
+	}
+	if live := e.liveSession(info.ID); live != nil {
+		return live, nil
+	}
+	sess, err := e.store.Open(info.Path)
+	if err != nil {
 		return nil, sessionLookupError(err, id)
 	}
 	return e.adopt(sess, sess.ID()), nil
@@ -493,29 +496,6 @@ func (e *rpcEngine) liveSession(id string) *rpcSession {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.live[id]
-}
-
-// livePrefix returns the live session id is a unique prefix of, or nil.
-// A file lookup has already resolved the prefix to one file before this
-// runs, so a second match would mean the two disagree; nil then lets the
-// caller report the lookup's own result.
-func (e *rpcEngine) livePrefix(id string) *rpcSession {
-	if id == "" {
-		return nil
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	var match *rpcSession
-	for full, live := range e.live {
-		if !strings.HasPrefix(full, id) {
-			continue
-		}
-		if match != nil {
-			return nil
-		}
-		match = live
-	}
-	return match
 }
 
 // sessionLookupError maps the store's errors onto the engine's: a missing
