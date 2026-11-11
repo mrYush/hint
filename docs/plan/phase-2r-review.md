@@ -60,6 +60,52 @@ The output is not a market report; it is a scored roadmap and a product definiti
 - [ ] Owner review: present the findings, the scorecard, the next two releases and the ATE definition; the owner accepts or returns them before Phase 3 starts.
 - [ ] Record the decisions and rejected alternatives in a dated review note, including what the review deliberately did not change.
 
+### WP2R.3 — Harbor benchmark integration
+
+**Branch:** `feature/harbor-adapter`
+
+[Issue #107](https://github.com/mrYush/hint/issues/107) adds a maintained Harbor adapter and a reproducible Terminal-Bench CPU-only workflow.
+This companion package supplies external evaluation evidence for WP2R.2 and keeps its fixture and scorecard scope separate.
+
+- ✅ Pin Harbor and Hint, run the production headless loop in isolated Docker trials, and preserve Harbor's verifier and task settings.
+- ✅ Record effective configuration, artifacts, ATIF, available usage and exceptions, with a deterministic tool-using Docker regression.
+- [ ] Validate real model routes within an agreed smoke budget.
+  GLM and DeepSeek gateway runs require operator-confirmed model IDs, endpoints and budget.
+- ✅ Add offline Python CI for option validation, partial log recovery, result accounting, static typing and API documentation.
+- [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
+  The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
+
+
+#### Review remediation plan (2026-11-11)
+
+The following review fixes remain in `feature/harbor-adapter` under #107.
+They implement the session-validation subset of #110 and the CI timeout subset of #113.
+
+1. ✅ F-04/F-05 — Match journal headers to stdout session IDs, reject ambiguous matches and empty successful trajectories, and retain sanitized partial evidence with explicit collection status.
+2. ✅ F-06 — Recover only an incomplete final JSON record without a line terminator, and reject complete malformed records and schema errors.
+3. ✅ F-11/S-17 — Propagate unexpected summary programming errors and require a complete SHA-256 image digest.
+4. ✅ CLI/C-06 — Explain dry-run-only route flags in CLI help and bound the Harbor CI job to 15 minutes.
+5. ✅ Validate the regressions, run repository checks and Docker fake-provider scenarios, and review the final diff.
+
+
+#### Scope exception — repomap test fixture (#116)
+
+At the owner's request, `feature/harbor-adapter` also carries the focused test fix for [#116](https://github.com/mrYush/hint/issues/116), which blocked PR #108.
+This follows the existing exception for scope discovered during review and avoids a separate branch for the small test-only correction.
+The PR description should carry this scope note when updated.
+
+- ✅ Isolate the manually driven scheduler and choose the blocked child from the exact first directory page consumed by the fixture.
+- ✅ Preserve the three-step assertion and the requirement that the parent stream remains open.
+- ✅ Verify repeated race/coverage runs, Linux execution and all repository Go checks.
+
+The original test passed 100 macOS race/coverage repetitions and 10 Linux arm64 repetitions.
+Forcing the prequeued child into the second enumeration page reproduced `state=pending` even with the background scheduler stopped.
+Rediscovery increments the queued revision, so rotating the older blocked item intentionally leaves the newer revision in place.
+The fix controls the fixture's discovery order while retaining production queue behavior.
+
+Validation passed with 100 targeted race/coverage repetitions on macOS arm64, 100 targeted Linux arm64 container repetitions, the full race/coverage suite, ordinary tests, vet, golangci-lint and Linux arm64 compilation.
+Remote CI verification remains pending publication of this correction.
+
 ## Outputs
 
 - A code and architecture findings register with dispositions and a `v0.4.1` decision.
