@@ -1211,3 +1211,30 @@ func (failingKeyring) Set(string, string) error {
 func (failingKeyring) Delete(string) error {
 	return errors.New("config: secret store: no D-Bus session")
 }
+
+func TestUnsetEnvReferenceWarningInDraft(t *testing.T) {
+ opts := dirs(t)
+ writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: p
+    kind: openai
+    api_key: ${MISSING_API_KEY}
+    model: ${MISSING_MODEL}
+`)
+ opts.Draft = true
+ cfg, err := LoadFrom(opts)
+ if err != nil { t.Fatal(err) }
+ hasWarning(t, cfg, "MISSING_API_KEY")
+ hasWarning(t, cfg, "MISSING_MODEL")
+}
+
+func TestTypedProfileErrors(t *testing.T) {
+ cfg := &Config{}
+ _, err := cfg.Default()
+ if !errors.Is(err, ErrNoProvider) { t.Fatalf("Default error = %v", err) }
+ var ve *ValidationError
+ if !errors.As(err, &ve) || ve.Key != "default_provider" { t.Fatalf("Default validation = %v", err) }
+ _, err = cfg.Profile("missing")
+ if !errors.Is(err, ErrUnknownProfile) { t.Fatalf("Profile error = %v", err) }
+ if !errors.As(err, &ve) || ve.Key != "providers" { t.Fatalf("Profile validation = %v", err) }
+}
