@@ -725,10 +725,9 @@ your convenience.
 
 ### Known issues
 
-`v0.3.2` ships with these confirmed bugs. They are backlog (decided
-2026-10-11) and did not block this patch.
-Details and the full audit:
-[`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+`v0.4.0` ships with these confirmed bugs.
+They are backlog (decided 2026-10-11) and did not block this release.
+Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
 1. **A session file can become unreadable** if `hint` is interrupted at
    the exact end of a write; the next `hint -c` then fails to open it.
