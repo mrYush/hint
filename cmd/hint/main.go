@@ -72,7 +72,9 @@ func formatVersion(version, commit, date string, info *debug.BuildInfo) string {
 }
 
 func main() {
-	root := newRootCommand()
+	env, err := processEnvironment()
+	if err != nil { fmt.Fprintln(os.Stderr, "hint:", err); os.Exit(1) }
+	root := newRootCommandWithEnvironment(env)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "hint:", err)
 		code := 1
@@ -96,6 +98,7 @@ const (
 
 // options are the choices of one invocation, as read from the flags.
 type options struct {
+	env environment
 	flags         config.Flags
 	mode          permission.Mode
 	session       sessionMode
@@ -116,6 +119,11 @@ type options struct {
 // folded into an options value inside RunE, so that the code doing the
 // work never sees cobra.
 func newRootCommand() *cobra.Command {
+	env, _ := processEnvironment()
+	return newRootCommandWithEnvironment(env)
+}
+
+func newRootCommandWithEnvironment(env environment) *cobra.Command {
 	var flags config.Flags
 	var ask, autoEdit, yolo bool
 	var continueLast, resume, noSession bool
@@ -161,6 +169,7 @@ keeps the line REPL.`,
 			}
 			opts := options{
 				indexMaxBytes: indexMaxBytes,
+				env: env,
 				flags:         flags,
 				mode:          runMode(ask, autoEdit, yolo),
 				session:       sessionModeOf(continueLast, resume, noSession, sessionID),
