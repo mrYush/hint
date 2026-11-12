@@ -19,7 +19,7 @@ import (
 // newSessionsCommand lists the recorded sessions of the working directory,
 // newest first, the way the -r picker shows them — but all of them, and
 // without asking anything.
-func newSessionsCommand() *cobra.Command {
+func newSessionsCommand(env environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "sessions",
 		Short: "List this directory's recorded sessions",
@@ -27,8 +27,9 @@ func newSessionsCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			env, err := processEnvironment()
-			if err != nil { return err }
+			if err := env.validate(); err != nil {
+				return err
+			}
 			store := session.NewStore(session.DefaultDir(env.home, env.lookup))
 			return listSessions(store, env.cwd, os.Stdout, os.Stderr)
 		},
@@ -63,7 +64,7 @@ func listSessions(store *session.Store, cwd string, out, stderr io.Writer) error
 // Ollama's installed models with their sizes, or the ids behind GET
 // /models for any other profile. --provider picks another profile, as it
 // does for a run.
-func newModelsCommand(flags *config.Flags) *cobra.Command {
+func newModelsCommand(flags *config.Flags, env environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "models",
 		Short: "List the models the selected provider profile serves",
@@ -71,10 +72,13 @@ func newModelsCommand(flags *config.Flags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
-			env, err := processEnvironment()
-			if err != nil { return err }
+			if err := env.validate(); err != nil {
+				return err
+			}
 			configOpts, err := env.configOptions(*flags, false)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			cfg, err := config.LoadFrom(configOpts)
 			if err != nil {
 				return fmt.Errorf("loading configuration: %w", err)

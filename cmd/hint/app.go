@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"time"
 
 	"github.com/mrYush/hint/internal/console"
@@ -33,7 +34,11 @@ const connectAuto = "auto"
 // is in this process unless --connect names a running `hint serve`;
 // either way the shell only ever speaks the RPC protocol to it.
 func run(ctx context.Context, opts options, inv invocation, sio stdio) error {
- if err := opts.env.validate(); err != nil { return fmt.Errorf("run environment: %w", err) }
+	if opts.connect == "" {
+		if err := opts.env.validate(); err != nil {
+			return fmt.Errorf("run environment: %w", err)
+		}
+	}
 	var a *app
 	var err error
 	if opts.connect != "" {
@@ -42,7 +47,7 @@ func run(ctx context.Context, opts options, inv invocation, sio stdio) error {
 		var eng *rpcEngine
 		var cleanup func()
 		eng, cleanup, err = newRPCEngine(ctx, opts, sio.err)
-		if err != nil && firstRunSetup(ctx, sio, err) {
+		if err != nil && firstRunSetup(ctx, sio, err, opts.env) {
 			eng, cleanup, err = newRPCEngine(ctx, opts, sio.err)
 		}
 		if err != nil {
@@ -135,10 +140,12 @@ func serveInProcess(ctx context.Context, eng *rpcEngine, opts options, sio stdio
 // endpoint and token are in the runtime directory, or an explicit
 // unix:/path or tcp:host:port with the token from the same directory.
 func connect(ctx context.Context, opts options, sio stdio) (*app, error) {
-	home := opts.env.home
-	if home == "" { return nil, fmt.Errorf("home directory is unavailable") }
-	dir := rpc.RuntimeDir(home, opts.env.lookup)
+	dir := rpc.RuntimeDir(opts.env.home, opts.env.lookup)
+	if !filepath.IsAbs(dir) {
+		return nil, fmt.Errorf("runtime directory must be absolute")
+	}
 	var network, addr string
+	var err error
 	if opts.connect == connectAuto {
 		network, addr, err = rpc.ReadEndpoint(dir)
 		if err != nil {
@@ -186,7 +193,7 @@ func newApp(ctx context.Context, cl *rpc.Client, opts options, sio stdio) (*app,
 	// The TUI has a session list of its own, so -r is not asked on the
 	// line reader; the shell starts in that list instead.
 	if !opts.tui || opts.session != sessionResume {
-		view, recorded, err := openSession(ctx, cl, opts.session, opts.sessionID, lines, sio.err)
+		view, recorded, err := openSession(ctx, cl, opts.session, opts.sessionID, lines, sio.err, opts.env.now)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +221,7 @@ func (a *app) close() {
 // warnings after it; a directory with nothing to continue falls back to a
 // new session rather than refusing to run — except for --session, which
 // names one and is refused when it is not there.
-func openSession(ctx context.Context, cl *rpc.Client, smode sessionMode, id string, lines *console.LineReader, stderr io.Writer) (rpc.SessionView, bool, error) {
+func openSession(ctx context.Context, cl *rpc.Client, smode sessionMode, id string, lines *console.LineReader, stderr io.Writer, now func() time.Time) (rpc.SessionView, bool, error) {
 	switch smode {
 	case sessionOff:
 		view, err := cl.OpenSession(ctx, rpc.OpenOptions{Ephemeral: true})
@@ -232,7 +239,7 @@ func openSession(ctx context.Context, cl *rpc.Client, smode sessionMode, id stri
 			view, err := cl.OpenSession(ctx, rpc.OpenOptions{})
 			return view, true, err
 		}
-		return attach(ctx, cl, infos[0].ID, stderr)
+		return attach(ctx, cl, infos[0].ID, stderr, now)
 	case sessionResume:
 		infos, err := cl.ListSessions(ctx)
 		if err != nil {
@@ -247,9 +254,9 @@ func openSession(ctx context.Context, cl *rpc.Client, smode sessionMode, id stri
 		if err != nil {
 			return rpc.SessionView{}, false, err
 		}
-		return attach(ctx, cl, choice.ID, stderr)
+		return attach(ctx, cl, choice.ID, stderr, now)
 	case sessionByID:
-		view, recorded, err := attach(ctx, cl, id, stderr)
+		view, recorded, err := attach(ctx, cl, id, stderr, now)
 		var rpcErr *rpc.Error
 		if errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
 			if infos, lerr := cl.ListSessions(ctx); lerr == nil && len(infos) == 0 {
@@ -263,19 +270,19 @@ func openSession(ctx context.Context, cl *rpc.Client, smode sessionMode, id stri
 }
 
 // attach continues the session id names and announces it.
-func attach(ctx context.Context, cl *rpc.Client, id string, stderr io.Writer) (rpc.SessionView, bool, error) {
+func attach(ctx context.Context, cl *rpc.Client, id string, stderr io.Writer, now func() time.Time) (rpc.SessionView, bool, error) {
 	view, err := cl.AttachSession(ctx, id)
 	if err != nil {
 		return rpc.SessionView{}, false, err
 	}
-	announce(stderr, view)
+	announce(stderr, view, now())
 	return view, true, nil
 }
 
 // announce says which session a run continues.
-func announce(stderr io.Writer, view rpc.SessionView) {
+func announce(stderr io.Writer, view rpc.SessionView, now time.Time) {
 	fmt.Fprintf(stderr, "hint: continuing session %s (%d messages, started %s)\n",
-		view.ID, len(view.Messages), session.Age(view.Created, time.Now()))
+		view.ID, len(view.Messages), session.Age(view.Created, now))
 	for _, w := range view.Warnings {
 		fmt.Fprintf(stderr, "hint: warning: session %s: %s\n", view.ID, w)
 	}

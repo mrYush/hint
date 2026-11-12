@@ -1,6 +1,9 @@
 // Package debuglog writes the --debug trace: the requests and responses
 // of a run, the tool calls it made and the failures it met, to one file
-// per run under the state directory. Traces are retained for seven days.\n// They contain full prompts, responses, tool calls, and project-file content.\n// Every line passes through
+// per run under the state directory. Traces are pruned when older than
+// seven days and unmodified for seven days.
+// They contain full prompts, responses, tool calls, and project-file content.
+// Every line passes through
 // [config.Redact] on its way to the disk, so a configured API key cannot
 // reach the file even when a caller forgets to mask it — the client's own
 // masking of its key is the first layer, this writer the last.
@@ -13,6 +16,7 @@
 package debuglog
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -54,17 +58,21 @@ func Open(dir string, now time.Time, secrets []string) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("debuglog: %w", err)
 	}
-	if err := prune(dir, now); err != nil { return nil, fmt.Errorf("debuglog: prune: %w", err) }
+	pruneErr := prune(dir, now)
 	path := filepath.Join(dir, fmt.Sprintf("%s-%d.log", now.Format("20060102-150405"), os.Getpid()))
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("debuglog: %w", err)
 	}
-	return &Log{
+	l := &Log{
 		path: path,
 		f:    f,
 		out:  log.New(redactor{w: f, secrets: secrets}, "", log.LstdFlags|log.Lmicroseconds),
-	}, nil
+	}
+	if pruneErr != nil {
+		l.Printf("warning: pruning old debug logs: %v", pruneErr)
+	}
+	return l, nil
 }
 
 // Path returns the trace file, for the notice that tells the user where
@@ -107,21 +115,50 @@ func (r redactor) Write(p []byte) (int, error) {
 const retentionDays = 7
 
 func prune(dir string, now time.Time) error {
- entries, err := os.ReadDir(dir)
- if err != nil { return err }
- cutoff := now.AddDate(0, 0, -retentionDays)
- for _, entry := range entries {
-  if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") { continue }
-  name := entry.Name()
-  if len(name) < len("20060102-150405-1.log") { continue }
-  stamp, err := time.ParseInLocation("20060102-150405", name[:15], now.Location())
-  if err != nil || name[15] != '-' { continue }
-  pid := strings.TrimSuffix(name[16:], ".log")
-  if pid == "" { continue }
-  valid := true
-  for _, c := range pid { if c < '0' || c > '9' { valid = false; break } }
-  if !valid || !stamp.Before(cutoff) { continue }
-  if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) { return err }
- }
- return nil
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var failures []error
+	cutoff := now.AddDate(0, 0, -retentionDays)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		name := entry.Name()
+		if len(name) < len("20060102-150405-1.log") {
+			continue
+		}
+		stamp, err := time.ParseInLocation("20060102-150405", name[:15], now.Location())
+		if err != nil || name[15] != '-' {
+			continue
+		}
+		pid := strings.TrimSuffix(name[16:], ".log")
+		if pid == "" {
+			continue
+		}
+		valid := true
+		for _, c := range pid {
+			if c < '0' || c > '9' {
+				valid = false
+				break
+			}
+		}
+		if !valid || !stamp.Before(cutoff) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		// A long-running process may still be writing an old trace.
+		if !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }

@@ -17,7 +17,12 @@ import (
 func testSetup(t *testing.T) (*setupInfo, string) {
 	t.Helper()
 	global := filepath.Join(t.TempDir(), "hint", "config.yaml")
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return &setupInfo{
+		env:     env,
 		profile: config.Profile{Name: "api-bar", BaseURL: "https://gw.test/openai", Model: "m1"},
 		locs:    config.Locations{Global: global},
 	}, global
@@ -128,11 +133,11 @@ func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
 func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
 	var out bytes.Buffer
 	notATerminal := stdio{in: strings.NewReader(""), out: &out, err: &out}
-	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider) {
+	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider, environment{}) {
 		t.Error("asked questions on input that is not a terminal")
 	}
 	tty := stdio{in: os.Stdin, out: &out, err: &out, tty: true}
-	if firstRunSetup(context.Background(), tty, errors.New("config: parsing x: bad yaml")) {
+	if firstRunSetup(context.Background(), tty, errors.New("config: parsing x: bad yaml"), environment{}) {
 		t.Error("offered setup for an error setup cannot fix")
 	}
 }
@@ -170,7 +175,12 @@ providers:
 	if !errors.As(loadErr, &noKey) || noKey.Profile != "router" {
 		t.Fatalf("Load = %v; want the fallback's missing key", loadErr)
 	}
-	info := firstRunInfo(cwd, loadErr)
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.cwd = cwd
+	info := firstRunInfo(env, loadErr)
 	if p := info.profile; p.Name != "router" || p.BaseURL != "https://openrouter.ai/api/v1" || p.Model != "qwen/qwen3-coder" {
 		t.Errorf("setup proposes %q at %s with model %q; want router as configured", p.Name, p.BaseURL, p.Model)
 	}
@@ -208,8 +218,14 @@ func TestConfigSetUnsetShow(t *testing.T) {
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("APIBAR_KEY", "sk-from-env-1234567890")
+	t.Setenv("OTHER", "sk-other-0987654321")
 	t.Setenv("HOME", home)
-	s := newSetupInfo(nil, cwd, config.Flags{})
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.cwd = cwd
+	s := newSetupInfoWithEnvironment(nil, config.Flags{}, env)
 	s.cwd = cwd
 
 	if _, err := s.set("overview.depth", "-3", false); err == nil {
@@ -237,7 +253,6 @@ func TestConfigSetUnsetShow(t *testing.T) {
 
 	// The project value wins; show says so, with the key masked.
 	s.locs = config.Locate(home, cwd, os.LookupEnv)
-	t.Setenv("OTHER", "sk-other-0987654321")
 	out, err := s.show()
 	if err != nil {
 		t.Fatal(err)

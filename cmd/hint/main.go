@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/permission"
+	"github.com/mrYush/hint/internal/shell"
 )
 
 // Build metadata. A release build sets these through -ldflags "-X main.version=..."
@@ -72,14 +72,23 @@ func formatVersion(version, commit, date string, info *debug.BuildInfo) string {
 }
 
 func main() {
-	env, err := processEnvironment()
-	if err != nil { fmt.Fprintln(os.Stderr, "hint:", err); os.Exit(1) }
+	env, _ := processEnvironment()
 	root := newRootCommandWithEnvironment(env)
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "hint:", err)
 		code := 1
-		if errors.Is(err, errFlagUsage) { code = 2 }
-		if errors.Is(err, context.Canceled) { code = 130 }
+		if errors.Is(err, errFlagUsage) {
+			code = 2
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, shell.ErrInterrupted) {
+			code = 130
+		}
+		var interrupted *signalError
+		if errors.As(err, &interrupted) {
+			code = interrupted.code
+		}
+		if code != 130 && code != 143 {
+			fmt.Fprintln(os.Stderr, "hint:", err)
+		}
 		os.Exit(code)
 	}
 }
@@ -98,7 +107,7 @@ const (
 
 // options are the choices of one invocation, as read from the flags.
 type options struct {
-	env environment
+	env           environment
 	flags         config.Flags
 	mode          permission.Mode
 	session       sessionMode
@@ -132,11 +141,11 @@ func newRootCommandWithEnvironment(env environment) *cobra.Command {
 	var indexMaxBytes int64
 
 	rootCmd := &cobra.Command{
-		Use:     "hint [flags] [-p \"question\"]",
-		Version: buildVersion(),
-		Short:   "A developer assistant that reads, edits and runs your project",
+		Use:           "hint [flags] [-p \"question\"]",
+		Version:       buildVersion(),
+		Short:         "A developer assistant that reads, edits and runs your project",
 		SilenceErrors: true,
-		SilenceUsage: true,
+		SilenceUsage:  true,
 		Long: `hint is an agent for the directory you run it in. Without arguments it
 starts an interactive session: type a question, read the answer, ask the
 next one; the conversation is recorded and can be continued later with
@@ -161,15 +170,20 @@ keeps the line REPL.`,
   hint --connect -c                      # join that server from another terminal
   hint --mode rpc                        # the same protocol on stdin/stdout`,
 		Args: cobra.ArbitraryArgs,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			if err := cmd.ValidateFlagGroups(); err != nil {
+				return fmt.Errorf("%w: %w", errFlagUsage, err)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// A run-time failure is printed once, by main; cobra keeps
-			// reporting flag errors itself, since those never reach here.
+			// main prints each error once and selects its exit status.
 			if indexMaxBytes < 512<<10 {
-				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
+				return fmt.Errorf("%w: --index-max-bytes must be at least 524288 bytes", errFlagUsage)
 			}
 			opts := options{
 				indexMaxBytes: indexMaxBytes,
-				env: env,
+				env:           env,
 				flags:         flags,
 				mode:          runMode(ask, autoEdit, yolo),
 				session:       sessionModeOf(continueLast, resume, noSession, sessionID),
@@ -179,25 +193,25 @@ keeps the line REPL.`,
 				tui:           useTUI(tuiMode, plain, os.Stdout),
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
-				return fmt.Errorf("--mode must be rpc, not %q", rpcMode)
+				return fmt.Errorf("%w: --mode must be rpc, not %q", errFlagUsage, rpcMode)
 			}
 			if rpcMode == "rpc" {
-				ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+				ctx, stop := signalContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 				defer stop()
-				return serveStdio(ctx, opts)
+				return cancellationError(ctx, serveStdio(ctx, opts))
 			}
 			switch outputFormat(output) {
 			case outputText, outputJSON:
 				opts.output = outputFormat(output)
 			default:
-				return fmt.Errorf("--output must be text or json, not %q", output)
+				return fmt.Errorf("%w: --output must be text or json, not %q", errFlagUsage, output)
 			}
 			inv, err := dispatch(prompt, args, opts.output, os.Stdin)
 			if err != nil {
 				return err
 			}
 			if tuiMode && !inv.interactive {
-				return errors.New("--tui is the interactive session; it takes no -p or question")
+				return fmt.Errorf("%w: --tui requires an interactive session", errFlagUsage)
 			}
 			if inv.note != "" {
 				fmt.Fprintln(os.Stderr, "hint:", inv.note)
@@ -211,13 +225,13 @@ keeps the line REPL.`,
 			if !inv.interactive {
 				signals = append(signals, os.Interrupt)
 			}
-			ctx, stop := signal.NotifyContext(cmd.Context(), signals...)
+			ctx, stop := signalContext(cmd.Context(), signals...)
 			defer stop()
-			return run(ctx, opts, inv, stdio{in: os.Stdin, out: os.Stdout, err: os.Stderr, tty: isTerminal(os.Stdin)})
+			return cancellationError(ctx, run(ctx, opts, inv, stdio{in: os.Stdin, out: os.Stdout, err: os.Stderr, tty: isTerminal(os.Stdin)}))
 		},
 	}
 
-	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %v", errFlagUsage, err) })
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return fmt.Errorf("%w: %w", errFlagUsage, err) })
 
 	rootCmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Answer this one question and exit instead of starting a session")
 	rootCmd.Flags().StringVar(&output, "output", string(outputText), "Output of a one-shot answer: text or json")
@@ -274,7 +288,8 @@ keeps the line REPL.`,
 	pf.Lookup("summarize-instructions").NoOptDefVal = "true"
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
-	rootCmd.AddCommand(newSessionsCommand(), newModelsCommand(&flags), newServeCommand(&flags, &indexMaxBytes), newSetupCommand(&flags), newConfigCommand(&flags), newMCPCommand(&flags), extractionCommand())
+	rootCmd.AddCommand(newSessionsCommand(env), newModelsCommand(&flags, env), newServeCommand(&flags, &indexMaxBytes, env), newSetupCommand(&flags, env), newConfigCommand(&flags, env), newMCPCommand(&flags), extractionCommand())
+	wrapUsageValidation(rootCmd)
 	return rootCmd
 }
 
@@ -295,7 +310,7 @@ func dispatch(prompt string, args []string, output outputFormat, stdin *os.File)
 	positional := strings.TrimSpace(strings.Join(args, " "))
 	switch {
 	case prompt != "" && positional != "":
-		return invocation{}, errors.New("give the question either with -p or as arguments, not both")
+		return invocation{}, fmt.Errorf("%w: give the question either with -p or as arguments, not both", errFlagUsage)
 	case prompt != "":
 		return invocation{question: prompt}, nil
 	case positional != "":
@@ -381,5 +396,26 @@ func sessionModeOf(continueLast, resume, noSession bool, id string) sessionMode 
 		return sessionContinue
 	default:
 		return sessionNew
+	}
+}
+
+func cancellationError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
+	return err
+}
+
+func wrapUsageValidation(cmd *cobra.Command) {
+	if validate := cmd.Args; validate != nil {
+		cmd.Args = func(cmd *cobra.Command, args []string) error {
+			if err := validate(cmd, args); err != nil {
+				return fmt.Errorf("%w: %w", errFlagUsage, err)
+			}
+			return nil
+		}
+	}
+	for _, child := range cmd.Commands() {
+		wrapUsageValidation(child)
 	}
 }

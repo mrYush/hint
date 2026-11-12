@@ -198,7 +198,7 @@ func TestOpenSession(t *testing.T) {
 	ctx := context.Background()
 	noInput := console.NewLineReader(strings.NewReader(""))
 
-	view, recorded, err := openSession(ctx, cl, sessionOff, "", noInput, io.Discard)
+	view, recorded, err := openSession(ctx, cl, sessionOff, "", noInput, io.Discard, time.Now)
 	if err != nil || recorded || view.ID == "" {
 		t.Fatalf("sessionOff = %+v, %v, %v; want an unrecorded session with an id", view, recorded, err)
 	}
@@ -207,12 +207,12 @@ func TestOpenSession(t *testing.T) {
 	}
 
 	// --session in an empty directory is refused, not silently replaced.
-	if _, _, err := openSession(ctx, cl, sessionByID, "abc", noInput, io.Discard); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
+	if _, _, err := openSession(ctx, cl, sessionByID, "abc", noInput, io.Discard, time.Now); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
 		t.Fatalf("--session with nothing recorded: %v", err)
 	}
 
 	var stderr bytes.Buffer
-	if _, recorded, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr); err != nil || !recorded {
+	if _, recorded, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr, time.Now); err != nil || !recorded {
 		t.Fatalf("continue with nothing to continue: %v, %v", recorded, err)
 	}
 	if !strings.Contains(stderr.String(), "starting a new one") {
@@ -251,7 +251,7 @@ func TestOpenSession(t *testing.T) {
 	}
 
 	stderr.Reset()
-	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr)
+	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestOpenSession(t *testing.T) {
 
 	// -r: the second listed entry is the older, untouched session.
 	stderr.Reset()
-	picked, _, err := openSession(ctx, cl, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr)
+	picked, _, err := openSession(ctx, cl, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,27 +274,27 @@ func TestOpenSession(t *testing.T) {
 
 	// --session: the full id, or an unambiguous prefix of it.
 	stderr.Reset()
-	named, _, err := openSession(ctx, cl, sessionByID, second.ID()[:6], noInput, &stderr)
+	named, _, err := openSession(ctx, cl, sessionByID, second.ID()[:6], noInput, &stderr, time.Now)
 	if err != nil || named.ID != second.ID() {
 		t.Fatalf("--session %s: %v, %v", second.ID()[:6], named.ID, err)
 	}
 	if !strings.Contains(stderr.String(), "continuing session "+second.ID()) {
 		t.Errorf("no notice:\n%s", stderr.String())
 	}
-	_, _, err = openSession(ctx, cl, sessionByID, "no-such-id", noInput, io.Discard)
+	_, _, err = openSession(ctx, cl, sessionByID, "no-such-id", noInput, io.Discard, time.Now)
 	var rpcErr *rpc.Error
 	if !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotFound || !strings.Contains(err.Error(), "no-such-id") {
 		t.Errorf("--session with an unknown id: %v", err)
 	}
 
 	// -r with nobody answering is a refusal, not a silent new session.
-	if _, _, err := openSession(ctx, cl, sessionResume, "", noInput, io.Discard); !errors.Is(err, session.ErrNoChoice) {
+	if _, _, err := openSession(ctx, cl, sessionResume, "", noInput, io.Discard, time.Now); !errors.Is(err, session.ErrNoChoice) {
 		t.Fatalf("resume without an answer = %v, want ErrNoChoice", err)
 	}
 
 	// -r in a directory with no sessions starts a new one, like -c.
 	fresh, _, _, _ := testAssembly(t, &fakeChat{}, "")
-	if view, recorded, err := openSession(ctx, testClient(t, fresh), sessionResume, "", noInput, io.Discard); err != nil || !recorded || view.ID == "" {
+	if view, recorded, err := openSession(ctx, testClient(t, fresh), sessionResume, "", noInput, io.Discard, time.Now); err != nil || !recorded || view.ID == "" {
 		t.Fatalf("resume with nothing to resume = %+v, %v, %v", view, recorded, err)
 	}
 }
@@ -431,7 +431,7 @@ func testAssembly(t *testing.T, chat agentapi.ChatProvider, stdin string) (assem
 	as := assembly{
 		chat:    chat,
 		cfg:     cfg,
-		opts:    options{mode: permission.ModeAsk, session: sessionOff, output: outputText},
+		opts:    options{env: environment{now: time.Now}, mode: permission.ModeAsk, session: sessionOff, output: outputText},
 		cwd:     t.TempDir(),
 		store:   session.NewStore(filepath.Join(t.TempDir(), "sessions")),
 		notices: &stderr,
@@ -899,6 +899,7 @@ func TestConnect(t *testing.T) {
 	shell := func(target string, smode sessionMode) (*app, *bytes.Buffer, *bytes.Buffer, error) {
 		var out, stderr bytes.Buffer
 		opts := as.opts
+		opts.env = environment{lookupEnv: os.LookupEnv, now: time.Now}
 		opts.connect = target
 		opts.session = smode
 		a, err := connect(ctx, opts, stdio{in: strings.NewReader(""), out: &out, err: &stderr, tty: true})
