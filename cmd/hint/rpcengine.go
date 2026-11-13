@@ -128,30 +128,30 @@ func (e *rpcEngine) tracef(format string, args ...any) {
 	}
 }
 
-// newRPCEngine assembles the engine from the process: configuration,
+// newRPCEngine assembles the engine from the injected environment: configuration,
 // home and working directory, the debug log. cleanup releases the log.
 func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEngine, func(), error) {
+	if opts.env.now == nil {
+		opts.env.now = time.Now
+	}
 	if opts.indexMaxBytes != 0 && opts.indexMaxBytes < 512<<10 {
 		return nil, nil, errors.New("--index-max-bytes must be at least 524288 bytes")
 	}
-	cfg, err := config.Load(opts.flags)
+	configOpts, err := opts.env.configOptions(opts.flags, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg, err := config.LoadFrom(configOpts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading configuration: %w", err)
 	}
 	for _, w := range cfg.Warnings {
 		fmt.Fprintf(notices, "warning: %s\n", w)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "" // sessions and logs then land under relative defaults; better than refusing to run
-	}
+	home, cwd := opts.env.home, opts.env.cwd
 	var mapPath string
-	if cache, cacheErr := os.UserCacheDir(); cacheErr == nil {
+	if cache := opts.env.cacheDir(); cache != "" {
 		mapPath = filepath.Join(cache, "hint", "index", "code-v2.sqlite")
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("working directory: %w", err)
 	}
 
 	// The trace is a debugging aid, so failing to open it is a warning,
@@ -160,13 +160,13 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	var trace *debuglog.Log
 	cleanup := func() {}
 	if cfg.Debug || opts.debug {
-		trace, err = debuglog.Open(debuglog.DefaultDir(home, os.LookupEnv), time.Now(), cfg.Secrets())
+		trace, err = debuglog.Open(debuglog.DefaultDir(home, opts.env.lookup), opts.env.now(), cfg.Secrets())
 		if err != nil {
 			fmt.Fprintf(notices, "hint: warning: no debug log: %v\n", err)
 		} else {
 			cleanup = func() { _ = trace.Close() }
 			fmt.Fprintf(notices, "hint: debug log: %s\n", trace.Path())
-			trace.Printf("hint %s", strings.Join(os.Args[1:], " "))
+			trace.Printf("hint %s", strings.Join(opts.env.args[min(1, len(opts.env.args)):], " "))
 			trace.Printf("cwd %s", cwd)
 		}
 	}
@@ -180,12 +180,12 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		return nil, nil, err
 	}
 	global := ""
-	if dir := config.GlobalDir(home, os.LookupEnv); dir != "" {
+	if dir := config.GlobalDir(home, opts.env.lookup); dir != "" {
 		global = filepath.Join(dir, project.InstructionNames[0])
 	}
-	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
+	store := session.NewStore(session.DefaultDir(home, opts.env.lookup), session.WithClock(opts.env.now))
 	warnFileKeys(cfg, notices)
-	consent := mcpConsent(home)
+	consent := mcpConsent(home, opts.env.lookup)
 	eng, err := newEngine(ctx, assembly{
 		mapPath: mapPath,
 		chat:    chat,
@@ -196,8 +196,8 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		global:  global,
 		trace:   trace,
 		notices: notices,
-		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
-		denied:  deniedPaths(home, cwd, os.LookupEnv, store.Dir()),
+		reload:  func() (*config.Config, error) { return config.LoadFrom(configOpts) },
+		denied:  deniedPaths(home, cwd, opts.env.lookup, store.Dir()),
 		consent: consent,
 	})
 	if err != nil {
@@ -223,6 +223,10 @@ func deniedPaths(home, cwd string, lookupEnv func(string) (string, bool), sessio
 // project context, the tools, the limits. Warnings that belong to the
 // run (a cut HINT.md, git refusing to answer) are printed here once.
 func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error) {
+	as.opts.env.cwd = as.cwd
+	if as.opts.env.now == nil {
+		as.opts.env.now = time.Now
+	}
 	root, err := tool.NewRoot(as.cwd)
 	if err != nil {
 		return nil, fmt.Errorf("working directory: %w", err)
@@ -282,7 +286,7 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 		notices:     as.notices,
 		trace:       as.trace,
 		debugLog:    debugLog,
-		setup:       newSetupInfo(as.cfg, as.cwd, as.opts.flags),
+		setup:       newSetupInfoWithEnvironment(as.cfg, as.opts.flags, as.opts.env),
 		cfg:         as.cfg,
 		reload:      as.reload,
 		providers:   map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
@@ -562,7 +566,7 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	live := &rpcSession{
 		workspace: e.workspace.NewSession(),
 		id:        id,
-		created:   time.Now(),
+		created:   e.setup.env.now(),
 		eng:       e,
 		file:      sess,
 		rec:       session.NewRecorder(sess, len(initial)),
@@ -825,7 +829,7 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 	}
 	if as.cfg.Instructions.Summarize {
 		var s project.Summarizer = project.ChatSummarizer{Provider: as.chat}
-		if dir, err := project.DefaultSummaryCacheDir(); err == nil {
+		if dir := as.opts.env.summaryCacheDir(); dir != "" {
 			s = project.CachedSummarizer{Dir: dir, Inner: s}
 		}
 		opts = append(opts, project.WithSummarizer(s))

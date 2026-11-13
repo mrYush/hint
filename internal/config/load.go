@@ -17,16 +17,16 @@ import (
 // Flags carries CLI overrides. Nil numeric/bool pointers mean the flag was
 // not provided; explicit zero and false remain distinguishable from absence.
 type Flags struct {
-	Provider string
-	APIURL string
-	APIKey string
-	Model string
-	ContextWindow *int
-	InstructionBudget *int
-	OverviewDepth *int
-	OverviewEntries *int
+	Provider              string
+	APIURL                string
+	APIKey                string
+	Model                 string
+	ContextWindow         *int
+	InstructionBudget     *int
+	OverviewDepth         *int
+	OverviewEntries       *int
 	SummarizeInstructions *bool
-	Completion string
+	Completion            string
 }
 
 // Options are the external inputs of LoadFrom. Everything the loader touches
@@ -981,7 +981,7 @@ func validCompletionMode(v string) bool {
 // overlayBool applies the environment variable and then the flag to *dst,
 // each when set. Invalid environment booleans produce warnings; CLI values
 // have already been parsed and type-checked by Cobra.
-func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) error {
+func (l *loader) overlayBool(dst *bool, envName, _ string, flagValue *bool) error {
 	if v, ok := l.env(envName); ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
@@ -1002,7 +1002,7 @@ func (l *loader) overlayBool(dst *bool, envName, flagName, flagValue *bool) erro
 // *dst alone. The file value already in *dst (named key in messages) is
 // checked against min too, since a file can say -1 as easily; a file's 0
 // is left for the defaults to fill. CLI values are already parsed by Cobra.
-func (l *loader) overlayInt(dst *int, key, envName, flagName, flagValue *int, min int) (set bool, err error) {
+func (l *loader) overlayInt(dst *int, key, envName, flagName string, flagValue *int, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
 		return false, fmt.Errorf("%s must be at least %d, got %d", key, min, *dst)
 	}

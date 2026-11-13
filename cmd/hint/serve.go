@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -18,7 +17,7 @@ import (
 	"github.com/mrYush/hint/internal/rpc"
 )
 
-func newServeCommand(flags *config.Flags, indexMaxBytes *int64) *cobra.Command {
+func newServeCommand(flags *config.Flags, indexMaxBytes *int64, env environment) *cobra.Command {
 	var listen string
 	var ask, autoEdit, yolo, debug bool
 	cmd := &cobra.Command{
@@ -36,17 +35,21 @@ this process's stdin. Another terminal joins with hint --connect.`,
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			if *indexMaxBytes < 512<<10 {
-				return fmt.Errorf("--index-max-bytes must be at least 524288 bytes")
+				return fmt.Errorf("%w: --index-max-bytes must be at least 524288 bytes", errFlagUsage)
+			}
+			if err := env.validate(); err != nil {
+				return err
 			}
 			opts := options{
+				env:           env,
 				indexMaxBytes: *indexMaxBytes,
 				flags:         *flags,
 				mode:          runMode(ask, autoEdit, yolo),
 				debug:         debug,
 			}
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := signalContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return serveListen(ctx, opts, listen)
+			return cancellationError(ctx, serveListen(ctx, opts, listen))
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", "", "Address to listen on, as unix:/path or tcp:localhost:port (loopback only)")
@@ -72,7 +75,17 @@ func serveStdio(ctx context.Context, opts options) error {
 	fmt.Fprintln(os.Stderr, "hint: rpc on stdio")
 	srv := &rpc.Server{Engine: eng, Version: buildVersion(), Stop: cancel}
 	defer srv.Close()
-	return srv.ServeStdio(ctx, os.Stdin, os.Stdout)
+	// An inherited stdin can block even when closed from another goroutine.
+	// The pipe lets cancellation release the decoder before engine cleanup.
+	input, writer := io.Pipe()
+	defer func() { _ = input.Close() }()
+	go func() {
+		_, err := io.Copy(writer, os.Stdin)
+		_ = writer.CloseWithError(err)
+	}()
+	stopRead := context.AfterFunc(ctx, func() { _ = input.CloseWithError(ctx.Err()) })
+	defer stopRead()
+	return srv.ServeStdio(ctx, input, os.Stdout)
 }
 
 func serveListen(ctx context.Context, opts options, listen string) error {
@@ -83,11 +96,10 @@ func serveListen(ctx context.Context, opts options, listen string) error {
 	defer cleanup()
 	warnYolo(opts.mode)
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
+	if opts.env.home == "" {
+		return fmt.Errorf("home directory is unavailable")
 	}
-	lis, token, err := publish(rpc.RuntimeDir(home, os.LookupEnv), listen, os.Stderr)
+	lis, token, err := publish(rpc.RuntimeDir(opts.env.home, opts.env.lookup), listen, os.Stderr)
 	if err != nil {
 		return err
 	}

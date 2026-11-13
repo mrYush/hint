@@ -28,6 +28,7 @@ const defaultBaseURL = "http://localhost:8000/v1"
 // uses, for the moment a credential is rejected: which profile, which
 // files, and the one place setup writes to.
 type setupInfo struct {
+	env     environment
 	profile config.Profile
 	locs    config.Locations
 	// cwd and flags are what the run was started with, so that showing
@@ -46,14 +47,8 @@ func (s *setupInfo) needsKey() bool {
 	return s.profile.APIKey == "" && s.profile.Kind != config.KindOllama
 }
 
-// newSetupInfo describes the configuration cfg was loaded from. cfg may
-// be nil (loading failed): setup then starts from nothing.
-func newSetupInfo(cfg *config.Config, cwd string, flags config.Flags) *setupInfo {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
-	s := &setupInfo{locs: config.Locate(home, cwd, os.LookupEnv), cwd: cwd, flags: flags, store: config.StoreAuto, keyring: config.OSKeyring{}}
+func newSetupInfoWithEnvironment(cfg *config.Config, flags config.Flags, env environment) *setupInfo {
+	s := &setupInfo{env: env, locs: config.Locate(env.home, env.cwd, env.lookup), cwd: env.cwd, flags: flags, store: config.StoreAuto, keyring: config.OSKeyring{}}
 	if cfg != nil {
 		if p, err := cfg.Default(); err == nil {
 			s.profile = p
@@ -116,7 +111,7 @@ func (s *setupInfo) save(profile string, values map[string]string) (string, erro
 		msg += "; no secret store answered (" + strings.TrimPrefix(storeErr.Error(), "config: ") + "), so the key is in that file, mode 0600: anyone running as you can read it"
 	}
 	if name, ok := envReference(key); ok {
-		if _, set := os.LookupEnv(name); !set {
+		if _, set := s.env.lookup(name); !set {
 			msg += "; " + name + " is not set in this shell: export it before starting hint"
 		}
 	}
@@ -405,7 +400,7 @@ func (a *app) offerSetup(ctx context.Context, help string) {
 // report whether the configuration was written and loading should be
 // tried again. Anywhere else the original error stands, and it already
 // names `hint setup`.
-func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
+func firstRunSetup(ctx context.Context, sio stdio, loadErr error, env environment) bool {
 	var noKey *config.NoKeyError
 	missingKey := errors.As(loadErr, &noKey)
 	if !missingKey && !errors.Is(loadErr, config.ErrNoProvider) {
@@ -415,11 +410,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 	if !sio.tty || !ok {
 		return false
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return false
-	}
-	info := firstRunInfo(cwd, loadErr)
+	info := firstRunInfo(env, loadErr)
 	fmt.Fprintln(sio.err, "hint: you will need "+keyHelp+".")
 	fmt.Fprintln(sio.err, "hint:", strings.TrimPrefix(loadErr.Error(), "config: "))
 	fmt.Fprintln(sio.err, info.describe())
@@ -439,9 +430,10 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error) bool {
 // as far as it goes, and, when a profile has no key, that profile — the
 // fallback as well as the default — with its own base URL and model as
 // the answers Enter keeps.
-func firstRunInfo(cwd string, loadErr error) *setupInfo {
-	cfg, _ := config.LoadDraft(config.Flags{}) // what does not load is why setup runs
-	info := newSetupInfo(cfg, cwd, config.Flags{})
+func firstRunInfo(env environment, loadErr error) *setupInfo {
+	opts, _ := env.configOptions(config.Flags{}, true)
+	cfg, _ := config.LoadFrom(opts) // A broken config is why setup runs.
+	info := newSetupInfoWithEnvironment(cfg, config.Flags{}, env)
 	var noKey *config.NoKeyError
 	if !errors.As(loadErr, &noKey) {
 		return info
@@ -461,7 +453,7 @@ func firstRunInfo(cwd string, loadErr error) *setupInfo {
 
 // newSetupCommand is `hint setup`: the same questions without a session,
 // for the first run and for a key that is wrong before anything starts.
-func newSetupCommand(flags *config.Flags) *cobra.Command {
+func newSetupCommand(flags *config.Flags, env environment) *cobra.Command {
 	return &cobra.Command{
 		Use:   "setup",
 		Short: "Fill in the provider configuration interactively",
@@ -477,13 +469,15 @@ in a repository.`,
 			if !isTerminal(os.Stdin) {
 				return errors.New("setup asks questions; stdin is not a terminal")
 			}
-			cwd, err := os.Getwd()
+			if err := env.validate(); err != nil {
+				return err
+			}
+			configOpts, err := env.configOptions(*flags, true)
 			if err != nil {
 				return err
 			}
-			// A config that does not load yet is the reason to run setup.
-			cfg, _ := config.LoadDraft(*flags)
-			info := newSetupInfo(cfg, cwd, *flags)
+			cfg, _ := config.LoadFrom(configOpts)
+			info := newSetupInfoWithEnvironment(cfg, *flags, env)
 			fmt.Fprintln(os.Stderr, info.describe())
 			_, err = askSetup(cmd.Context(), newTTYIO(os.Stdin, os.Stderr), os.Stderr, info)
 			return err
