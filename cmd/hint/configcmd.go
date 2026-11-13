@@ -84,7 +84,12 @@ func (s *setupInfo) unset(key string, project bool) (string, error) {
 // show is the configuration the next start resolves: every key of the
 // table with its value after all layers, keys masked.
 func (s *setupInfo) show() (string, error) {
-	cfg, err := config.LoadFrom(config.Options{HomeDir: homeDir(), WorkingDir: s.cwd, LookupEnv: os.LookupEnv, Flags: s.flags})
+	opts, err := s.env.configOptions(s.flags, false)
+	if err != nil {
+		return "", err
+	}
+	opts.Keyring = s.keyring
+	cfg, err := config.LoadFrom(opts)
 	if err != nil {
 		return "", err
 	}
@@ -182,14 +187,17 @@ func homeDir() string {
 
 // newConfigCommand is `hint config`: show, list, set and unset keys of
 // the config files without opening them in an editor.
-func newConfigCommand(flags *config.Flags) *cobra.Command {
+func newConfigCommand(flags *config.Flags, env environment) *cobra.Command {
 	info := func() (*setupInfo, error) {
-		cwd, err := os.Getwd()
+		if err := env.validate(); err != nil {
+			return nil, err
+		}
+		configOpts, err := env.configOptions(*flags, true)
 		if err != nil {
 			return nil, err
 		}
-		cfg, _ := config.LoadDraft(*flags) // a broken config is one reason to be here
-		return newSetupInfo(cfg, cwd, *flags), nil
+		cfg, _ := config.LoadFrom(configOpts) // A broken config is one reason to be here.
+		return newSetupInfoWithEnvironment(cfg, *flags, env), nil
 	}
 	var project bool
 	cmd := &cobra.Command{
@@ -283,7 +291,11 @@ on a terminal. No RPC method and no tool reaches it.`,
 			if !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 				return errors.New("show-key prints a secret: it needs a terminal on stdin and stdout")
 			}
-			cfg, err := config.Load(*flags)
+			opts, err := env.configOptions(*flags, false)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.LoadFrom(opts)
 			if err != nil {
 				return err
 			}

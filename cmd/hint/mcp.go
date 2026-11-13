@@ -214,7 +214,7 @@ func newMCPEnableCommand(flags *config.Flags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			srv, approved, err := enableMCPServer(mcpServers(cfg), root, args[0], mcpConsent(homeDir()))
+			srv, approved, err := enableMCPServer(mcpServers(cfg), root, args[0], mcpConsent(homeDir(), os.LookupEnv))
 			if err != nil {
 				return err
 			}
@@ -324,22 +324,22 @@ func newMCPManager(cfg *config.Config, root string) (*mcp.Manager, error) {
 		Client:      mcp.ClientInfo{Name: "hint", Version: buildVersion()},
 		ProjectRoot: root,
 		Environ:     config.FilterEnviron(os.Environ(), cfg.SecretEnv(), cfg.Secrets()),
-		Consent:     mcpConsent(homeDir()),
+		Consent:     mcpConsent(homeDir(), os.LookupEnv),
 		Budget:      mcp.DefaultBudget(),
 	})
 }
 
 // mcpConsentPath is the consent record outside every repository; an
 // empty string means there is no config directory to put it in.
-func mcpConsentPath(home string) string {
-	if dir := config.GlobalDir(home, os.LookupEnv); dir != "" {
+func mcpConsentPath(home string, lookup func(string) (string, bool)) string {
+	if dir := config.GlobalDir(home, lookup); dir != "" {
 		return filepath.Join(dir, "mcp-consent.json")
 	}
 	return ""
 }
 
-func mcpConsent(home string) mcp.Consent {
-	if path := mcpConsentPath(home); path != "" {
+func mcpConsent(home string, lookup func(string) (string, bool)) mcp.Consent {
+	if path := mcpConsentPath(home, lookup); path != "" {
 		return mcp.NewConsentStore(path)
 	}
 	return nil

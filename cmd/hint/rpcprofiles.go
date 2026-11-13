@@ -43,7 +43,7 @@ func (e *rpcEngine) refresh() error {
 	}
 	e.cfg = cfg
 	e.providers = map[rpc.ProfileRef]agentapi.ChatProvider{}
-	e.setup = newSetupInfo(cfg, e.setup.cwd, e.setup.flags)
+	e.setup = newSetupInfoWithEnvironment(cfg, e.setup.flags, e.setup.env)
 	return nil
 }
 

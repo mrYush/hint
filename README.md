@@ -733,6 +733,12 @@ your convenience.
 The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
+**Fixed in `fix/issue-38-runtime-hardening`, pending merge.** CLI usage errors now exit with status 2, and one-shot, RPC, and serve invocations exit quietly with status 130 for SIGINT or 143 for SIGTERM.
+`--help` and `--version` work without a home directory.
+Debug traces older than seven days are pruned when they have also gone seven days without modification.
+Duplicate flag errors, undifferentiated exit codes, and unbounded debug trace retention were present since `v0.2.0-alpha`.
+See [#38](https://github.com/mrYush/hint/issues/38).
+
 **Fixed on `develop`, not in a release yet.** Windows shell quoting and cancellation were broken in `v0.4.0`: a command with quotes, such as `go test -run "TestX"`, could be misquoted, and canceling a command could leave its child processes running.
 `bash` now passes the command line to `cmd.exe /D /S /C` itself and supervises the process tree with a Job Object, and CI runs the Windows shell and process-tree tests.
 Present since `v0.2.0-alpha`.
@@ -799,8 +805,11 @@ first, with the error as a suffix when the two differ.
 `--debug` (or `HINT_DEBUG=true`) writes a trace of the run — the requests
 sent, the responses, the tools called — to a file under
 `~/.local/state/hint/log/` (`$XDG_STATE_HOME` is respected), one file per
-run; the path is printed at the start. API keys are masked in it. Attach
-the file when reporting a problem.
+run; the path is printed at the start.
+When a new trace opens, timestamped Hint logs older than seven days are removed if they have also gone seven days without modification.
+Cleanup failures are recorded in the new trace and do not prevent logging.
+API keys are masked, but traces contain full prompts, responses, tool calls, and project-file content.
+Review the file for sensitive content before attaching it to a problem report.
 
 ```bash
 hint --debug -p "Your question"

@@ -1045,7 +1045,15 @@ depend on them:
   beyond cooked mode, no multi-line questions, no `/new`, `/mode` or
   `/compact` commands (Phase 1's TUI); piped stdin is not read as a
   question; `hint sessions` and `--session` see the working directory's
-  sessions only; the trace directory is never pruned.
+  sessions only.
+- [Issue #38](https://github.com/mrYush/hint/issues/38) adds seven-day retention for timestamped debug traces when a new trace opens.
+  Recently modified traces are retained even when their start timestamp is older than seven days.
+  Cleanup is best-effort and failures are recorded in the new trace.
+  Traces include full prompts, responses, tool calls, and project-file content, with configured API keys redacted.
+- [Issue #38](https://github.com/mrYush/hint/issues/38) passes validated process inputs through CLI startup, engine configuration and reload, setup, sessions, and debug logging.
+  Help, version, and argument validation work without a home directory.
+  Usage errors exit with status 2 and SIGINT exits with status 130 and SIGTERM with status 143 for one-shot, RPC, and serve invocations.
+  Expected signal cancellation does not print an error.
 
 ### WP0.10 — CI, release, distribution — **done**
 
