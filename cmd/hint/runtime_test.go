@@ -167,6 +167,15 @@ func TestEngineUsesInjectedEnvironment(t *testing.T) {
 }
 
 func TestRPCInterruptExit(t *testing.T) {
+	testServerSignalExit(t, []string{"--mode", "rpc"}, "hint: rpc on stdio")
+}
+
+func TestServeInterruptExit(t *testing.T) {
+	testServerSignalExit(t, []string{"serve", "--listen", "tcp:127.0.0.1:0"}, "hint: listening on tcp")
+}
+
+func testServerSignalExit(t *testing.T, args []string, readyMessage string) {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("os.Interrupt is not supported by os.Process.Signal on Windows")
 	}
@@ -179,7 +188,7 @@ func TestRPCInterruptExit(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 
-			cmd := cliProcess(t, []string{"HOME=" + t.TempDir(), "HINT_API_KEY=fixture", "HINT_MODEL=fixture"}, "--mode", "rpc")
+			cmd := cliProcess(t, []string{"HOME=" + t.TempDir(), "HINT_API_KEY=fixture", "HINT_MODEL=fixture"}, args...)
 			input, err := cmd.StdinPipe()
 			if err != nil {
 				t.Fatal(err)
@@ -206,7 +215,7 @@ func TestRPCInterruptExit(t *testing.T) {
 				announced := false
 				for scanner.Scan() {
 					output.WriteString(scanner.Text() + "\n")
-					if !announced && strings.Contains(scanner.Text(), "rpc on stdio") {
+					if !announced && strings.Contains(scanner.Text(), readyMessage) {
 						ready <- true
 						announced = true
 					}
@@ -219,10 +228,10 @@ func TestRPCInterruptExit(t *testing.T) {
 			select {
 			case ok := <-ready:
 				if !ok {
-					t.Fatal("RPC startup failed")
+					t.Fatal("server startup failed")
 				}
 			case <-time.After(10 * time.Second):
-				t.Fatal("RPC startup timed out")
+				t.Fatal("server startup timed out")
 			}
 			if err := cmd.Process.Signal(tc.signal); err != nil {
 				t.Fatal(err)
