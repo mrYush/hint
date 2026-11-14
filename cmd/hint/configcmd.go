@@ -84,14 +84,26 @@ func (s *setupInfo) unset(key string, project bool) (string, error) {
 // show is the configuration the next start resolves: every key of the
 // table with its value after all layers, keys masked.
 func (s *setupInfo) show() (string, error) {
+	out, _, err := s.showWithWarnings()
+	return out, err
+}
+
+// showWithWarnings separates diagnostics from configuration output so the CLI
+// can route them to stderr without mixing them into redirected stdout.
+func (s *setupInfo) showWithWarnings() (string, []string, error) {
 	opts, err := s.env.configOptions(s.flags, false)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	opts.Keyring = s.keyring
 	cfg, err := config.LoadFrom(opts)
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+	warnings := make([]string, 0, len(cfg.Warnings))
+	secrets := cfg.Secrets()
+	for _, warning := range cfg.Warnings {
+		warnings = append(warnings, config.Redact(warning, secrets))
 	}
 	var b strings.Builder
 	if len(s.locs.Read) == 0 {
@@ -141,7 +153,7 @@ func (s *setupInfo) show() (string, error) {
 			fmt.Fprintf(&b, "providers.%s.%s = %s\n", p.Name, field, orUnset(fields[field]))
 		}
 	}
-	return strings.TrimRight(b.String(), "\n"), nil
+	return strings.TrimRight(b.String(), "\n"), warnings, nil
 }
 
 func orUnset(v string) string {
@@ -223,11 +235,14 @@ or config.example.yaml in the repository.`,
 			if err != nil {
 				return err
 			}
-			out, err := s.show()
+			out, warnings, err := s.showWithWarnings()
 			if err != nil {
 				return err
 			}
-			fmt.Println(out)
+			for _, warning := range warnings {
+				fmt.Fprintln(cmd.ErrOrStderr(), "hint:", warning)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), out)
 			return nil
 		},
 	}

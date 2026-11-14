@@ -742,7 +742,7 @@ func (m model) configCommand(args []string) (model, tea.Cmd) {
 		return m, nil
 	}
 	if err != nil {
-		m.status = strings.TrimPrefix(err.Error(), "config: ")
+		m.status = err.Error()
 		return m, nil
 	}
 	m.add(entry{kind: entryNotice, text: text, done: true})

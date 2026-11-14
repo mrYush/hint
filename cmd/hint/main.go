@@ -264,9 +264,9 @@ keeps the line REPL.`,
 	rootCmd.Flags().BoolVar(&noSession, "no-session", false, "Do not record this conversation")
 	rootCmd.MarkFlagsMutuallyExclusive("continue", "resume", "session", "no-session")
 
-	// Configuration flags. Defaults stay empty on purpose: a non-empty flag
-	// default would override values from config files (the pre-WP0.2
-	// --model=gpt-4 bug). Built-in defaults live in internal/config.
+	// String configuration flags default to empty; numeric and boolean
+	// overrides are passed only when Changed. Built-in defaults live in
+	// internal/config, so an omitted flag cannot override the files.
 	pf := rootCmd.PersistentFlags()
 	pf.Int64Var(&indexMaxBytes, "index-max-bytes", 128<<20, "Maximum local code-index storage allowance in bytes, including rollback-journal headroom")
 	pf.StringVar(&flags.Provider, "provider", "", "Provider profile to use for this run")
@@ -277,10 +277,10 @@ keeps the line REPL.`,
 	pf.IntVar(&instructionBudget, "instruction-budget", 0, "Bytes all HINT.md-style instruction files may take together (default 32768)")
 	pf.IntVar(&overviewDepth, "overview-depth", 0, "Directory levels listed in the system prompt; 0 for none (default 2)")
 	pf.IntVar(&overviewEntries, "overview-entries", 0, "Cap on the entries listed in the system prompt (default 100)")
-	pf.BoolVar(&summarizeInstructions, "summarize-instructions", false, "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
-	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	// A bare --summarize-instructions means true; =false still turns a
 	// config file's setting off for one run.
+	pf.BoolVar(&summarizeInstructions, "summarize-instructions", false, "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
+	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
 
 	// Cobra parses typed values; Changed preserves explicit 0 and false.

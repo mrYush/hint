@@ -62,7 +62,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	}
 	own, err := e.cfg.Profile(ref.Profile)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "config: "))
+		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, err.Error())
 	}
 	// The cache is keyed by the profile and the model that differs from
 	// its own: a switch to the default profile, with or without its model
@@ -73,7 +73,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	if chat := e.providers[ref]; chat != nil {
 		p, err := e.cfg.Usable(ref.Profile, "selected")
 		if err != nil {
-			return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "config: "))
+			return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
 		}
 		if ref.Model != "" {
 			p.Model = ref.Model
@@ -82,7 +82,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	}
 	chat, p, err := provider.ForProfile(e.cfg, ref.Profile, ref.Model, e.notices, e.debugLog)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "config: "))
+		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
 	}
 	chat = e.observeInference(chat)
 	e.providers[ref] = chat
@@ -108,7 +108,7 @@ func (e *rpcEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {
 		}
 		if _, err := e.cfg.Usable(p.Name, "selected"); err != nil {
 			info.Usable = false
-			info.Problem = strings.TrimPrefix(err.Error(), "config: ")
+			info.Problem = err.Error()
 		}
 		out = append(out, info)
 	}
@@ -167,7 +167,7 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 	}
 	if profile.Name != "" {
 		if err := live.switchTo(rpc.ProfileRef{Profile: profile.Name, Model: profile.Model}, false); err != nil {
-			live.warnings = append(live.warnings, fmt.Sprintf("the source's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
+			live.warnings = append(live.warnings, fmt.Sprintf("the source's profile is not usable (%s); answering with the default profile instead", err.Error()))
 		}
 	}
 	return live, nil

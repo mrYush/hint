@@ -297,8 +297,12 @@ providers:
     api_key: ${UNSET_KEY}
 `)
 	_, err := LoadFrom(opts)
-	if err == nil || !strings.Contains(err.Error(), "API key") {
-		t.Errorf("want an API-key validation error for the unset variable, got %v", err)
+	var noKey *NoKeyError
+	if !errors.As(err, &noKey) || noKey.Profile != "p" {
+		t.Fatalf("want a typed API-key validation error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "providers.p.api_key: environment variable UNSET_KEY is not set") {
+		t.Errorf("missing variable diagnostic: %v", err)
 	}
 }
 
@@ -574,7 +578,7 @@ func TestZeroConfig(t *testing.T) {
 	t.Run("nothing configured is an error", func(t *testing.T) {
 		opts := dirs(t)
 		_, err := LoadFrom(opts)
-		if err == nil || !strings.Contains(err.Error(), "no provider configured") {
+		if !errors.Is(err, ErrNoProvider) {
 			t.Errorf("want a no-provider error, got %v", err)
 		}
 	})
@@ -729,8 +733,26 @@ providers:
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("LoadFrom error = %v, want it to contain %q", err, tt.wantErr)
+			var noKey *NoKeyError
+			var noModel *NoModelError
+			var ve *ValidationError
+			switch tt.wantErr {
+			case "API key", "fallback":
+				if !errors.As(err, &noKey) {
+					t.Fatalf("want NoKeyError, got %v", err)
+				}
+				if tt.wantErr == "fallback" && noKey.Role != "fallback" {
+					t.Errorf("key error role = %q, want fallback", noKey.Role)
+				}
+			case "model":
+				if !errors.As(err, &noModel) {
+					t.Errorf("want NoModelError, got %v", err)
+				}
+			default:
+				key := map[string]string{"unknown kind": "providers.bad.kind", "default_provider": "default_provider", "duplicate": "providers.p"}[tt.wantErr]
+				if !errors.As(err, &ve) || ve.Key != key {
+					t.Errorf("want ValidationError.Key=%q, got %v", key, err)
+				}
 			}
 		})
 	}
@@ -916,7 +938,8 @@ overview:
   max_entries: -3
 `)
 		_, err := LoadFrom(opts)
-		if err == nil || !strings.Contains(err.Error(), "overview.max_entries") {
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Key != "overview.max_entries" {
 			t.Errorf("want an error naming overview.max_entries, got %v", err)
 		}
 	})
@@ -1049,8 +1072,10 @@ completion:
 			t.Errorf("flag: mode = %v", cfg.Completion.Mode)
 		}
 		opts.Flags.Completion = "sometimes"
-		if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "--completion") {
-			t.Errorf("a bad flag value was accepted: %v", err)
+		_, err = LoadFrom(opts)
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Key != "completion.mode" {
+			t.Errorf("bad completion mode error = %v", err)
 		}
 	})
 	t.Run("an unusable completion profile switches the block off with a warning", func(t *testing.T) {
@@ -1203,48 +1228,60 @@ func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
 type failingKeyring struct{}
 
 func (failingKeyring) Get(string) (string, error) {
-	return "", errors.New("config: secret store: no D-Bus session")
+	return "", errors.New("secret store: no D-Bus session")
 }
 func (failingKeyring) Set(string, string) error {
-	return errors.New("config: secret store: no D-Bus session")
+	return errors.New("secret store: no D-Bus session")
 }
 func (failingKeyring) Delete(string) error {
-	return errors.New("config: secret store: no D-Bus session")
+	return errors.New("secret store: no D-Bus session")
 }
 
 func TestUnsetEnvReferenceWarningInDraft(t *testing.T) {
- opts := dirs(t)
- writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
   - name: p
     kind: openai
     api_key: ${MISSING_API_KEY}
     model: ${MISSING_MODEL}
 `)
- opts.Draft = true
- cfg, err := LoadFrom(opts)
- if err != nil { t.Fatal(err) }
- hasWarning(t, cfg, "MISSING_API_KEY")
- hasWarning(t, cfg, "MISSING_MODEL")
+	opts.Draft = true
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasWarning(t, cfg, "MISSING_API_KEY")
+	hasWarning(t, cfg, "MISSING_MODEL")
 }
 
 func TestTypedProfileErrors(t *testing.T) {
- cfg := &Config{}
- _, err := cfg.Default()
- if !errors.Is(err, ErrNoProvider) { t.Fatalf("Default error = %v", err) }
- var ve *ValidationError
- if !errors.As(err, &ve) || ve.Key != "default_provider" { t.Fatalf("Default validation = %v", err) }
- _, err = cfg.Profile("missing")
- if !errors.Is(err, ErrUnknownProfile) { t.Fatalf("Profile error = %v", err) }
- if !errors.As(err, &ve) || ve.Key != "providers" { t.Fatalf("Profile validation = %v", err) }
+	cfg := &Config{}
+	_, err := cfg.Default()
+	if !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("Default error = %v", err)
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Key != "default_provider" {
+		t.Fatalf("Default validation = %v", err)
+	}
+	_, err = cfg.Profile("missing")
+	if !errors.Is(err, ErrUnknownProfile) {
+		t.Fatalf("Profile error = %v", err)
+	}
+	cfg.DefaultProvider = "missing"
+	_, err = cfg.Default()
+	if !errors.Is(err, ErrUnknownProfile) || !errors.As(err, &ve) || ve.Key != "default_provider" {
+		t.Fatalf("Default validation = %v", err)
+	}
 }
 
-func intPtr(v int) *int { return &v }
+func intPtr(v int) *int    { return &v }
 func boolPtr(v bool) *bool { return &v }
 
 func TestExplicitTypedFlagOverrides(t *testing.T) {
- opts := dirs(t)
- writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
   - name: local
     kind: ollama
@@ -1254,9 +1291,15 @@ overview:
 instructions:
   summarize: true
 `)
- opts.Flags = Flags{OverviewDepth: intPtr(0), SummarizeInstructions: boolPtr(false)}
- cfg, err := LoadFrom(opts)
- if err != nil { t.Fatal(err) }
- if cfg.Overview.Depth != 0 { t.Errorf("explicit depth 0 became %d", cfg.Overview.Depth) }
- if cfg.Instructions.Summarize { t.Error("explicit false did not override file true") }
+	opts.Flags = Flags{OverviewDepth: intPtr(0), SummarizeInstructions: boolPtr(false)}
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Overview.Depth != 0 {
+		t.Errorf("explicit depth 0 became %d", cfg.Overview.Depth)
+	}
+	if cfg.Instructions.Summarize {
+		t.Error("explicit false did not override file true")
+	}
 }

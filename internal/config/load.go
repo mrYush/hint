@@ -153,28 +153,16 @@ func LoadFrom(opts Options) (*Config, error) {
 	}
 
 	if err := l.overlaySelected(cfg); err != nil {
-		return nil, err
+		return nil, l.withDiagnostics(err)
 	}
 	applyKindDefaults(cfg)
 	if err := l.resolveLimits(cfg, merged); err != nil {
-		return nil, err
+		return nil, l.withDiagnostics(err)
 	}
 
 	if !opts.Draft {
 		if err := l.validate(cfg); err != nil {
-			// Warnings would otherwise be lost when LoadFrom returns nil.
-			// Include only missing-variable diagnostics in the error;
-			// never include expanded values or credentials.
-			var missing []string
-			for _, warning := range l.warnings {
-				if strings.Contains(warning, ": environment variable ") && strings.HasSuffix(warning, " is not set") {
-					missing = append(missing, warning)
-				}
-			}
-			if len(missing) > 0 {
-				return nil, fmt.Errorf("%w (%s)", err, strings.Join(missing, "; "))
-			}
-			return nil, err
+			return nil, l.withDiagnostics(err)
 		}
 	}
 	cfg.Warnings = l.warnings
@@ -183,8 +171,9 @@ func LoadFrom(opts Options) (*Config, error) {
 
 // loader threads Options and accumulated warnings through the pipeline.
 type loader struct {
-	opts     Options
-	warnings []string
+	opts       Options
+	warnings   []string
+	missingEnv []missingEnvReference
 	// keyEnv collects the ${VAR} names api_key values referred to.
 	keyEnv []string
 	// mcpSecrets collects the expanded MCP header and env values, and the
@@ -194,6 +183,38 @@ type loader struct {
 
 func (l *loader) warnf(format string, args ...any) {
 	l.warnings = append(l.warnings, fmt.Sprintf(format, args...))
+}
+
+// missingEnvReference keeps diagnostics independent of their display format.
+// Only the field and variable name are retained, never expanded values.
+type missingEnvReference struct {
+	field    string
+	variable string
+}
+
+func (d missingEnvReference) String() string {
+	return fmt.Sprintf("%s: environment variable %s is not set", d.field, d.variable)
+}
+
+func (l *loader) warnMissingEnv(field, variable string) {
+	d := missingEnvReference{field: field, variable: variable}
+	if slices.Contains(l.missingEnv, d) {
+		return
+	}
+	l.missingEnv = append(l.missingEnv, d)
+	l.warnings = append(l.warnings, d.String())
+}
+
+// withDiagnostics preserves missing references even when loading fails.
+func (l *loader) withDiagnostics(err error) error {
+	if len(l.missingEnv) == 0 {
+		return err
+	}
+	messages := make([]string, 0, len(l.missingEnv))
+	for _, d := range l.missingEnv {
+		messages = append(messages, d.String())
+	}
+	return fmt.Errorf("%w (%s)", err, strings.Join(messages, "; "))
 }
 
 // env returns the value of a set, non-empty environment variable. A variable
@@ -462,10 +483,10 @@ func (l *loader) readFile(path string) (fileConfig, bool, error) {
 	seen := make(map[string]struct{}, len(fc.Providers))
 	for _, p := range fc.Providers {
 		if p.Name == "" {
-			return fileConfig{}, false, fmt.Errorf("%s: provider profile without a name", path)
+			return fileConfig{}, false, fmt.Errorf("%s: %w", path, validationErrorf("providers", "provider profile without a name"))
 		}
 		if _, dup := seen[p.Name]; dup {
-			return fileConfig{}, false, fmt.Errorf("%s: duplicate provider profile %q", path, p.Name)
+			return fileConfig{}, false, fmt.Errorf("%s: %w", path, validationErrorf("providers."+p.Name, "duplicate provider profile %q", p.Name))
 		}
 		seen[p.Name] = struct{}{}
 	}
@@ -604,12 +625,10 @@ func (l *loader) mergeFiles(global, project fileConfig) fileConfig {
 // expandWarn expands a file value and reports missing references without
 // exposing their values. A missing reference still expands to an empty string.
 func (l *loader) expandWarn(field, value string) string {
-	seen := make(map[string]bool)
 	return os.Expand(value, func(name string) string {
-		v, ok := l.opts.LookupEnv(name)
-		if !ok && !seen[name] {
-			l.warnf("%s: environment variable %s is not set", field, name)
-			seen[name] = true
+		v, ok := l.env(name)
+		if !ok && envName.MatchString(name) {
+			l.warnMissingEnv(field, name)
 		}
 		return v
 	})
@@ -701,11 +720,9 @@ func (l *loader) expandMCPRefs(server, field, value string) string {
 		name := m[1]
 		if v, ok := l.env(name); ok {
 			l.mcpSecrets = append(l.mcpSecrets, v)
-		} else {
-			l.warnf("mcp_servers.%s.%s: %s expands to nothing", server, field, name)
 		}
 	}
-	return expandValue(value, l.opts.LookupEnv)
+	return l.expandWarn("mcp_servers."+server+"."+field, value)
 }
 
 // expandMCPValue expands one env or header value. The expanded value is a
@@ -719,6 +736,9 @@ func (l *loader) expandMCPValue(server, field, value string) string {
 	}
 	return expanded
 }
+
+// envName excludes shell parameters such as $1, $$ and $@ from diagnostics.
+var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // envRefs matches the $VAR and ${VAR} references os.Expand understands.
 var envRefs = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
@@ -862,15 +882,15 @@ func (l *loader) overlaySelected(cfg *Config) error {
 	if l.opts.Flags.Model != "" {
 		p.Model = l.opts.Flags.Model
 	}
-	_, err := l.overlayInt(&p.ContextWindow, "context_window", "HINT_CONTEXT_WINDOW", "--context-window", l.opts.Flags.ContextWindow, 0)
+	_, err := l.overlayInt(&p.ContextWindow, "providers."+p.Name+".context_window", "HINT_CONTEXT_WINDOW", l.opts.Flags.ContextWindow, 0)
 	return err
 }
 
 // resolveLimits settles the project-context limits: the merged files'
 // values, then the HINT_* variables, then the flags, then the built-in
 // defaults for whatever is still unset. A negative value is rejected
-// wherever it came from; a non-numeric one is an error from a flag and a
-// warning from the environment, the way HINT_DEBUG is treated.
+// wherever it came from. Invalid environment values produce warnings;
+// Cobra rejects non-numeric flag values before the loader is called.
 func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if files.Instructions.Budget != nil {
 		cfg.Instructions.Budget = *files.Instructions.Budget
@@ -887,20 +907,18 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 	if files.Overview.MaxEntries != nil {
 		cfg.Overview.MaxEntries = *files.Overview.MaxEntries
 	}
-	set, err := l.overlayInt(&cfg.Instructions.Budget, "instructions.budget", "HINT_INSTRUCTION_BUDGET", "--instruction-budget", l.opts.Flags.InstructionBudget, 1)
+	set, err := l.overlayInt(&cfg.Instructions.Budget, "instructions.budget", "HINT_INSTRUCTION_BUDGET", l.opts.Flags.InstructionBudget, 1)
 	if err != nil {
 		return err
 	}
 	cfg.Instructions.BudgetExplicit = cfg.Instructions.BudgetExplicit || set
-	if _, err := l.overlayInt(&cfg.Overview.Depth, "overview.depth", "HINT_OVERVIEW_DEPTH", "--overview-depth", l.opts.Flags.OverviewDepth, 0); err != nil {
+	if _, err := l.overlayInt(&cfg.Overview.Depth, "overview.depth", "HINT_OVERVIEW_DEPTH", l.opts.Flags.OverviewDepth, 0); err != nil {
 		return err
 	}
-	if _, err := l.overlayInt(&cfg.Overview.MaxEntries, "overview.max_entries", "HINT_OVERVIEW_ENTRIES", "--overview-entries", l.opts.Flags.OverviewEntries, 1); err != nil {
+	if _, err := l.overlayInt(&cfg.Overview.MaxEntries, "overview.max_entries", "HINT_OVERVIEW_ENTRIES", l.opts.Flags.OverviewEntries, 1); err != nil {
 		return err
 	}
-	if err := l.overlayBool(&cfg.Instructions.Summarize, "HINT_INSTRUCTIONS_SUMMARIZE", "--summarize-instructions", l.opts.Flags.SummarizeInstructions); err != nil {
-		return err
-	}
+	l.overlayBool(&cfg.Instructions.Summarize, "HINT_INSTRUCTIONS_SUMMARIZE", l.opts.Flags.SummarizeInstructions)
 	if cfg.Instructions.Budget <= 0 {
 		cfg.Instructions.Budget = DefaultInstructionBudget
 	}
@@ -918,7 +936,7 @@ func (l *loader) resolveLimits(cfg *Config, files fileConfig) error {
 		cfg.SecretStore.Store = StoreAuto
 	case StoreAuto, StoreKeyring, StoreFile:
 	default:
-		return fmt.Errorf("secrets.store must be auto, keyring or file, not %q", cfg.SecretStore.Store)
+		return validationErrorf("secrets.store", "must be auto, keyring or file, not %q", cfg.SecretStore.Store)
 	}
 	return nil
 }
@@ -948,7 +966,7 @@ func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
 	}
 	if v := l.opts.Flags.Completion; v != "" {
 		if !validCompletionMode(v) {
-			return fmt.Errorf("--completion must be off, tab, idle or both, not %q", v)
+			return validationErrorf("completion.mode", "must be off, tab, idle or both, not %q", v)
 		}
 		c.Mode = CompletionMode(v)
 	}
@@ -956,14 +974,17 @@ func (l *loader) resolveCompletion(cfg *Config, fc fileCompletion) error {
 	case c.Mode == "":
 		c.Mode = CompletionOff
 	case !validCompletionMode(string(c.Mode)):
-		return fmt.Errorf("completion.mode must be off, tab, idle or both, not %q", c.Mode)
+		return validationErrorf("completion.mode", "must be off, tab, idle or both, not %q", c.Mode)
 	}
-	if c.IdleAfter <= 0 || c.WarnAfter <= 0 {
-		return errors.New("completion.idle_after and completion.warn_after must be positive durations")
+	if c.IdleAfter <= 0 {
+		return validationErrorf("completion.idle_after", "must be a positive duration")
+	}
+	if c.WarnAfter <= 0 {
+		return validationErrorf("completion.warn_after", "must be a positive duration")
 	}
 	if c.Profile != "" && c.Mode != CompletionOff {
 		if _, err := cfg.Usable(c.Profile, "completion"); err != nil {
-			l.warnf("completion is off: %s", strings.TrimPrefix(err.Error(), ""))
+			l.warnf("completion is off: %s", err.Error())
 			c.Mode = CompletionOff
 		}
 	}
@@ -981,7 +1002,7 @@ func validCompletionMode(v string) bool {
 // overlayBool applies the environment variable and then the flag to *dst,
 // each when set. Invalid environment booleans produce warnings; CLI values
 // have already been parsed and type-checked by Cobra.
-func (l *loader) overlayBool(dst *bool, envName, _ string, flagValue *bool) error {
+func (l *loader) overlayBool(dst *bool, envName string, flagValue *bool) {
 	if v, ok := l.env(envName); ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
@@ -993,7 +1014,6 @@ func (l *loader) overlayBool(dst *bool, envName, _ string, flagValue *bool) erro
 	if flagValue != nil {
 		*dst = *flagValue
 	}
-	return nil
 }
 
 // overlayInt applies the environment variable and then the flag to *dst,
@@ -1002,9 +1022,9 @@ func (l *loader) overlayBool(dst *bool, envName, _ string, flagValue *bool) erro
 // *dst alone. The file value already in *dst (named key in messages) is
 // checked against min too, since a file can say -1 as easily; a file's 0
 // is left for the defaults to fill. CLI values are already parsed by Cobra.
-func (l *loader) overlayInt(dst *int, key, envName, flagName string, flagValue *int, min int) (set bool, err error) {
+func (l *loader) overlayInt(dst *int, key, envName string, flagValue *int, min int) (set bool, err error) {
 	if *dst < min && *dst != 0 {
-		return false, fmt.Errorf("%s must be at least %d, got %d", key, min, *dst)
+		return false, validationErrorf(key, "must be at least %d, got %d", min, *dst)
 	}
 	if v, ok := l.env(envName); ok {
 		n, err := strconv.Atoi(v)
@@ -1020,7 +1040,7 @@ func (l *loader) overlayInt(dst *int, key, envName, flagName string, flagValue *
 	if flagValue != nil {
 		n := *flagValue
 		if n < min {
-			return set, fmt.Errorf("%s must be at least %d, got %d", flagName, min, n)
+			return set, validationErrorf(key, "must be at least %d, got %d", min, n)
 		}
 		*dst, set = n, true
 	}
@@ -1062,31 +1082,31 @@ func (l *loader) validate(cfg *Config) error {
 		switch p.Kind {
 		case KindOpenAI, KindOllama:
 		default:
-			return fmt.Errorf("profile %q: unknown kind %q (want %q or %q)", p.Name, p.Kind, KindOpenAI, KindOllama)
+			return validationErrorf("providers."+p.Name+".kind", "unknown kind %q (want %q or %q)", p.Kind, KindOpenAI, KindOllama)
 		}
 		if p.HeaderTimeout < 0 {
-			return fmt.Errorf("profile %q: header_timeout %s is negative", p.Name, p.HeaderTimeout)
+			return validationErrorf("providers."+p.Name+".header_timeout", "%s is negative", p.HeaderTimeout)
 		}
 		switch p.MaxTokensField {
 		case "", FieldMaxTokens, FieldMaxCompletionTokens:
 		default:
-			return fmt.Errorf("profile %q: max_tokens_field must be %s or %s, not %q", p.Name, FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
+			return validationErrorf("providers."+p.Name+".max_tokens_field", "must be %s or %s, not %q", FieldMaxTokens, FieldMaxCompletionTokens, p.MaxTokensField)
 		}
 	}
 	for _, s := range cfg.MCPServers {
 		if err := validateMCPServer(s); err != nil {
-			return fmt.Errorf("%w", err)
+			return err
 		}
 	}
 	if cfg.DefaultProvider == "" {
-		return errors.New("default_provider must be set when more than one profile is defined")
+		return validationErrorf("default_provider", "must be set when more than one profile is defined")
 	}
 	if _, err := cfg.Profile(cfg.DefaultProvider); err != nil {
-		return fmt.Errorf("default_provider: %w", err)
+		return &ValidationError{Key: "default_provider", Err: err}
 	}
 	if cfg.FallbackProvider != "" {
 		if _, err := cfg.Profile(cfg.FallbackProvider); err != nil {
-			return fmt.Errorf("fallback_provider: %w", err)
+			return &ValidationError{Key: "fallback_provider", Err: err}
 		}
 		if cfg.FallbackProvider == cfg.DefaultProvider {
 			l.warnf("fallback_provider %q equals default_provider and was ignored", cfg.FallbackProvider)
