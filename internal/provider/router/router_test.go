@@ -118,10 +118,16 @@ var allKinds = []agentapi.ErrorKind{
 	agentapi.ErrRateLimited, agentapi.ErrUnavailable, agentapi.ErrAuth,
 	agentapi.ErrInvalidRequest, agentapi.ErrModelNotFound,
 	agentapi.ErrContextOverflow, agentapi.ErrContentFiltered, agentapi.ErrCanceled,
+	agentapi.ErrTurnLimit,
 }
 
 func TestKindTableIsComplete(t *testing.T) {
+	const definedKinds = 12
+	if len(allKinds) != definedKinds { t.Fatalf("allKinds has %d entries; want %d", len(allKinds), definedKinds) }
+	seen := make(map[agentapi.ErrorKind]bool)
 	for _, k := range allKinds {
+		if seen[k] { t.Errorf("duplicate kind %q", k) }
+		seen[k] = true
 		if !k.Valid() {
 			t.Errorf("kind %q is not valid", k)
 		}

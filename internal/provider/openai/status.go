@@ -76,6 +76,22 @@ func kindForStatus(status int, msg string) agentapi.ErrorKind {
 // isContextOverflow recognises the request-too-long refusal inside a 400
 // body. There is no structured code for it across dialects, so this is a
 // substring match over the phrasings the supported providers actually use.
+// kindForWireError classifies provider errors sent inside HTTP 200 SSE.
+func kindForWireError(e *wireError) agentapi.ErrorKind {
+ if e == nil { return agentapi.ErrUnknown }
+ code := strings.ToLower(strings.Trim(strings.TrimSpace(string(e.Code)), "\""))
+ detail := strings.ToLower(strings.Join([]string{code, e.Type, e.Message}, " "))
+ switch {
+ case isContextOverflow(detail): return agentapi.ErrContextOverflow
+ case strings.Contains(detail, "invalid_api_key"), strings.Contains(detail, "authentication"), strings.Contains(detail, "unauthorized"), strings.Contains(detail, "forbidden"), strings.Contains(detail, "permission_denied"): return agentapi.ErrAuth
+ case strings.Contains(detail, "rate_limit"), strings.Contains(detail, "rate limit"), strings.Contains(detail, "too_many_requests"), strings.Contains(detail, "quota_exceeded"): return agentapi.ErrRateLimited
+ case strings.Contains(detail, "model_not_found"), strings.Contains(detail, "model not found"): return agentapi.ErrModelNotFound
+ case strings.Contains(detail, "invalid_request"), strings.Contains(detail, "invalid request"): return agentapi.ErrInvalidRequest
+ case strings.Contains(detail, "content_filter"), strings.Contains(detail, "content policy"): return agentapi.ErrContentFiltered
+ default: return agentapi.ErrUnavailable
+ }
+}
+
 func isContextOverflow(msg string) bool {
 	m := strings.ToLower(msg)
 	for _, needle := range []string{

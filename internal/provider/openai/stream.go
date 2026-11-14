@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"sync/atomic"
 	"strings"
 	"time"
 
@@ -83,16 +84,15 @@ func (c *Client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 
 	// Stall detection: every received line rearms the timer; if it fires,
-	// closing the body unblocks the scanner with a read error. timedOut is
-	// only read after the scanner stopped, so the race with a late fire is
-	// benign.
+	// closing the body unblocks the scanner with a read error. The flag
+	// is atomic because the timer callback races with the reader.
 	idle := c.idleTimeout
 	if idle <= 0 {
 		idle = defaultIdleTimeout
 	}
-	timedOut := false
+	var timedOut atomic.Bool
 	stall := time.AfterFunc(idle, func() {
-		timedOut = true
+		timedOut.Store(true)
 		_ = resp.Body.Close()
 	})
 	defer stall.Stop()
@@ -122,7 +122,7 @@ func (c *Client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		switch {
 		case ctx.Err() != nil, agentapi.KindOf(err) == agentapi.ErrCanceled:
 			terminal(cancelTerminal())
-		case timedOut:
+		case timedOut.Load():
 			e := agentapi.NewError(agentapi.ErrTimeout,
 				"stream stalled: no data for %s", idle).WithProvider(c.profile.Name)
 			terminal(agentapi.ChatEvent{Kind: agentapi.ChatError, Err: e})
@@ -282,7 +282,7 @@ func (d *decoder) flushRecord() []agentapi.ChatEvent {
 		return nil
 	}
 	if chunk.Error != nil {
-		d.failure = agentapi.NewError(agentapi.ErrUnavailable,
+		d.failure = agentapi.NewError(kindForWireError(chunk.Error),
 			"provider reported: %s", chunk.Error.describe())
 		return nil
 	}
