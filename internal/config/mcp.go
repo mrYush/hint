@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -72,81 +71,82 @@ type MCPToolFilter struct {
 // validateMCPServer checks the structural rules the loader can decide
 // before internal/mcp sees the value. The MCP package checks them again,
 // because it is also called directly by tests and future callers.
+// Failures identify the server with ValidationError.Key = mcp_servers.<name>.
 func validateMCPServer(s MCPServer) error {
 	where := "mcp_servers." + s.Name
 	if !mcpServerNamePattern.MatchString(s.Name) {
-		return fmt.Errorf("%s: server name must match %s", where, mcpServerNamePattern)
+		return validationErrorf(where, "server name must match %s", mcpServerNamePattern)
 	}
 	switch s.Transport {
 	case MCPTransportStdio:
 		if s.Command == "" {
-			return fmt.Errorf("%s: a stdio server needs command", where)
+			return validationErrorf(where, "a stdio server needs command")
 		}
 		if s.URL != "" || len(s.Headers) > 0 {
-			return fmt.Errorf("%s: a stdio server cannot set url or headers", where)
+			return validationErrorf(where, "a stdio server cannot set url or headers")
 		}
 	case MCPTransportHTTP:
 		if s.URL == "" {
-			return fmt.Errorf("%s: an http server needs url", where)
+			return validationErrorf(where, "an http server needs url")
 		}
 		u, err := url.Parse(s.URL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("%s: url must be an absolute http or https URL", where)
+			return validationErrorf(where, "url must be an absolute http or https URL")
 		}
 		if u.User != nil {
-			return fmt.Errorf("%s: url must not carry a user or password; use headers", where)
+			return validationErrorf(where, "url must not carry a user or password; use headers")
 		}
 		if s.Command != "" || len(s.Args) > 0 || len(s.Env) > 0 {
-			return fmt.Errorf("%s: an http server cannot set command, args or env", where)
+			return validationErrorf(where, "an http server cannot set command, args or env")
 		}
 	default:
-		return fmt.Errorf("%s: transport must be %q or %q, not %q", where, MCPTransportStdio, MCPTransportHTTP, s.Transport)
+		return validationErrorf(where, "transport must be %q or %q, not %q", MCPTransportStdio, MCPTransportHTTP, s.Transport)
 	}
 	switch s.Permission {
 	case "", "read", "write", "execute":
 	default:
-		return fmt.Errorf("%s: permission must be read, write or execute, not %q", where, s.Permission)
+		return validationErrorf(where, "permission must be read, write or execute, not %q", s.Permission)
 	}
 	if s.Timeout < 0 {
-		return fmt.Errorf("%s: timeout must not be negative", where)
+		return validationErrorf(where, "timeout must not be negative")
 	}
 	if s.DescriptionMax < 0 {
-		return fmt.Errorf("%s: description_max must not be negative", where)
+		return validationErrorf(where, "description_max must not be negative")
 	}
 	if len(s.Tools.Allow) > 0 && len(s.Tools.Deny) > 0 {
-		return fmt.Errorf("%s: tools.allow and tools.deny cannot both be set", where)
+		return validationErrorf(where, "tools.allow and tools.deny cannot both be set")
 	}
 	for _, name := range append(append([]string{}, s.Tools.Allow...), s.Tools.Deny...) {
 		if name == "" {
-			return fmt.Errorf("%s: tools lists an empty tool name", where)
+			return validationErrorf(where, "tools lists an empty tool name")
 		}
 		if strings.ContainsAny(name, " \t\r\n") {
-			return fmt.Errorf("%s: tool name %q contains whitespace", where, name)
+			return validationErrorf(where, "tool name %q contains whitespace", name)
 		}
 	}
 	seenResources := map[string]bool{}
 	for _, uri := range s.Resources {
 		u, err := url.Parse(uri)
 		if err != nil || u.Scheme == "" || strings.TrimSpace(uri) != uri {
-			return fmt.Errorf("%s: resource URI %q must be absolute", where, uri)
+			return validationErrorf(where, "resource URI %q must be absolute", uri)
 		}
 		if seenResources[uri] {
-			return fmt.Errorf("%s: resource URI %q is listed more than once", where, uri)
+			return validationErrorf(where, "resource URI %q is listed more than once", uri)
 		}
 		seenResources[uri] = true
 	}
 	for name := range s.Env {
 		if name == "" || strings.ContainsAny(name, "=\x00") {
-			return fmt.Errorf("%s: env has an invalid variable name %q", where, name)
+			return validationErrorf(where, "env has an invalid variable name %q", name)
 		}
 	}
 	for name := range s.Headers {
 		if name == "" || strings.ContainsAny(name, ": \t\r\n\x00") {
-			return fmt.Errorf("%s: headers has an invalid name %q", where, name)
+			return validationErrorf(where, "headers has an invalid name %q", name)
 		}
 	}
 	if s.Project && (len(s.Env) > 0 || len(s.Headers) > 0) {
-		return fmt.Errorf("%s: a project server may not set env or headers", where)
+		return validationErrorf(where, "a project server may not set env or headers")
 	}
 	return nil
 }

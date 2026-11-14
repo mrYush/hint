@@ -115,6 +115,17 @@ Extends `internal/config`. Priority: CLI flags → env (`HINT_*`) → project
 - ✅ Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
 - ✅ Table-driven tests for source priority and env expansion
 
+Follow-up from the Go-practices audit: [#37](https://github.com/mrYush/hint/issues/37), branch `fix/issue-37-config-diagnostics` (pending merge).
+
+- ✅ S7: warn with the field and variable name for missing or empty `$VAR` / `${VAR}` references; preserve these diagnostics on load failure and display warnings on stderr in `hint config`.
+- ✅ S8: expose `ErrNoProvider`, `ErrUnknownProfile`, and `ValidationError.Key`; retain `NoKeyError` / `NoModelError` through wrapping and test with `errors.Is` / `errors.As`.
+- ✅ S9: omit the package-level `config:` prefix; callers supply operation context.
+- ✅ S22: parse numeric and boolean CLI flags with Cobra and use `Changed` to pass optional typed overrides.
+
+Diagnostics retain names, never expanded values, and do not mistake shell parameters such as `$1` and `$$` for environment variables.
+`ValidationError.Key` identifies the responsible field, including `default_provider`, `fallback_provider`, `providers.<name>.<field>`, and `mcp_servers.<name>`.
+Direct profile lookup returns `ErrUnknownProfile`; the caller that knows the selecting field attaches its key.
+
 Example config:
 
 ```yaml
@@ -177,11 +188,10 @@ depend on them:
   `APIBAR_TOKEN` (api-bar wins) or `OPENAI_API_KEY` (legacy openai.com). An
   explicit profile must name its key via `${VAR}` — the loader never guesses
   a key for it, and never sends an OpenAI key to another host.
-- **Flag defaults are empty strings.** The old `--model` default `gpt-4`
-  silently beat every config file; built-in defaults now live in the loader,
-  applied only after all overlays. Legacy paths (`~/.config/hint.yaml`,
-  `./hint.yaml`) are still read with a deprecation warning when the
-  canonical ones are absent.
+- **Omitted flags do not override files.** String flags default to empty; numeric and boolean flags reach the loader as `*int` / `*bool` only when Cobra reports `Changed`.
+  Explicit `0` and `false` remain distinct from omission.
+  Built-in defaults live in the loader and apply after overlays.
+  Legacy paths (`~/.config/hint.yaml`, `./hint.yaml`) are still read with a deprecation warning when the canonical ones are absent.
 - **`$VAR`/`${VAR}` expansion applies to file values only** (profile fields
   plus `default_provider`/`fallback_provider`), after merge. Flag and env
   overlay values are not expanded — the shell already did that. No
@@ -1010,14 +1020,11 @@ depend on them:
   core-as-a-service, where a line has more than one consumer. Failing to
   open the file is a warning, not a refusal. The file and its directory
   are owner-only: the trace holds the user's prompts and code.
-- **Numeric flags are strings.** Flag defaults must stay empty (WP0.2's
-  rule) and 0 is a legal `--overview-depth`; a cobra int flag cannot tell
-  unset from 0. The loader parses them: a bad flag is an error naming the
-  flag, a bad variable a warning that leaves the value alone (the
-  `HINT_DEBUG` rule), and a negative value is refused wherever it came
-  from, a file included. The YAML side uses `*int` for the same reason,
-  so `overview: {depth: 0}` in a project file survives the merge with a
-  global file that says 3.
+- **Numeric and boolean flags are typed** ([#37](https://github.com/mrYush/hint/issues/37)).
+  Cobra parses values; `Changed` determines whether a `*int` / `*bool` override reaches the loader, preserving explicit `--overview-depth=0` and `--summarize-instructions=false`.
+  Invalid flag syntax exits 2; a parsed value outside the configuration range exits 1, as does an invalid file value.
+  The loader reports configuration keys rather than CLI flag spellings; invalid environment values remain warnings that leave the lower-priority value alone.
+  YAML uses pointers too, so a project's `overview: {depth: 0}` survives merging with a global depth of 3.
 - **Config owns the limit defaults; `project` keeps its constants.**
   `config` is loaded before anything else and must not import `project`,
   so the three numbers exist twice and `internal/project`'s test asserts

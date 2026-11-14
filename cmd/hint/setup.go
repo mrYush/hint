@@ -108,7 +108,7 @@ func (s *setupInfo) save(profile string, values map[string]string) (string, erro
 	case stored:
 		msg = "the API key is in the OS secret store (hint config show-key " + profile + " shows it again); " + msg
 	case storeErr != nil:
-		msg += "; no secret store answered (" + strings.TrimPrefix(storeErr.Error(), "config: ") + "), so the key is in that file, mode 0600: anyone running as you can read it"
+		msg += "; no secret store answered (" + storeErr.Error() + "), so the key is in that file, mode 0600: anyone running as you can read it"
 	}
 	if name, ok := envReference(key); ok {
 		if _, set := s.env.lookup(name); !set {
@@ -412,7 +412,7 @@ func firstRunSetup(ctx context.Context, sio stdio, loadErr error, env environmen
 	}
 	info := firstRunInfo(env, loadErr)
 	fmt.Fprintln(sio.err, "hint: you will need "+keyHelp+".")
-	fmt.Fprintln(sio.err, "hint:", strings.TrimPrefix(loadErr.Error(), "config: "))
+	fmt.Fprintln(sio.err, "hint:", loadErr.Error())
 	fmt.Fprintln(sio.err, info.describe())
 	tty := newTTYIO(in, sio.err)
 	answer, err := tty.Line(ctx, "Set it up now? [Y/n]: ")

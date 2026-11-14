@@ -125,21 +125,21 @@ func LookupKey(path string) (k Key, profile string, err error) {
 	if rest, ok := strings.CutPrefix(path, "providers."); ok {
 		name, field, ok := strings.Cut(rest, ".")
 		if !ok || name == "" || strings.Contains(field, ".") {
-			return Key{}, "", fmt.Errorf("config: a profile field is providers.<profile>.<field>, not %q", path)
+			return Key{}, "", fmt.Errorf("a profile field is providers.<profile>.<field>, not %q", path)
 		}
 		for _, k := range keys {
 			if f, ok := k.Profile(); ok && f == field {
 				return k, name, nil
 			}
 		}
-		return Key{}, "", fmt.Errorf("config: profiles have no field %q (hint config keys lists them)", field)
+		return Key{}, "", fmt.Errorf("profiles have no field %q (hint config keys lists them)", field)
 	}
 	for _, k := range keys {
 		if k.Path == path {
 			return k, "", nil
 		}
 	}
-	return Key{}, "", fmt.Errorf("config: unknown key %q (hint config keys lists them)", path)
+	return Key{}, "", fmt.Errorf("unknown key %q (hint config keys lists them)", path)
 }
 
 // Normalize checks value against the key's type and returns it in the
@@ -148,33 +148,33 @@ func LookupKey(path string) (k Key, profile string, err error) {
 func (k Key) Normalize(value string) (string, error) {
 	v := strings.TrimSpace(value)
 	if v == "" {
-		return "", fmt.Errorf("config: %s needs a value", k.Path)
+		return "", fmt.Errorf("%s needs a value", k.Path)
 	}
 	switch k.Type {
 	case TypeInt:
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return "", fmt.Errorf("config: %s must be a whole number, not %q", k.Path, v)
+			return "", fmt.Errorf("%s must be a whole number, not %q", k.Path, v)
 		}
 		if n < k.Min {
-			return "", fmt.Errorf("config: %s must be at least %d", k.Path, k.Min)
+			return "", fmt.Errorf("%s must be at least %d", k.Path, k.Min)
 		}
 		return strconv.Itoa(n), nil
 	case TypeBool:
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return "", fmt.Errorf("config: %s must be true or false, not %q", k.Path, v)
+			return "", fmt.Errorf("%s must be true or false, not %q", k.Path, v)
 		}
 		return strconv.FormatBool(b), nil
 	case TypeDuration:
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			return "", fmt.Errorf("config: %s must be a positive duration with units (90s, 15m), not %q", k.Path, v)
+			return "", fmt.Errorf("%s must be a positive duration with units (90s, 15m), not %q", k.Path, v)
 		}
 		return v, nil
 	case TypeEnum:
 		if !slices.Contains(k.Enum, v) {
-			return "", fmt.Errorf("config: %s must be one of %s, not %q", k.Path, strings.Join(k.Enum, ", "), v)
+			return "", fmt.Errorf("%s must be one of %s, not %q", k.Path, strings.Join(k.Enum, ", "), v)
 		}
 		return v, nil
 	case TypeString, TypeSecret:

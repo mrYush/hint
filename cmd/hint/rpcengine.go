@@ -536,7 +536,7 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 	if sess != nil {
 		if rec := sess.Profile(); rec.Name != "" {
 			if err := live.switchTo(rpc.ProfileRef{Profile: rec.Name, Model: rec.Model}, false); err != nil {
-				live.warnings = append(live.warnings, fmt.Sprintf("the session's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
+				live.warnings = append(live.warnings, fmt.Sprintf("the session's profile is not usable (%s); answering with the default profile instead", err.Error()))
 			}
 		}
 	}
