@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -183,7 +184,7 @@ mcp_servers:
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	hasWarning(t, cfg, "MISSING expands to nothing")
+	hasWarning(t, cfg, "environment variable MISSING is not set")
 	if got := cfg.MCPServers[0].Headers["Authorization"]; got != "Bearer " {
 		t.Errorf("Authorization = %q; want the empty expansion", got)
 	}
@@ -254,8 +255,13 @@ func TestMCPServersValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := loadMCP(t, mcpProviderYAML+tt.yaml, "", nil, false)
-			if err == nil {
-				t.Fatalf("LoadFrom accepted the config")
+			key := "mcp_servers.s"
+			if tt.name == "bad server name" {
+				key = "mcp_servers.bad.name"
+			}
+			var ve *ValidationError
+			if !errors.As(err, &ve) || ve.Key != key {
+				t.Fatalf("want ValidationError.Key=%q, got %v", key, err)
 			}
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("error = %v; want %q", err, tt.want)

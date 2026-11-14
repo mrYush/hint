@@ -733,6 +733,11 @@ your convenience.
 The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
+**Fixed in `fix/issue-37-config-diagnostics`, pending merge.** An unset or empty reference such as `api_key: ${API_BAR_KE}` now produces a warning naming the variable and field, including when loading fails or `hint config` displays a valid configuration.
+Errors no longer repeat `loading configuration: config:`.
+Silent expansion and repeated error context were present since `v0.2.0-alpha`.
+See [#37](https://github.com/mrYush/hint/issues/37).
+
 **Fixed in `fix/issue-38-runtime-hardening`, pending merge.** CLI usage errors now exit with status 2, and one-shot, RPC, and serve invocations exit quietly with status 130 for SIGINT or 143 for SIGTERM.
 `--help` and `--version` work without a home directory.
 Debug traces older than seven days are pruned when they have also gone seven days without modification.

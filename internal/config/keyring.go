@@ -19,7 +19,7 @@ type Keyring interface {
 }
 
 // ErrKeyringNotFound reports an account the store has no secret for.
-var ErrKeyringNotFound = errors.New("config: no such entry in the secret store")
+var ErrKeyringNotFound = errors.New("no such entry in the secret store")
 
 // KeyringService is the service name hint's entries are filed under.
 const KeyringService = "hint"
@@ -52,7 +52,7 @@ func (OSKeyring) Get(account string) (string, error) {
 		return "", fmt.Errorf("%w: %s/%s", ErrKeyringNotFound, KeyringService, account)
 	}
 	if err != nil {
-		return "", fmt.Errorf("config: secret store: %w", err)
+		return "", fmt.Errorf("secret store: %w", err)
 	}
 	return s, nil
 }
@@ -60,7 +60,7 @@ func (OSKeyring) Get(account string) (string, error) {
 // Set implements Keyring.
 func (OSKeyring) Set(account, secret string) error {
 	if err := gokeyring.Set(KeyringService, account, secret); err != nil {
-		return fmt.Errorf("config: secret store: %w", err)
+		return fmt.Errorf("secret store: %w", err)
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func (OSKeyring) Delete(account string) error {
 		return fmt.Errorf("%w: %s/%s", ErrKeyringNotFound, KeyringService, account)
 	}
 	if err != nil {
-		return fmt.Errorf("config: secret store: %w", err)
+		return fmt.Errorf("secret store: %w", err)
 	}
 	return nil
 }

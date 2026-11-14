@@ -255,11 +255,11 @@ func (m model) completed(msg completionMsg) model {
 		c.failed++
 		c.failures++
 		if c.failures >= maxFailures {
-			c.disabled = fmt.Sprintf("switched off after %d failures in a row; last: %s", c.failures, strings.TrimPrefix(msg.err.Error(), "config: "))
+			c.disabled = fmt.Sprintf("switched off after %d failures in a row; last: %s", c.failures, msg.err.Error())
 			m.add(entry{kind: entryNotice, text: "completion " + c.disabled + "; /completion on tries again", done: true})
 			return m
 		}
-		m.status = "completion failed: " + strings.TrimPrefix(msg.err.Error(), "config: ")
+		m.status = "completion failed: " + msg.err.Error()
 		return m
 	case msg.res.Disabled:
 		c.disabled = msg.res.Reason
@@ -423,7 +423,7 @@ func (m model) modelsLoaded(msg modelsMsg) model {
 	}
 	if msg.err != nil {
 		c.models[msg.profile] = []string{}
-		m.status = "no model list for " + msg.profile + ": " + strings.TrimPrefix(msg.err.Error(), "config: ")
+		m.status = "no model list for " + msg.profile + ": " + msg.err.Error()
 		return m
 	}
 	c.models[msg.profile] = msg.models

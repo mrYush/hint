@@ -103,10 +103,10 @@ func Edit(path string, fn func(*Document) error) error {
 	switch data, err := os.ReadFile(path); {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
-		return fmt.Errorf("config: reading %s: %w", path, err)
+		return fmt.Errorf("reading %s: %w", path, err)
 	default:
 		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return fmt.Errorf("config: parsing %s: %w", path, err)
+			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 	}
 	if doc.Kind == 0 { // a missing or empty file
@@ -114,7 +114,7 @@ func Edit(path string, fn func(*Document) error) error {
 	}
 	d := &Document{root: doc.Content[0]}
 	if d.root.Kind != yaml.MappingNode {
-		return fmt.Errorf("config: %s is not a mapping at the top level", path)
+		return fmt.Errorf("%s is not a mapping at the top level", path)
 	}
 	if err := fn(d); err != nil {
 		return err
@@ -124,11 +124,11 @@ func Edit(path string, fn func(*Document) error) error {
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
 	if err := enc.Encode(&doc); err != nil {
-		return fmt.Errorf("config: encoding %s: %w", path, err)
+		return fmt.Errorf("encoding %s: %w", path, err)
 	}
 	_ = enc.Close()
 	if err := checkDecodes(buf.Bytes()); err != nil {
-		return fmt.Errorf("config: the change would break %s: %w", path, err)
+		return fmt.Errorf("the change would break %s: %w", path, err)
 	}
 	return writeAtomic(path, buf.Bytes())
 }
@@ -159,26 +159,26 @@ func checkDecodes(data []byte) error {
 // hold a key: owner only.
 func writeAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("config: %w", err)
+		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.yaml")
 	if err != nil {
-		return fmt.Errorf("config: %w", err)
+		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("config: %w", err)
+		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("config: writing %s: %w", path, err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("config: writing %s: %w", path, err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("config: replacing %s: %w", path, err)
+		return fmt.Errorf("replacing %s: %w", path, err)
 	}
 	return nil
 }
@@ -251,7 +251,7 @@ func (d *Document) profile(name string, create bool) (*yaml.Node, error) {
 		setKey(d.root, "providers", providers)
 	}
 	if providers.Kind != yaml.SequenceNode {
-		return nil, errors.New("config: providers is not a list")
+		return nil, errors.New("providers is not a list")
 	}
 	for _, item := range providers.Content {
 		if n := mapValue(item, "name"); n != nil && n.Value == name {
@@ -285,7 +285,7 @@ func (d *Document) section(name string) *yaml.Node {
 // one as its default.
 func WriteProfile(path, name string, values map[string]string) error {
 	if name == "" {
-		return errors.New("config: a profile needs a name")
+		return errors.New("a profile needs a name")
 	}
 	return Edit(path, func(d *Document) error {
 		if _, err := d.profile(name, true); err != nil {
