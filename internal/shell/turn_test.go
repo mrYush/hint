@@ -17,6 +17,7 @@ import (
 )
 
 func TestSummarizeArgsCutsOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	got := SummarizeArgs([]byte(strings.Repeat("Привет ", 30)))
 	if !utf8.ValidString(got) {
 		t.Fatalf("SummarizeArgs returned invalid UTF-8: %q", got)
@@ -30,6 +31,7 @@ func TestSummarizeArgsCutsOnRuneBoundary(t *testing.T) {
 }
 
 func TestExplain(t *testing.T) {
+	t.Parallel()
 	auth := agentapi.NewError(agentapi.ErrAuth, "Unauthorized")
 	if got := Explain(auth); !strings.Contains(got, "Unauthorized") || !strings.Contains(got, "api_key") {
 		t.Errorf("Explain(auth) = %q; want the error and what to check", got)
@@ -76,6 +78,7 @@ func silentCore(t *testing.T, conn net.Conn) {
 }
 
 func TestRunTurnGivesUpOnASilentCore(t *testing.T) {
+	// Run serially because this test overrides the package-wide idle timeout.
 	saved := startWait
 	startWait = 50 * time.Millisecond
 	t.Cleanup(func() { startWait = saved })
@@ -197,6 +200,7 @@ func permissionCore(t *testing.T) (*rpc.Client, <-chan struct{}) {
 }
 
 func TestRunTurnPermissionPromptFailureCancelsTurn(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("tty gone")
 	cl, cancelled := permissionCore(t)
 	sink := testSink{permission: func(context.Context, agentapi.PermissionRequest) (permission.Decision, error) {
@@ -223,6 +227,7 @@ func TestRunTurnPermissionPromptFailureCancelsTurn(t *testing.T) {
 }
 
 func TestRunTurnFailedPermissionReplyCancelsTurn(t *testing.T) {
+	t.Parallel()
 	cl, cancelled := permissionCore(t)
 	sink := testSink{permission: func(context.Context, agentapi.PermissionRequest) (permission.Decision, error) {
 		return permission.Allow, nil

@@ -10,6 +10,7 @@ import (
 )
 
 func TestWriteSummaryCacheConcurrent(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("an open reader can prevent replacing a cache entry on Windows")
 	}
@@ -43,6 +44,7 @@ func TestWriteSummaryCacheConcurrent(t *testing.T) {
 }
 
 func TestWriteSummaryCacheCleansUpOnRenameFailure(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "summary.md")
 	if err := os.Mkdir(path, 0o700); err != nil {

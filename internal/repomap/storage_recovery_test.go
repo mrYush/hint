@@ -20,6 +20,7 @@ import (
 )
 
 func TestDiscoveryQuotaPreservesWorkAndCursorThenRecovers(t *testing.T) {
+	t.Parallel()
 	root, err := tool.NewRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

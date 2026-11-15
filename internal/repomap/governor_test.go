@@ -13,6 +13,7 @@ func testResourceProfile() ResourceProfile {
 }
 
 func TestGovernorUnknownPressureAndHysteresis(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1000, 0)
 	g := resourceGovernor{mode: ModeAuto, profile: testResourceProfile()}
 	if ok, why := g.admit(now); ok || why != "telemetry_unavailable" {
@@ -54,6 +55,7 @@ func TestGovernorUnknownPressureAndHysteresis(t *testing.T) {
 }
 
 func TestGovernorUnvalidatedAndInference(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	g := resourceGovernor{mode: ModeAuto, sample: ResourceSample{At: now, Known: true, AvailableMemory: 100, FreeDisk: 100}}
 	if ok, why := g.admit(now); ok || why != "resource_profile_unvalidated" {

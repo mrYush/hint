@@ -15,6 +15,7 @@ import (
 // TestReferenceEverything is an opt-in local check of the cached reference
 // server. Once enabled, client and dial failures fail rather than skip.
 func TestReferenceEverything(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("HINT_TEST_MCP_REFERENCE") != "1" {
 		t.Skip("set HINT_TEST_MCP_REFERENCE=1 to run the cached reference server")
 	}

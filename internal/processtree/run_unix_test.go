@@ -13,6 +13,7 @@ import (
 )
 
 func TestCancelGroupPreservesError(t *testing.T) {
+	t.Parallel()
 	// A live child makes a fallback observable: killing only this process must
 	// not turn a failed group kill into success for callers such as git clone.
 	ctx, cancel := context.WithCancel(t.Context())
@@ -69,6 +70,7 @@ func TestCancelGroupPreservesError(t *testing.T) {
 }
 
 func TestCancelGroupBeforeStart(t *testing.T) {
+	t.Parallel()
 	err := cancelGroup(&exec.Cmd{}, func(int, syscall.Signal) error {
 		t.Fatal("group kill called before the process started")
 		return nil

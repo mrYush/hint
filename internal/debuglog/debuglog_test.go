@@ -10,6 +10,7 @@ import (
 )
 
 func TestOpenAndRedact(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "state", "log")
 	now := time.Date(2026, 9, 7, 15, 30, 12, 0, time.UTC)
 	l, err := Open(dir, now, []string{"sk-secret-1234567890"})
@@ -52,6 +53,7 @@ func TestOpenAndRedact(t *testing.T) {
 }
 
 func TestDefaultDir(t *testing.T) {
+	t.Parallel()
 	lookup := func(env map[string]string) func(string) (string, bool) {
 		return func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	}
@@ -67,6 +69,7 @@ func TestDefaultDir(t *testing.T) {
 }
 
 func TestRetention(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
 		name               string
@@ -121,6 +124,7 @@ func TestRetention(t *testing.T) {
 }
 
 func TestOpenSurvivesPruneFailure(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("requires Unix directory permissions")
 	}
@@ -148,6 +152,7 @@ func TestOpenSurvivesPruneFailure(t *testing.T) {
 }
 
 func TestRetentionKeepsRecentlyWrittenOldTrace(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	now := time.Now()
 	path := filepath.Join(dir, now.AddDate(0, 0, -8).Format("20060102-150405")+"-123.log")
@@ -163,6 +168,7 @@ func TestRetentionKeepsRecentlyWrittenOldTrace(t *testing.T) {
 }
 
 func TestSlogRedactsBeforeEncoding(t *testing.T) {
+	t.Parallel()
 	secret := "secret-with-\"quotes\"\nand-newline"
 	l, err := Open(t.TempDir(), time.Now(), []string{secret})
 	if err != nil {

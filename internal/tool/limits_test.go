@@ -27,6 +27,7 @@ func (s stubTool) Run(ctx context.Context, callID string, _ json.RawMessage) (ag
 }
 
 func TestWithLimits_PassesDescriptorsThrough(t *testing.T) {
+	t.Parallel()
 	inner := stubTool{name: "stub"}
 	wrapped := tool.WithLimits(inner, tool.DefaultLimits())
 	if wrapped.Name() != "stub" || wrapped.Description() != "stub" || wrapped.Class() != agentapi.ClassRead {
@@ -39,6 +40,7 @@ func TestWithLimits_PassesDescriptorsThrough(t *testing.T) {
 }
 
 func TestWithLimits_TimeoutBecomesErrorResult(t *testing.T) {
+	t.Parallel()
 	slow := stubTool{name: "slow", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
 		<-ctx.Done()
 		return agentapi.ToolResult{}, ctx.Err()
@@ -58,6 +60,7 @@ func TestWithLimits_TimeoutBecomesErrorResult(t *testing.T) {
 }
 
 func TestWithLimits_ParentCancelIsNotRelabelled(t *testing.T) {
+	t.Parallel()
 	slow := stubTool{name: "slow", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
 		<-ctx.Done()
 		return agentapi.ToolResult{}, ctx.Err()
@@ -73,6 +76,7 @@ func TestWithLimits_ParentCancelIsNotRelabelled(t *testing.T) {
 }
 
 func TestWithLimits_ParentDeadlineIsNotRelabelled(t *testing.T) {
+	t.Parallel()
 	slow := stubTool{name: "slow", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
 		<-ctx.Done()
 		return agentapi.ToolResult{}, ctx.Err()
@@ -94,6 +98,7 @@ func TestWithLimits_ParentDeadlineIsNotRelabelled(t *testing.T) {
 }
 
 func TestWithLimits_TruncatesTextParts(t *testing.T) {
+	t.Parallel()
 	big := strings.Repeat("line of output\n", 1000)
 	chatty := stubTool{name: "chatty", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
 		return agentapi.TextResult(callID, "chatty", big), nil
@@ -110,6 +115,7 @@ func TestWithLimits_TruncatesTextParts(t *testing.T) {
 }
 
 func TestWithLimits_MachineryErrorPassesThrough(t *testing.T) {
+	t.Parallel()
 	boom := errors.New("machinery broke")
 	broken := stubTool{name: "broken", run: func(ctx context.Context, callID string) (agentapi.ToolResult, error) {
 		return agentapi.ToolResult{}, boom

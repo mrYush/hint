@@ -25,6 +25,23 @@ git auto-commits, LSP, widgets, and mobile apps — all later phases.
 - `--debug` writes full requests/responses (keys masked) to
   `~/.local/state/hint/log`.
 
+## Test reliability follow-up — issue #42
+
+**Branch:** `dev/issue-42-test-reliability`
+
+[Issue #42](https://github.com/mrYush/hint/issues/42) addresses S30–S32 from the Go-practices audit.
+
+- [x] Replace sleep-based synchronization in the audited REPL, line-reader and permission-prompt scenarios.
+- [x] Fail immediately on an unexpected line and close and drain test input with a bounded cleanup.
+- [x] Enable parallel execution across isolated tests, including config, project, tools, RPC, workspace, index, MCP and TUI.
+- [x] Document serial exceptions for process-wide mutations, clipboard replacement, subprocess entry points, live services, measurements and fixtures with short real deadlines.
+- [x] Cover future and expired HTTP dates in `Retry-After`; retain the existing B1/B2/B3/M1/M2 regressions.
+
+The scheduler overlap heuristic and fractional-second retry rounding remain separate follow-ups.
+MCP timeout fixtures discover tools with the normal connection budget and apply the short timeout only to the deliberately blocked call.
+They verify that discovery returned the expected tools before invoking them.
+Resource-sensitive initialization fixtures retain serial execution.
+
 ## Work packages
 
 ### WP0.1 — Public contract: `pkg/agentapi` — **done**

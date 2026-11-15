@@ -145,6 +145,7 @@ func toolResultIDs(messages []agentapi.Message) []string {
 }
 
 func TestRunTurn_IndependentReadsOverlapAndKeepRequestOrder(t *testing.T) {
+	t.Parallel()
 	arrive := make(chan string, 2)
 	release := make(chan struct{})
 	p := &fakeProvider{scripts: []script{
@@ -176,6 +177,7 @@ func TestRunTurn_IndependentReadsOverlapAndKeepRequestOrder(t *testing.T) {
 }
 
 func TestRunTurn_GatedCallsRunOneAtATimeInOrder(t *testing.T) {
+	t.Parallel()
 	var cur, peak atomic.Int32
 	var order []string
 	w := inflightTool{name: "write", class: agentapi.ClassWrite, cur: &cur, peak: &peak, order: &order}
@@ -209,6 +211,7 @@ func TestRunTurn_GatedCallsRunOneAtATimeInOrder(t *testing.T) {
 }
 
 func TestRunTurn_GroupThenWrite(t *testing.T) {
+	t.Parallel()
 	// Seq(Par(c1, c2), c3): the write starts only after both reads
 	// returned — it reads their completion counter at the moment it runs.
 	arrive := make(chan string, 2)
@@ -240,6 +243,7 @@ func TestRunTurn_GroupThenWrite(t *testing.T) {
 }
 
 func TestRunTurn_ParallelLimitOfOneIsThePlainChain(t *testing.T) {
+	t.Parallel()
 	var cur, peak atomic.Int32
 	var order []string
 	r := inflightTool{name: "count", class: agentapi.ClassRead, cur: &cur, peak: &peak, order: &order}
@@ -263,6 +267,7 @@ func TestRunTurn_ParallelLimitOfOneIsThePlainChain(t *testing.T) {
 }
 
 func TestRunTurn_AfterHintSerializesReads(t *testing.T) {
+	t.Parallel()
 	var cur, peak atomic.Int32
 	var order []string
 	r := inflightTool{name: "count", class: agentapi.ClassRead, cur: &cur, peak: &peak, order: &order}
@@ -286,6 +291,7 @@ func TestRunTurn_AfterHintSerializesReads(t *testing.T) {
 }
 
 func TestRunTurn_PanicInGroupLeavesSiblingAlone(t *testing.T) {
+	t.Parallel()
 	arrive := make(chan string, 1)
 	release := make(chan struct{})
 	p := &fakeProvider{scripts: []script{
@@ -332,6 +338,7 @@ func TestRunTurn_PanicInGroupLeavesSiblingAlone(t *testing.T) {
 }
 
 func TestRunTurn_MachineryErrorInGroupCancelsSiblingsAndAbortsTurn(t *testing.T) {
+	t.Parallel()
 	// c2 blocks until its context ends. Without the group cancel it would
 	// wait forever and collect's deadline would fail the test.
 	p := &fakeProvider{scripts: []script{
@@ -353,6 +360,7 @@ func TestRunTurn_MachineryErrorInGroupCancelsSiblingsAndAbortsTurn(t *testing.T)
 }
 
 func TestRunTurn_CancelDuringGroupMarksUnfinishedCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p := &fakeProvider{scripts: []script{

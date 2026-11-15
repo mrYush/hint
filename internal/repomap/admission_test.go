@@ -14,6 +14,7 @@ import (
 )
 
 func TestOversizedDeclarationBecomesDurableOmission(t *testing.T) {
+	t.Parallel()
 	var parsed atomic.Int32
 	runner := &managerTestExtractor{run: func(ctx context.Context, source extract.Source, limits extract.Limits) (extract.Result, error) {
 		parsed.Add(1)
@@ -74,6 +75,7 @@ func largeSignatureSource() string {
 }
 
 func TestCatalogBudgetsBoundExtractionAndCacheOmissions(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name, reason string
 		options      index.Options
@@ -110,6 +112,7 @@ func TestCatalogBudgetsBoundExtractionAndCacheOmissions(t *testing.T) {
 }
 
 func TestIncreasedCatalogBudgetInvalidatesCachedOmission(t *testing.T) {
+	t.Parallel()
 	m, _, space, dir, path := retentionFixture(t, nil)
 	managerWrite(t, filepath.Join(dir, "huge.go"), largeSignatureSource())
 	lease, err := space.Resolve("", "huge.go")

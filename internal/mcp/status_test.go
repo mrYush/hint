@@ -12,6 +12,7 @@ import (
 )
 
 func TestManagerStatusRunning(t *testing.T) {
+	t.Parallel()
 	m, _ := testManager(t, []fakeTool{echoTool()}, ServerConfig{Permission: agentapi.ClassRead}, Options{})
 	statuses, err := m.Status(context.Background())
 	if err != nil {
@@ -33,6 +34,7 @@ func TestManagerStatusRunning(t *testing.T) {
 }
 
 func TestManagerStatusDisabled(t *testing.T) {
+	t.Parallel()
 	m, err := NewManager([]ServerConfig{{
 		Name: "proj", Transport: TransportStdio, Command: "unused", Project: true,
 	}}, Options{})
@@ -50,6 +52,7 @@ func TestManagerStatusDisabled(t *testing.T) {
 }
 
 func TestManagerStatusFailed(t *testing.T) {
+	t.Parallel()
 	m, err := NewManager([]ServerConfig{{
 		Name: "down", Transport: TransportStdio, Command: "unused",
 	}}, Options{
@@ -71,6 +74,7 @@ func TestManagerStatusFailed(t *testing.T) {
 }
 
 func TestManagerStatusHidden(t *testing.T) {
+	t.Parallel()
 	m, _ := testManager(t, []fakeTool{echoTool()}, ServerConfig{}, Options{
 		Budget: Budget{Total: 1 << 20, PerServer: 1},
 	})
@@ -84,6 +88,7 @@ func TestManagerStatusHidden(t *testing.T) {
 }
 
 func TestManagerStatusPing(t *testing.T) {
+	t.Parallel()
 	conn := newHangingConn()
 	conn.toolsReply = true
 	m, err := NewManager([]ServerConfig{{Name: "old", Transport: TransportStdio, Command: "unused"}}, Options{

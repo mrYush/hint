@@ -9,6 +9,7 @@ import (
 
 // TestMode_AsksMatrix is the checklist's "every class × every mode".
 func TestMode_AsksMatrix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		mode  permission.Mode
 		class agentapi.ActionClass
@@ -35,6 +36,7 @@ func TestMode_AsksMatrix(t *testing.T) {
 }
 
 func TestMode_ZeroValueIsAsk(t *testing.T) {
+	t.Parallel()
 	var m permission.Mode
 	if m != permission.ModeAsk || m.String() != "ask" {
 		t.Fatalf("zero Mode = %s, want ask", m)
@@ -42,6 +44,7 @@ func TestMode_ZeroValueIsAsk(t *testing.T) {
 }
 
 func TestParseMode(t *testing.T) {
+	t.Parallel()
 	for _, s := range []string{"ask", "auto-edit", "yolo"} {
 		m, err := permission.ParseMode(s)
 		if err != nil || m.String() != s {

@@ -9,6 +9,7 @@ import (
 )
 
 func TestCoverageReasonsFollowScopeAndRetainedGeneration(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "good.go", "package p; func Good() {}")
 	indexQueryFile(t, m, space, dir, "notes.txt", "unsupported text")

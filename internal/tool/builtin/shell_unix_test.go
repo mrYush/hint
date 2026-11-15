@@ -12,6 +12,7 @@ import (
 )
 
 func TestShellKillFallsBackWhenGroupIsMissing(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cmd := exec.CommandContext(ctx, "sh", "-c", "read -r line")
 	stdin, err := cmd.StdinPipe()
@@ -53,6 +54,7 @@ func TestShellKillFallsBackWhenGroupIsMissing(t *testing.T) {
 }
 
 func TestShellKillBeforeStart(t *testing.T) {
+	t.Parallel()
 	if err := killProcessTree(&exec.Cmd{}); err != nil {
 		t.Fatalf("unstarted shell cancellation: %v", err)
 	}

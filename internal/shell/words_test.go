@@ -6,6 +6,7 @@ import (
 )
 
 func TestSplitWords(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		line string
 		want []string
@@ -37,6 +38,7 @@ func TestSplitWords(t *testing.T) {
 }
 
 func TestQuoteWordRoundTrip(t *testing.T) {
+	t.Parallel()
 	for _, want := range []string{"main.go", "the auth flow", `say "hello"`, `a\\b`, ""} {
 		quoted := QuoteWord(want)
 		got, err := SplitWords(quoted)
@@ -47,6 +49,7 @@ func TestQuoteWordRoundTrip(t *testing.T) {
 }
 
 func TestEndsInSpace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		line string
 		want bool

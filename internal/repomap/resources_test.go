@@ -13,6 +13,7 @@ import (
 )
 
 func TestResourceParsingRejectsMissingAndNonfiniteCounters(t *testing.T) {
+	t.Parallel()
 	vm := "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 2.\nPages inactive: 3.\nPages speculative: 1.\n"
 	if got, err := darwinAvailableMemory(vm); err != nil || got != 6*16384 {
 		t.Fatalf("memory=%d,%v", got, err)
@@ -52,6 +53,7 @@ func TestResourceParsingRejectsMissingAndNonfiniteCounters(t *testing.T) {
 }
 
 func TestExperimentalProfileRequiresExplicitOn(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	g := resourceGovernor{mode: ModeAuto, profile: ExperimentalResourceProfile(), sample: ResourceSample{At: now, Known: true, AvailableMemory: 2 << 30, FreeDisk: 4 << 30}}
 	if ok, why := g.admit(now); ok || why != "resource_profile_unvalidated" {
@@ -72,6 +74,7 @@ func TestExperimentalProfileRequiresExplicitOn(t *testing.T) {
 }
 
 func TestSamplerCancellationAndDiagnosticStatus(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{})
 	m, err := New(context.Background(), Options{Path: filepath.Join(t.TempDir(), "index.db"), Mode: ModeOn,
 		Sampler: func(ctx context.Context) (ResourceSample, error) {
@@ -98,6 +101,7 @@ func TestSamplerCancellationAndDiagnosticStatus(t *testing.T) {
 }
 
 func TestLocalResourceSamplerSmoke(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("HINT_INDEX_TELEMETRY_SMOKE") != "1" {
 		t.Skip("set HINT_INDEX_TELEMETRY_SMOKE=1 for real local platform counters")
 	}
@@ -117,6 +121,7 @@ func TestLocalResourceSamplerSmoke(t *testing.T) {
 }
 
 func TestManagerMapCatalogRequiresExplicitEnable(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	for _, tc := range []struct {
 		mode Mode

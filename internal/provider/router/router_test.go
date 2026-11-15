@@ -116,6 +116,7 @@ var allKinds = agentapi.ErrorKinds()
 // TestFailoverByKind exercises every ErrorKind arriving as the primary's
 // terminal error before any delta, with a fallback configured.
 func TestFailoverByKind(t *testing.T) {
+	t.Parallel()
 	for _, kind := range allKinds {
 		t.Run(string(kind), func(t *testing.T) {
 			primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(kind)}}}}
@@ -169,6 +170,7 @@ func TestFailoverByKind(t *testing.T) {
 // TestNoFailoverAfterOutput: once a delta reached the consumer, a failure is
 // forwarded as-is regardless of kind — no retry, no fallback.
 func TestNoFailoverAfterOutput(t *testing.T) {
+	t.Parallel()
 	for _, kind := range allKinds {
 		t.Run(string(kind), func(t *testing.T) {
 			primary := &fakeProvider{name: "cloud", scripts: []script{
@@ -200,6 +202,7 @@ func TestNoFailoverAfterOutput(t *testing.T) {
 }
 
 func TestNoFallbackConfiguredForwardsError(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(agentapi.ErrNetwork)}}}}
 	r := New(primary, noSleep(t))
 
@@ -214,6 +217,7 @@ func TestNoFallbackConfiguredForwardsError(t *testing.T) {
 }
 
 func TestRetrySucceedsWithoutFallback(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{
 		{events: []agentapi.ChatEvent{failure(agentapi.ErrUnavailable)}},
 		{events: []agentapi.ChatEvent{delta("ok"), done()}},
@@ -239,6 +243,7 @@ func TestRetrySucceedsWithoutFallback(t *testing.T) {
 }
 
 func TestRetryHonoursRetryAfter(t *testing.T) {
+	t.Parallel()
 	err429 := agentapi.NewError(agentapi.ErrRateLimited, "slow down")
 	err429.RetryAfterSeconds = 3
 	primary := &fakeProvider{name: "cloud", scripts: []script{
@@ -258,6 +263,7 @@ func TestRetryHonoursRetryAfter(t *testing.T) {
 }
 
 func TestStartErrorAlsoFailsOver(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{
 		{startErr: agentapi.NewError(agentapi.ErrAuth, "bad key")},
 	}}
@@ -275,6 +281,7 @@ func TestStartErrorAlsoFailsOver(t *testing.T) {
 }
 
 func TestReadyFailureSkipsFallbackChat(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(agentapi.ErrNetwork)}}}}
 	fb := &readyFake{
 		fakeProvider: &fakeProvider{name: "local", scripts: []script{{events: []agentapi.ChatEvent{done()}}}},
@@ -299,6 +306,7 @@ func TestReadyFailureSkipsFallbackChat(t *testing.T) {
 }
 
 func TestReadySuccessProceedsToChat(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(agentapi.ErrNetwork)}}}}
 	fb := &readyFake{
 		fakeProvider: &fakeProvider{name: "local", scripts: []script{{events: []agentapi.ChatEvent{delta("fb"), done()}}}},
@@ -315,6 +323,7 @@ func TestReadySuccessProceedsToChat(t *testing.T) {
 }
 
 func TestUsageWithheldUntilDone(t *testing.T) {
+	t.Parallel()
 	usage := agentapi.ChatEvent{Kind: agentapi.ChatUsage, Usage: &agentapi.Usage{InputTokens: 1}}
 	primary := &fakeProvider{name: "cloud", scripts: []script{
 		{events: []agentapi.ChatEvent{delta("a"), usage, done()}},
@@ -331,6 +340,7 @@ func TestUsageWithheldUntilDone(t *testing.T) {
 }
 
 func TestContractViolationClosedWithoutTerminal(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{delta("a")}}}}
 	r := New(primary)
 
@@ -342,6 +352,7 @@ func TestContractViolationClosedWithoutTerminal(t *testing.T) {
 }
 
 func TestNameIsPrimaryStatic(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(agentapi.ErrNetwork)}}}}
 	fallback := &fakeProvider{name: "local", scripts: []script{{events: []agentapi.ChatEvent{done()}}}}
 	r := New(primary, WithFallback(fallback), noSleep(t))
@@ -353,6 +364,7 @@ func TestNameIsPrimaryStatic(t *testing.T) {
 }
 
 func TestSleepInterruptedByCancelStopsRetrying(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{events: []agentapi.ChatEvent{failure(agentapi.ErrUnavailable)}}}}
 	r := New(primary, withSleep(func(ctx context.Context, d time.Duration) error {
 		return context.Canceled
@@ -369,6 +381,7 @@ func TestSleepInterruptedByCancelStopsRetrying(t *testing.T) {
 }
 
 func TestRetryDelayCapped(t *testing.T) {
+	t.Parallel()
 	long := agentapi.NewError(agentapi.ErrRateLimited, "come back tomorrow")
 	long.RetryAfterSeconds = 3600
 	if d := retryDelay(0, long); d != maxRetryDelay {
@@ -380,6 +393,7 @@ func TestRetryDelayCapped(t *testing.T) {
 }
 
 func TestNonAgentErrorIsClassified(t *testing.T) {
+	t.Parallel()
 	primary := &fakeProvider{name: "cloud", scripts: []script{{startErr: errors.New("plain failure")}}}
 	r := New(primary)
 

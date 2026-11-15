@@ -18,6 +18,7 @@ func twoProfiles() []rpc.ProfileInfo {
 }
 
 func TestNewSessionLeavesTheCurrentOne(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{Profile: rpc.ProfileRef{Profile: "cloud", Model: "gpt"}})
 	old := h.m.sessionID
@@ -72,6 +73,7 @@ func TestNewSessionLeavesTheCurrentOne(t *testing.T) {
 }
 
 func TestNewSessionIsUnavailableDuringATurn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	old := h.m.sessionID
 	h.m.busy = true
@@ -89,6 +91,7 @@ func TestNewSessionIsUnavailableDuringATurn(t *testing.T) {
 }
 
 func TestNewSessionStaysEphemeral(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	eng.sessions = map[string]*fakeSession{"eph-1": {id: "eph-1", eng: eng, ephemeral: true}}
 	h := newHarness(t, eng, Options{SessionID: "eph-1", Ephemeral: true})
@@ -111,6 +114,7 @@ func TestNewSessionStaysEphemeral(t *testing.T) {
 }
 
 func TestProfileCommandSwitchesAndCompletes(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{profiles: twoProfiles()}
 	h := newHarness(t, eng, Options{Profile: rpc.ProfileRef{Profile: "local", Model: "qwen"}})
 	if v := h.view(); !strings.Contains(v, "local/qwen") {
@@ -193,6 +197,7 @@ func history(n int) []agentapi.Message {
 func itoa(i int) string { return string(rune('0' + i)) }
 
 func TestForkFromTheBrowser(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{History: history(3)})
 	src := eng.sessions[h.m.sessionID]
@@ -229,6 +234,7 @@ func TestForkFromTheBrowser(t *testing.T) {
 }
 
 func TestSessionTreeAndForkFromTheList(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
 	old := &fakeSession{id: "old-session", eng: eng, msgs: history(2)}
@@ -262,6 +268,7 @@ func TestSessionTreeAndForkFromTheList(t *testing.T) {
 }
 
 func TestSetupAppliesTheSavedProfile(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{profiles: []rpc.ProfileInfo{{Name: "api-bar", Kind: "openai", Model: "m1", Usable: true}}}
 	setup := &Setup{Describe: "d", Profile: "api-bar", Values: map[string]string{"model": "m1"}, Save: func(string, map[string]string) (string, error) {
 		return "saved to /home/u/.config/hint/config.yaml", nil

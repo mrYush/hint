@@ -8,6 +8,7 @@ import (
 )
 
 func TestSummaryProviderKey(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{
 		DefaultProvider:  "primary",
 		FallbackProvider: "fallback",

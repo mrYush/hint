@@ -14,6 +14,7 @@ import (
 // what WithEnviron returns, not the process's own, so `env` cannot hand
 // a key to the model.
 func TestBash_RunsWithoutTheKeys(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	needsPOSIXShell(t)
 	t.Setenv("APIBAR_KEY", "sk-env-1234567890abcdef")
 	t.Setenv("KEEP_ME", "yes")
@@ -46,6 +47,7 @@ func TestBash_RunsWithoutTheKeys(t *testing.T) {
 // pure-Go walks and ripgrep alike — never list, match or search inside a
 // denied directory, and that read_file refuses it.
 func TestWalksSkipDeniedDirectories(t *testing.T) {
+	t.Parallel()
 	base := newRoot(t, map[string]string{
 		"src/main.go":               "package main // needle\n",
 		".config/hint/config.yaml":  "api_key: needle-sk-1234567890\n",

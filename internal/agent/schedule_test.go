@@ -34,6 +34,7 @@ func toolCall(id, name string, after ...string) agentapi.ToolCall {
 }
 
 func TestBuildSchedule(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name        string
 		calls       []agentapi.ToolCall

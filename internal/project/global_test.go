@@ -14,6 +14,7 @@ import (
 // these defaults when no source sets a limit, and it cannot import this
 // package to read them.
 func TestDefaultsMatchConfig(t *testing.T) {
+	t.Parallel()
 	if project.DefaultInstructionBudget != config.DefaultInstructionBudget {
 		t.Errorf("instruction budget: project %d, config %d", project.DefaultInstructionBudget, config.DefaultInstructionBudget)
 	}
@@ -26,6 +27,7 @@ func TestDefaultsMatchConfig(t *testing.T) {
 }
 
 func TestGlobalInstructions(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	global := filepath.Join(home, "HINT.md")
 	writeTree(t, home, map[string]string{"HINT.md": "Always answer in English.\n"})

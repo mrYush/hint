@@ -10,6 +10,7 @@ import (
 )
 
 func TestLoad_NoGit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
 		"HINT.md":       "root rules\n",
@@ -43,6 +44,7 @@ func TestLoad_NoGit(t *testing.T) {
 }
 
 func TestLoad_Git(t *testing.T) {
+	t.Parallel()
 	git := gitPath(t)
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
@@ -71,6 +73,7 @@ func TestLoad_Git(t *testing.T) {
 }
 
 func TestLoad_OptionsAndErrors(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"RULES.md": strings.Repeat("r", 100), "f": ""})
 

@@ -27,6 +27,7 @@ type mute struct{ touching }
 func (mute) Touches(json.RawMessage) []string { return nil }
 
 func TestTouches(t *testing.T) {
+	t.Parallel()
 	call := agentapi.ToolCall{ID: "c1", Name: "touching", Arguments: json.RawMessage(`{}`)}
 	// Through a decorator, the inner tool answers.
 	wrapped := tool.WithLimits(touching{path: "/p/a.go"}, tool.DefaultLimits())

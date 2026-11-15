@@ -16,6 +16,7 @@ import (
 )
 
 func TestRunTurnReleasesWorkspaceBeforeChannelCloses(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "ok" }}, "")
 	eng, err := newEngine(t.Context(), as)
 	if err != nil {
@@ -47,6 +48,7 @@ func TestRunTurnReleasesWorkspaceBeforeChannelCloses(t *testing.T) {
 }
 
 func TestReposAddRemovePersistenceAndBusy(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
 	eng, cl := testEngine(t, as)
 	ctx := context.Background()
@@ -87,6 +89,7 @@ func TestReposAddRemovePersistenceAndBusy(t *testing.T) {
 }
 
 func TestReposListingHasBoundedProgressAndMembershipBinding(t *testing.T) {
+	t.Parallel()
 	s, _ := repoTestSession(t)
 	parent := t.TempDir()
 	for i := 0; i < 24; i++ {
@@ -140,6 +143,7 @@ func TestReposListingHasBoundedProgressAndMembershipBinding(t *testing.T) {
 }
 
 func TestReposIndexModeRequiresIdleEngine(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
 	as.mapPath = filepath.Join(t.TempDir(), "catalog.sqlite")
 	as.mapRunner = engineMapExtractor{}
@@ -166,6 +170,7 @@ func TestReposIndexModeRequiresIdleEngine(t *testing.T) {
 }
 
 func TestREPLReposCommand(t *testing.T) {
+	t.Parallel()
 	as, sio, _, stderr := testAssembly(t, &fakeChat{}, "/repos\n/exit\n")
 	a, err := assemble(context.Background(), as, sio)
 	if err != nil {

@@ -10,12 +10,14 @@ import (
 )
 
 func TestUnified_IdenticalIsEmpty(t *testing.T) {
+	t.Parallel()
 	if got := diff.Unified("a.txt", "same\n", "same\n"); got != "" {
 		t.Fatalf("got %q, want empty", got)
 	}
 }
 
 func TestUnified_NewFile(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("new.go", "", "package main\n\nfunc main() {}\n")
 	want := "--- /dev/null\n" +
 		"+++ b/new.go\n" +
@@ -29,6 +31,7 @@ func TestUnified_NewFile(t *testing.T) {
 }
 
 func TestUnified_EditWithContext(t *testing.T) {
+	t.Parallel()
 	old := "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"
 	new := "1\n2\n3\n4\nfive\n6\n7\n8\n9\n10\n"
 	got := diff.Unified("n.txt", old, new)
@@ -42,6 +45,7 @@ func TestUnified_EditWithContext(t *testing.T) {
 }
 
 func TestUnified_TwoHunks(t *testing.T) {
+	t.Parallel()
 	var oldLines []string
 	for i := 1; i <= 20; i++ {
 		oldLines = append(oldLines, strings.Repeat("x", i%3+1))
@@ -62,6 +66,7 @@ func TestUnified_TwoHunks(t *testing.T) {
 }
 
 func TestUnified_NoTrailingNewline(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("f", "a\nb", "a\nb\n")
 	want := "--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b\n"
 	if got != want {
@@ -70,6 +75,7 @@ func TestUnified_NoTrailingNewline(t *testing.T) {
 }
 
 func TestUnified_DeleteOnly(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("f", "a\nb\nc\n", "a\nc\n")
 	want := "--- a/f\n+++ b/f\n@@ -1,3 +1,2 @@\n a\n-b\n c\n"
 	if got != want {
@@ -78,6 +84,7 @@ func TestUnified_DeleteOnly(t *testing.T) {
 }
 
 func TestLines_PrefersDeleteBeforeInsert(t *testing.T) {
+	t.Parallel()
 	edits := diff.Lines([]string{"a", "b", "c"}, []string{"a", "x", "c"})
 	want := []diff.Edit{{diff.Equal, "a"}, {diff.Delete, "b"}, {diff.Insert, "x"}, {diff.Equal, "c"}}
 	if len(edits) != len(want) {
@@ -123,6 +130,7 @@ func apply(t *testing.T, old []string, edits []diff.Edit) []string {
 }
 
 func TestLines_RandomRoundTrip(t *testing.T) {
+	t.Parallel()
 	rng := rand.New(rand.NewSource(1))
 	alphabet := []string{"a", "b", "c", "d"}
 	for iter := 0; iter < 500; iter++ {
@@ -169,6 +177,7 @@ func editDistance(a, b []string) int {
 }
 
 func TestLines_EditLimit(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		changed    int
@@ -221,6 +230,7 @@ func BenchmarkLines(b *testing.B) {
 }
 
 func TestLines_LargeRewriteFallsBack(t *testing.T) {
+	t.Parallel()
 	old := make([]string, 3000)
 	new := make([]string, 3000)
 	for i := range old {

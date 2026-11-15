@@ -9,6 +9,7 @@ import (
 )
 
 func TestInt_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		raw     string
@@ -43,6 +44,7 @@ func TestInt_UnmarshalJSON(t *testing.T) {
 }
 
 func TestDecodeArgs_IgnoresUnknownFields(t *testing.T) {
+	t.Parallel()
 	var in struct {
 		Path string `json:"path"`
 	}
@@ -55,6 +57,7 @@ func TestDecodeArgs_IgnoresUnknownFields(t *testing.T) {
 }
 
 func TestDecodeArgs_WrongTypeIsError(t *testing.T) {
+	t.Parallel()
 	var in struct {
 		Path string `json:"path"`
 	}
@@ -64,6 +67,7 @@ func TestDecodeArgs_WrongTypeIsError(t *testing.T) {
 }
 
 func TestInvalidArgs(t *testing.T) {
+	t.Parallel()
 	res := tool.InvalidArgs("c1", "read_file", errors.New("path is required"))
 	if !res.IsError || res.CallID != "c1" || res.Name != "read_file" || res.Text() != "path is required" {
 		t.Fatalf("unexpected result: %+v", res)

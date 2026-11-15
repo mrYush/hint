@@ -8,6 +8,7 @@ import (
 )
 
 func TestMissingEnvironmentDiagnostics(t *testing.T) {
+	t.Parallel()
 	for _, draft := range []bool{false, true} {
 		for _, env := range []map[string]string{nil, {"MISSING_MODEL": ""}} {
 			opts := dirs(t)
@@ -67,6 +68,7 @@ mcp_servers:
 }
 
 func TestMissingEnvironmentSurvivesLimitFailure(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -86,6 +88,7 @@ overview: {depth: -1}
 }
 
 func TestLoadValidationFields(t *testing.T) {
+	t.Parallel()
 	base := "providers:\n  - name: p\n    kind: ollama\n    model: m\n"
 	for _, tt := range []struct {
 		name, yaml, key string
@@ -125,6 +128,7 @@ func TestLoadValidationFields(t *testing.T) {
 }
 
 func TestCompletionWarningHasNoPackagePrefix(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:

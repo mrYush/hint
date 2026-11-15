@@ -9,6 +9,7 @@ import (
 )
 
 func TestOccupancyAccountsForToolCatalog(t *testing.T) {
+	t.Parallel()
 	a := &Agent{estimator: charEstimator{}}
 	messages := []agentapi.Message{
 		agentapi.UserMessage("12345678"),
@@ -38,6 +39,7 @@ func TestOccupancyAccountsForToolCatalog(t *testing.T) {
 }
 
 func TestCharEstimatorCountsCatalogFields(t *testing.T) {
+	t.Parallel()
 	e := charEstimator{}
 	if got := e.EstimateTools(nil); got != 0 {
 		t.Errorf("empty catalog = %d, want 0", got)
@@ -70,6 +72,7 @@ func TestCharEstimatorCountsCatalogFields(t *testing.T) {
 }
 
 func TestMessageOnlyEstimatorStillCountsTools(t *testing.T) {
+	t.Parallel()
 	a := &Agent{estimator: thinkingAwareEstimator{small: 1}}
 	tools := []agentapi.ToolSchema{{Name: "map", Description: strings.Repeat("x", 1024), InputSchema: json.RawMessage(`{}`)}}
 	if got := a.estimateTools(tools); got < 256 {
@@ -78,6 +81,7 @@ func TestMessageOnlyEstimatorStillCountsTools(t *testing.T) {
 }
 
 func TestCompactThinkingShortcutCountsTools(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	a := &Agent{
 		limits:    Limits{MaxContextTokens: 100, CompactThreshold: 0.8},
@@ -107,6 +111,7 @@ func TestCompactThinkingShortcutCountsTools(t *testing.T) {
 }
 
 func TestCompactReservesToolCatalogBeforeSplittingTail(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	a := &Agent{
 		limits:    Limits{MaxContextTokens: 100, CompactThreshold: 0.8},

@@ -7,6 +7,7 @@ import (
 )
 
 func TestRequestValidation(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{`null`, `[]`, `{}`, `{"repo":"app","path":"src","symbol":"Open","match":"prefix","limit":1}`, `{"cursor":"token"}`, `{"cursor":"x","path":""}`, `{"path":"","entry_id":"x"}`, `{"match":"prefix"}`, `{"limit":0}`, `{"limit":51}`, `{"unknown":1}`, `{} {}`, `{"repo":null}`, `{"entry_id":""}`} {
 		t.Run(raw, func(t *testing.T) {
 			_, err := decodeRequest(json.RawMessage(raw))
@@ -19,6 +20,7 @@ func TestRequestValidation(t *testing.T) {
 }
 
 func TestOutputBudgetPreservesJSONAndAddressableStub(t *testing.T) {
+	t.Parallel()
 	r := Response{
 		RootID: "r_" + strings.Repeat("r", 43), MembershipRevision: 18446744073709551615,
 		Generation: 18446744073709551615, Scope: Scope{EntryID: "e_" + strings.Repeat("e", 43)}, Order: "path",
@@ -48,6 +50,7 @@ func TestOutputBudgetPreservesJSONAndAddressableStub(t *testing.T) {
 }
 
 func TestErrorPayloadIsBounded(t *testing.T) {
+	t.Parallel()
 	text := errorPayload("invalid_args", strings.Repeat("\"界", 1000), false)
 	if !json.Valid([]byte(text)) || len(text) > MinOutputBytes {
 		t.Fatalf("unbounded error: %d", len(text))
@@ -55,6 +58,7 @@ func TestErrorPayloadIsBounded(t *testing.T) {
 }
 
 func TestInvalidationsCanFinishAPageBeforeTheNextStub(t *testing.T) {
+	t.Parallel()
 	r := Response{RootID: "r_" + strings.Repeat("r", 43), MembershipRevision: ^uint64(0), Generation: ^uint64(0),
 		Scope: Scope{EntryID: "e_" + strings.Repeat("e", 43)}, Order: "path", Status: Status{State: "paused", Reason: "resource_profile_unvalidated"},
 		Files: []File{}, Entries: []Declaration{}, Verification: &Verification{},

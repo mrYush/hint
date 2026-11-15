@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestExpandValue(t *testing.T) {
+	t.Parallel()
 	env := map[string]string{
 		"KEY":   "secret",
 		"MODEL": "gpt-4o",

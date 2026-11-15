@@ -12,6 +12,7 @@ import (
 // carries the same weight as the round-trip tests.
 
 func TestContentPartValidate(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		part    agentapi.ContentPart
@@ -46,6 +47,7 @@ func TestContentPartValidate(t *testing.T) {
 }
 
 func TestMessageValidate(t *testing.T) {
+	t.Parallel()
 	call := agentapi.ToolCall{ID: "c1", Name: "glob", Arguments: json.RawMessage(`{}`)}
 
 	cases := []struct {
@@ -82,6 +84,7 @@ func TestMessageValidate(t *testing.T) {
 }
 
 func TestMessageTextAndThinking(t *testing.T) {
+	t.Parallel()
 	msg := agentapi.Message{
 		Role: agentapi.RoleAssistant,
 		Content: []agentapi.ContentPart{
@@ -104,6 +107,7 @@ func TestMessageTextAndThinking(t *testing.T) {
 }
 
 func TestToolCallValidate(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		call    agentapi.ToolCall
@@ -132,6 +136,7 @@ func TestToolCallValidate(t *testing.T) {
 }
 
 func TestToolSchemaValidate(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		schema  agentapi.ToolSchema
@@ -155,6 +160,7 @@ func TestToolSchemaValidate(t *testing.T) {
 }
 
 func TestToolResultMessage(t *testing.T) {
+	t.Parallel()
 	r := agentapi.TextResult("c1", "read_file", "package main")
 
 	msg := r.Message()
@@ -181,6 +187,7 @@ func TestToolResultMessage(t *testing.T) {
 }
 
 func TestChatEventValidate(t *testing.T) {
+	t.Parallel()
 	usage := agentapi.Usage{InputTokens: 1}
 	cases := []struct {
 		name    string
@@ -215,6 +222,7 @@ func TestChatEventValidate(t *testing.T) {
 }
 
 func TestChatEventTerminal(t *testing.T) {
+	t.Parallel()
 	terminal := []agentapi.ChatEventKind{agentapi.ChatDone, agentapi.ChatError}
 	for _, k := range terminal {
 		if !(agentapi.ChatEvent{Kind: k}).Terminal() {
@@ -230,6 +238,7 @@ func TestChatEventTerminal(t *testing.T) {
 }
 
 func TestEventValidate(t *testing.T) {
+	t.Parallel()
 	msg := agentapi.UserMessage("hi")
 	bad := agentapi.Message{Role: "nope"}
 	usage := agentapi.Usage{}
@@ -281,6 +290,7 @@ func TestEventValidate(t *testing.T) {
 }
 
 func TestChatRequestValidate(t *testing.T) {
+	t.Parallel()
 	msgs := []agentapi.Message{agentapi.UserMessage("hi")}
 	schema := json.RawMessage(`{"type":"object"}`)
 
@@ -315,6 +325,7 @@ func TestChatRequestValidate(t *testing.T) {
 }
 
 func TestRoleAndClassValid(t *testing.T) {
+	t.Parallel()
 	for _, r := range []agentapi.Role{agentapi.RoleSystem, agentapi.RoleUser, agentapi.RoleAssistant, agentapi.RoleTool} {
 		if !r.Valid() {
 			t.Errorf("%q must be a valid role", r)
@@ -338,6 +349,7 @@ func TestRoleAndClassValid(t *testing.T) {
 }
 
 func TestUsageArithmetic(t *testing.T) {
+	t.Parallel()
 	a := agentapi.Usage{InputTokens: 10, OutputTokens: 3, CachedInputTokens: 8, ReasoningTokens: 1}
 	b := agentapi.Usage{InputTokens: 5, OutputTokens: 2, CachedInputTokens: 0, ReasoningTokens: 2}
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestMapDistinguishesUnavailableRootFromMissingScope(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"missing-file", "missing-root", "replaced-root", "continuation"} {
 		t.Run(mode, func(t *testing.T) {
 			m, space, dir := queryFixture(t)
@@ -79,6 +80,7 @@ func TestMapDistinguishesUnavailableRootFromMissingScope(t *testing.T) {
 }
 
 func TestRootReplacementAfterCursorResumeIsStale(t *testing.T) {
+	t.Parallel()
 	var current *Manager
 	var dir string
 	armed, replaced := false, false

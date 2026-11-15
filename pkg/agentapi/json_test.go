@@ -32,6 +32,7 @@ func roundTrip[T any](t *testing.T, want T) {
 }
 
 func TestContentPartRoundTrip(t *testing.T) {
+	t.Parallel()
 	cases := map[string]agentapi.ContentPart{
 		"text":         agentapi.Text("hello"),
 		"empty text":   agentapi.Text(""),
@@ -47,6 +48,7 @@ func TestContentPartRoundTrip(t *testing.T) {
 }
 
 func TestMessageRoundTrip(t *testing.T) {
+	t.Parallel()
 	cases := map[string]agentapi.Message{
 		"system":         agentapi.SystemMessage("you are a helpful assistant"),
 		"user":           agentapi.UserMessage("what does main.go do?"),
@@ -85,6 +87,7 @@ func TestMessageRoundTrip(t *testing.T) {
 }
 
 func TestToolTypesRoundTrip(t *testing.T) {
+	t.Parallel()
 	t.Run("schema", func(t *testing.T) {
 		roundTrip(t, agentapi.ToolSchema{
 			Name:        "read_file",
@@ -116,6 +119,7 @@ func TestToolTypesRoundTrip(t *testing.T) {
 }
 
 func TestChatEventRoundTrip(t *testing.T) {
+	t.Parallel()
 	usage := agentapi.Usage{InputTokens: 1200, OutputTokens: 64, CachedInputTokens: 1024}
 	cases := map[string]agentapi.ChatEvent{
 		"text delta":     {Kind: agentapi.ChatTextDelta, Text: "Hel"},
@@ -136,6 +140,7 @@ func TestChatEventRoundTrip(t *testing.T) {
 }
 
 func TestEventRoundTrip(t *testing.T) {
+	t.Parallel()
 	msg := agentapi.AssistantMessage("done")
 	call := agentapi.ToolCall{ID: "call_1", Name: "edit_file", Arguments: json.RawMessage(`{"path":"main.go"}`)}
 	result := agentapi.TextResult("call_1", "edit_file", "1 replacement")
@@ -172,6 +177,7 @@ func TestEventRoundTrip(t *testing.T) {
 }
 
 func TestChatRequestRoundTrip(t *testing.T) {
+	t.Parallel()
 	temp := 0.0 // zero, not unset: the pointer is what carries the difference
 	roundTrip(t, agentapi.ChatRequest{
 		Model:    "gpt-4o",
@@ -186,6 +192,7 @@ func TestChatRequestRoundTrip(t *testing.T) {
 }
 
 func TestOptionRoundTrip(t *testing.T) {
+	t.Parallel()
 	t.Run("stt", func(t *testing.T) {
 		roundTrip(t, agentapi.STTOpts{Model: "whisper-1", Language: "ru", Prompt: "hint", MediaType: "audio/wav"})
 	})
@@ -200,6 +207,7 @@ func TestOptionRoundTrip(t *testing.T) {
 // TestZeroValuesRoundTrip guards the omitempty tags: a zero value must
 // survive the trip too, which is what a decoder of an old session file sees.
 func TestZeroValuesRoundTrip(t *testing.T) {
+	t.Parallel()
 	roundTrip(t, agentapi.ContentPart{})
 	roundTrip(t, agentapi.Message{})
 	roundTrip(t, agentapi.ToolResult{})
@@ -214,6 +222,7 @@ func TestZeroValuesRoundTrip(t *testing.T) {
 // field is a breaking change to sessions on disk and to RPC clients, so it
 // must fail a test rather than pass review unnoticed.
 func TestJSONFieldNames(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		value any
@@ -269,6 +278,7 @@ func TestJSONFieldNames(t *testing.T) {
 // by a newer version, carrying fields this version does not know, still
 // decodes. Adding an optional field is therefore not a breaking change.
 func TestUnknownFieldsIgnored(t *testing.T) {
+	t.Parallel()
 	const future = `{"role":"user","content":[{"kind":"text","text":"hi","annotations":["x"]}],"trace_id":"abc"}`
 
 	var msg agentapi.Message

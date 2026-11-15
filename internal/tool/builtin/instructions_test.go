@@ -29,6 +29,7 @@ func instructionFiles(t *testing.T) (global, projectFile string) {
 }
 
 func TestInstructions_Index(t *testing.T) {
+	t.Parallel()
 	global, proj := instructionFiles(t)
 	tl := builtin.NewInstructions([]string{global, proj})
 	if tl.Name() != "instructions" || tl.Class() != agentapi.ClassRead {
@@ -46,6 +47,7 @@ func TestInstructions_Index(t *testing.T) {
 }
 
 func TestInstructions_ReadFileAndSection(t *testing.T) {
+	t.Parallel()
 	global, proj := instructionFiles(t)
 	tl := builtin.NewInstructions([]string{global, proj})
 
@@ -62,6 +64,7 @@ func TestInstructions_ReadFileAndSection(t *testing.T) {
 }
 
 func TestInstructions_ResolvesNamesAndRefusesOthers(t *testing.T) {
+	t.Parallel()
 	global, proj := instructionFiles(t)
 	tl := builtin.NewInstructions([]string{global, proj})
 
@@ -83,6 +86,7 @@ func TestInstructions_ResolvesNamesAndRefusesOthers(t *testing.T) {
 }
 
 func TestInstructions_LocatesQuote(t *testing.T) {
+	t.Parallel()
 	global, proj := instructionFiles(t)
 	tl := builtin.NewInstructions([]string{global, proj})
 

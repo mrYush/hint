@@ -38,6 +38,7 @@ func gitRepo(t *testing.T) (tool.Root, string) {
 }
 
 func TestGitignore_PureGoWalks(t *testing.T) {
+	t.Parallel()
 	root, git := gitRepo(t)
 
 	got := ok(t, run(t, builtin.NewListDir(root, builtin.WithGit(git)), `{}`))

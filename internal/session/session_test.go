@@ -110,6 +110,7 @@ func writeGolden(t *testing.T, store *session.Store, cwd string) *session.Sessio
 // file must still load into the expected conversation. A change to either
 // is a change to every session on a user's disk and has to be deliberate.
 func TestGoldenFormat(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "0123456789abcdef")
 	sess := writeGolden(t, store, "/home/dev/project")
 
@@ -167,6 +168,7 @@ func TestGoldenFormat(t *testing.T) {
 }
 
 func TestOpenAppendsAfterLoad(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "aaaa")
 	sess := writeGolden(t, store, "/p")
 
@@ -195,6 +197,7 @@ func TestOpenAppendsAfterLoad(t *testing.T) {
 }
 
 func TestLoadSkipsNewerRecordsAndFields(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.jsonl")
 	lines := []string{
@@ -221,6 +224,7 @@ func TestLoadSkipsNewerRecordsAndFields(t *testing.T) {
 }
 
 func TestLoadRefusesNewerFormatAndMalformedFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cases := map[string]string{
 		"newer format version": `{"kind":"session","at":"2026-09-06T12:00:00Z","version":2,"id":"x","cwd":"/p"}` + "\n",
@@ -243,6 +247,7 @@ func TestLoadRefusesNewerFormatAndMalformedFiles(t *testing.T) {
 }
 
 func TestLoadIgnoresUnterminatedLastLine(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "bbbb")
 	sess := writeGolden(t, store, "/p")
 	// Simulate a crash mid-write: a partial record with no newline.
@@ -285,6 +290,7 @@ func TestLoadIgnoresUnterminatedLastLine(t *testing.T) {
 // a complete record missing only its newline. None of them is a record, so
 // Open drops it and leaves a file the next append can extend.
 func TestLoadDropsUnterminatedTail(t *testing.T) {
+	t.Parallel()
 	const header = `{"kind":"session","at":"2026-09-06T12:00:00Z","version":1,"wire_version":1,"id":"0123456789abcdef","cwd":"/p"}` + "\n"
 	tails := map[string]string{
 		"partial record":         `{"kind":"message","at":"2026-09-06T12:01:00Z","message":{"role":"user","con`,
@@ -326,6 +332,7 @@ func TestLoadDropsUnterminatedTail(t *testing.T) {
 // a record whose bytes are complete but whose newline is missing is the
 // torn tail, and the next append must still start a clean, readable line.
 func TestOpenAppendsAfterCompleteUnterminatedRecord(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "dddd")
 	sess := writeGolden(t, store, "/p")
 	path := sess.Path()
@@ -387,6 +394,7 @@ func TestOpenAppendsAfterCompleteUnterminatedRecord(t *testing.T) {
 }
 
 func TestMessagesRepairsDanglingToolCalls(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "cccc")
 	sess, err := store.Create("/p")
 	if err != nil {
@@ -429,6 +437,7 @@ func TestMessagesRepairsDanglingToolCalls(t *testing.T) {
 }
 
 func TestListAndLatest(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "first", "second", "other")
 	if _, err := store.Latest("/p"); !errors.Is(err, session.ErrNoSessions) {
 		t.Fatalf("Latest on an empty store = %v, want ErrNoSessions", err)
@@ -485,6 +494,7 @@ func TestListAndLatest(t *testing.T) {
 }
 
 func TestListSkipsDamagedFiles(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "good")
 	good, err := store.Create("/p")
 	if err != nil {
@@ -501,6 +511,7 @@ func TestListSkipsDamagedFiles(t *testing.T) {
 }
 
 func TestDefaultDir(t *testing.T) {
+	t.Parallel()
 	env := func(vars map[string]string) func(string) (string, bool) {
 		return func(k string) (string, bool) { v, ok := vars[k]; return v, ok }
 	}
@@ -516,6 +527,7 @@ func TestDefaultDir(t *testing.T) {
 }
 
 func TestProjectDirIsStableAndPerProject(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore("/base")
 	a, b := store.ProjectDir("/home/u/proj"), store.ProjectDir("/home/u/proj/")
 	if a != b {
@@ -530,6 +542,7 @@ func TestProjectDirIsStableAndPerProject(t *testing.T) {
 }
 
 func TestRecorder(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "rec")
 	sess, err := store.Create("/p")
 	if err != nil {
@@ -575,6 +588,7 @@ func TestRecorder(t *testing.T) {
 // plain system message, and a reader must mark it so that a client which
 // prepends a fresh preamble does not mistake history for the prompt.
 func TestSessionMarksLoadedSummary(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "marksummary")
 	sess, err := store.Create("/p")
 	if err != nil {
@@ -616,6 +630,7 @@ func TestSessionMarksLoadedSummary(t *testing.T) {
 }
 
 func TestRecorderStickyErrorAndNilSession(t *testing.T) {
+	t.Parallel()
 	session.NewRecorder(nil, 1).Observe(agentapi.Event{Kind: agentapi.EventMessage, Message: &agentapi.Message{}})
 
 	store := newStore(t, "closed")
@@ -638,6 +653,7 @@ func TestRecorderStickyErrorAndNilSession(t *testing.T) {
 }
 
 func TestAppendRejectsInvalidMessage(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "inv")
 	sess, err := store.Create("/p")
 	if err != nil {
@@ -656,6 +672,7 @@ func TestAppendRejectsInvalidMessage(t *testing.T) {
 }
 
 func TestRecordValidate(t *testing.T) {
+	t.Parallel()
 	msg := agentapi.UserMessage("hi")
 	cases := []struct {
 		name    string
@@ -686,6 +703,7 @@ func TestRecordValidate(t *testing.T) {
 }
 
 func TestAge(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	cases := map[time.Duration]string{
 		10 * time.Second: "just now",

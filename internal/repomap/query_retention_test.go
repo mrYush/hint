@@ -67,6 +67,7 @@ func requireRetainedPins(t *testing.T, store *index.Store, expected int) {
 }
 
 func TestNewQueryFailureReleasesPin(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"encoding", "cancel-after-pin"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -103,6 +104,7 @@ func TestNewQueryFailureReleasesPin(t *testing.T) {
 }
 
 func TestContinuationRetentionDependsOnFailure(t *testing.T) {
+	t.Parallel()
 	transient := errors.New("temporary metadata failure")
 	var failure error
 	m, registry, space, dir, _ := retentionFixture(t, func(string) error { return failure })
@@ -148,6 +150,7 @@ func TestContinuationRetentionDependsOnFailure(t *testing.T) {
 }
 
 func TestManagerCloseReleasesOnlyOwnedPins(t *testing.T) {
+	t.Parallel()
 	m, _, space, dir, path := retentionFixture(t, nil)
 	indexQueryFile(t, m, space, dir, "file.go", "package p; func First() {}; func Second() {}")
 	first := runMap(t, &mapTool{manager: m, space: space}, `{"limit":1}`, MaxOutputBytes)
@@ -177,6 +180,7 @@ func TestManagerCloseReleasesOnlyOwnedPins(t *testing.T) {
 }
 
 func TestQueryAdmissionFailureAfterPinReleasesReservation(t *testing.T) {
+	t.Parallel()
 	m, _, space, _, _ := retentionFixture(t, nil)
 	if err := m.acquire(t.Context()); err != nil {
 		t.Fatal(err)
@@ -191,6 +195,7 @@ func TestQueryAdmissionFailureAfterPinReleasesReservation(t *testing.T) {
 }
 
 func TestCloseWaitsForPostPinCleanup(t *testing.T) {
+	t.Parallel()
 	started, resume := make(chan struct{}), make(chan struct{})
 	var blockOnce, resumeOnce sync.Once
 	defer resumeOnce.Do(func() { close(resume) })

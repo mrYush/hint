@@ -10,6 +10,7 @@ import (
 )
 
 func TestSingleRootKeepsOriginalToolCatalog(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
 	eng, err := newEngine(context.Background(), as)
 	if err != nil {

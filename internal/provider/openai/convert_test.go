@@ -9,6 +9,7 @@ import (
 )
 
 func TestConvertRequestRoundTrip(t *testing.T) {
+	t.Parallel()
 	temp := 0.2
 	req := agentapi.ChatRequest{
 		Messages: []agentapi.Message{
@@ -65,6 +66,7 @@ func TestConvertRequestRoundTrip(t *testing.T) {
 }
 
 func TestConvertEmptyToolResultStillSendable(t *testing.T) {
+	t.Parallel()
 	// WP0.1 silent-tool rule: a tool that succeeds silently produces an
 	// empty message, and the wire form must carry content anyway.
 	msg := agentapi.ToolResult{CallID: "call_9", Name: "write_file"}.Message()
@@ -103,6 +105,7 @@ func TestConvertEmptyToolResultStillSendable(t *testing.T) {
 }
 
 func TestConvertRejectsMediaParts(t *testing.T) {
+	t.Parallel()
 	req := agentapi.ChatRequest{Messages: []agentapi.Message{
 		{
 			Role:    agentapi.RoleUser,

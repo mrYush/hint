@@ -11,6 +11,7 @@ import (
 )
 
 func TestWriteFile_CreatesWithParents(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	tl := builtin.NewWriteFile(root)
 	if tl.Class() != agentapi.ClassWrite {
@@ -41,6 +42,7 @@ func TestWriteFile_CreatesWithParents(t *testing.T) {
 }
 
 func TestWriteFile_PreservesModeAndLeavesNoTemp(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX modes on Windows")
 	}
@@ -67,6 +69,7 @@ func TestWriteFile_PreservesModeAndLeavesNoTemp(t *testing.T) {
 }
 
 func TestWriteFile_WritesThroughSymlinkInsideRoot(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation needs privileges on Windows")
 	}
@@ -86,6 +89,7 @@ func TestWriteFile_WritesThroughSymlinkInsideRoot(t *testing.T) {
 }
 
 func TestWriteFile_Errors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"dir/x": ""})
 	tl := builtin.NewWriteFile(root)
 	tests := []struct{ name, args, want string }{

@@ -88,6 +88,7 @@ func drive(t *testing.T, cl *rpc.Client, sessionID, text string) {
 }
 
 func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, _, _, _ := testAssembly(t, first, "")
@@ -173,6 +174,7 @@ func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
 }
 
 func TestProfilesReflectTheReloadedConfiguration(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
 	as.cfg = twoProfiles()
 	reloaded := twoProfiles()
@@ -208,6 +210,7 @@ func TestProfilesReflectTheReloadedConfiguration(t *testing.T) {
 }
 
 func TestForkCutsAtATurn(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(n int) string { return []string{"a1", "a2", "a3"}[n-1] }}
 	as, _, _, _ := testAssembly(t, chat, "")
 	_, cl := testEngine(t, as)
@@ -294,6 +297,7 @@ func TestForkCutsAtATurn(t *testing.T) {
 // the profiles with the one in use marked, with a name it switches the
 // session, and a profile that cannot be used is refused with its reason.
 func TestREPLProfileCommand(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, sio, out, stderr := testAssembly(t, first, "/profile\n/profile nokey\n/profile other\nhello\n/exit\n")
@@ -328,6 +332,7 @@ func TestREPLProfileCommand(t *testing.T) {
 }
 
 func TestREPLNewSessionLeavesTheOldOne(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, sio, out, stderr := testAssembly(t, first, "/new extra\nhello\n/profile other\n/new\nthere\n/exit\n")
@@ -386,6 +391,7 @@ func TestREPLNewSessionLeavesTheOldOne(t *testing.T) {
 }
 
 func TestREPLNewSessionStaysOffDisk(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "ok" }}
 	as, sio, out, stderr := testAssembly(t, chat, "/new\nhello\n/exit\n")
 	as.opts.session = sessionOff
@@ -428,6 +434,7 @@ func TestREPLNewSessionStaysOffDisk(t *testing.T) {
 }
 
 func TestUseTUI(t *testing.T) {
+	t.Parallel()
 	notATerminal, err := os.CreateTemp(t.TempDir(), "out")
 	if err != nil {
 		t.Fatal(err)

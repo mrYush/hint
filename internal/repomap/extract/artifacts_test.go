@@ -11,6 +11,7 @@ import (
 )
 
 func TestPinnedGrammarDigests(t *testing.T) {
+	t.Parallel()
 	for language, want := range map[string]string{
 		"python":     "0b4396e688a08f9d2c6a11de2b018bdda63eef7b59497ee1fd56481cc96f5423",
 		"javascript": "7abe2b54935fc1bf33bdcb8f48434676b801bcf62eca104b19b1dd1af18bfa5b",
@@ -29,6 +30,7 @@ func TestPinnedGrammarDigests(t *testing.T) {
 }
 
 func TestWASMDeadlineDuringInitialization(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	_, err := Extract(ctx, Source{"x.ts", []byte(strings.Repeat("function f(x: number): number { return x; }\n", 1000))}, DefaultLimits())
@@ -38,6 +40,7 @@ func TestWASMDeadlineDuringInitialization(t *testing.T) {
 }
 
 func TestMinifiedAndDecoratedSources(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		path, text string
 		count      int

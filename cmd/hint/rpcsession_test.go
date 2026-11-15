@@ -13,6 +13,7 @@ import (
 // one session would interleave their records. The second gets CodeBusy
 // while the first records, and succeeds once that run exits.
 func TestSecondRunCannotAttachTheSessionBeingRecorded(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "ok" }}, "")
 	_, first, stopFirst := testEngineServer(t, as)
 	defer stopFirst()
@@ -50,6 +51,7 @@ func TestSecondRunCannotAttachTheSessionBeingRecorded(t *testing.T) {
 // live ephemeral session shares its first characters. A prefix must
 // never reach a different conversation than the one the store resolved.
 func TestAttachPrefixDoesNotReachAnotherConversation(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "ok" }}, "")
 	_, first, stopFirst := testEngineServer(t, as)
 	defer stopFirst()

@@ -7,6 +7,7 @@ import (
 )
 
 func TestAnswerIgnoresTheLayout(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"y": "y", " Y ": "y", "н": "y", "Н": "y", "нуы": "yes",
 		"т": "n", "тщ": "no", "ф": "a", "фдцфны": "always",

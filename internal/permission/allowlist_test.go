@@ -9,6 +9,7 @@ import (
 )
 
 func TestCommandScope(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"go test ./...":               "go test",
 		"go test":                     "go test",
@@ -92,6 +93,7 @@ func grantThenReview(t *testing.T, first, second agentapi.PermissionRequest) (as
 }
 
 func TestAllowList_ExecutePrefix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		grant, later string
 		covered      bool
@@ -122,6 +124,7 @@ func TestAllowList_ExecutePrefix(t *testing.T) {
 }
 
 func TestAllowList_WriteIsNeverRemembered(t *testing.T) {
+	t.Parallel()
 	// "always" is not offered for a write, and answering it anyway is a
 	// one-off allow: the next write asks again, with its own diff.
 	asks, ask := grantThenReview(t, writeReq("edit_file", "main.go"), writeReq("edit_file", "main.go"))
@@ -134,6 +137,7 @@ func TestAllowList_WriteIsNeverRemembered(t *testing.T) {
 }
 
 func TestAllowList_UnscopableCommandIsOneOff(t *testing.T) {
+	t.Parallel()
 	req := execReq("go test; rm -rf ~")
 	p := &recordingPrompter{t: t, answers: []permission.Decision{permission.AllowAlways, permission.Deny}}
 	g := permission.New(permission.ModeAsk, p)

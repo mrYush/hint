@@ -17,6 +17,7 @@ func promptFixture() []rpc.PromptInfo {
 }
 
 func TestPromptListAndExpansionRunAsUserTurn(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{prompts: promptFixture()}
 	h := newHarness(t, eng, Options{})
 	h.run(h.submit("/prompts"))
@@ -36,6 +37,7 @@ func TestPromptListAndExpansionRunAsUserTurn(t *testing.T) {
 }
 
 func TestPromptArgumentCompletion(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{prompts: promptFixture()}
 	h := newHarness(t, eng, Options{})
 	h.typeText("/docs:review ma")
@@ -57,6 +59,7 @@ func TestPromptArgumentCompletion(t *testing.T) {
 }
 
 func TestPromptExpansionCancelAndQuit(t *testing.T) {
+	t.Parallel()
 	for _, action := range []string{"ctrl+c", "ctrl+d", "/exit"} {
 		t.Run(action, func(t *testing.T) {
 			eng := &fakeEngine{prompts: promptFixture()}
@@ -84,6 +87,7 @@ func TestPromptExpansionCancelAndQuit(t *testing.T) {
 }
 
 func TestPromptServersMethodNotFoundLeavesTabWorking(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.typeText("/he")
 	h.m.promptServersLoaded = false
@@ -108,6 +112,7 @@ func TestPromptServersMethodNotFoundLeavesTabWorking(t *testing.T) {
 }
 
 func TestPromptServersOtherErrorIsRemembered(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.m.promptServersLoaded = false
 	h.m.status = readingPromptServers
@@ -132,6 +137,7 @@ func TestPromptServersOtherErrorIsRemembered(t *testing.T) {
 }
 
 func TestPromptCompletionReportsFurtherValues(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.m.prompts, h.m.promptsLoaded = promptFixture(), true
 	h.typeText("/docs:review ma")
@@ -144,6 +150,7 @@ func TestPromptCompletionReportsFurtherValues(t *testing.T) {
 }
 
 func TestPromptCompletionHasMoreDoesNotQualifyNoMatch(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.m.prompts, h.m.promptsLoaded = promptFixture(), true
 	h.typeText("/docs:review zz")
@@ -156,6 +163,7 @@ func TestPromptCompletionHasMoreDoesNotQualifyNoMatch(t *testing.T) {
 }
 
 func TestPromptServersReadyKeepsOtherStatus(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.m.status = "the turn failed"
 	next, _ := h.m.promptServersReady(promptServersMsg{servers: []string{"docs"}})
@@ -170,6 +178,7 @@ func TestPromptServersReadyKeepsOtherStatus(t *testing.T) {
 }
 
 func TestPromptBusyWithoutCancelDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.m.busy = true
 	h.press("ctrl+c")
@@ -178,6 +187,7 @@ func TestPromptBusyWithoutCancelDoesNotPanic(t *testing.T) {
 }
 
 func TestPromptCommandCompletionWithoutColon(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{prompts: promptFixture()}
 	h := newHarness(t, eng, Options{})
 	h.typeText("/docs")
@@ -192,6 +202,7 @@ func TestPromptCommandCompletionWithoutColon(t *testing.T) {
 }
 
 func TestPromptCompletionSendsPreviousArguments(t *testing.T) {
+	t.Parallel()
 	prompts := promptFixture()
 	prompts[0].Arguments = append(prompts[0].Arguments, rpc.PromptArgument{Name: "focus"})
 	eng := &fakeEngine{prompts: prompts}
@@ -212,6 +223,7 @@ func TestPromptCompletionSendsPreviousArguments(t *testing.T) {
 }
 
 func TestPromptCompletionQuotesAndClearsStatus(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{prompts: promptFixture()}, Options{})
 	h.m.prompts = promptFixture()
 	h.m.promptsLoaded = true
@@ -227,6 +239,7 @@ func TestPromptCompletionQuotesAndClearsStatus(t *testing.T) {
 }
 
 func TestPromptListSuccessReplacesLoadingStatus(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{prompts: promptFixture()}, Options{})
 	h.run(h.submit("/prompts"))
 	if strings.Contains(h.m.status, "loading") || !strings.Contains(h.m.status, "1 MCP prompt loaded") {
@@ -235,6 +248,7 @@ func TestPromptListSuccessReplacesLoadingStatus(t *testing.T) {
 }
 
 func TestPromptExpansionAcceptsQuotedArguments(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{prompts: promptFixture()}
 	h := newHarness(t, eng, Options{})
 	h.m.prompts = promptFixture()
@@ -247,6 +261,7 @@ func TestPromptExpansionAcceptsQuotedArguments(t *testing.T) {
 }
 
 func TestPromptCommandCompletionWithStaticPrefix(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{prompts: []rpc.PromptInfo{{Server: "s", Name: "review"}}}
 	h := newHarness(t, eng, Options{})
 	h.typeText("/s")
@@ -261,6 +276,7 @@ func TestPromptCommandCompletionWithStaticPrefix(t *testing.T) {
 }
 
 func TestTabUnknownCommandDoesNotConnectMCP(t *testing.T) {
+	t.Parallel()
 	for _, input := range []string{"/hlep", "/tmp/x"} {
 		t.Run(input, func(t *testing.T) {
 			eng := &fakeEngine{prompts: promptFixture()}

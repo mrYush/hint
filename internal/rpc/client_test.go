@@ -33,6 +33,7 @@ func dialFake(t *testing.T, srv *Server) (*Client, *fakeEngine) {
 // TestHelloThenTurnWithPermission: a Prompter answers the permission event
 // through Turn.Reply, and the engine observes the allow.
 func TestClient_TurnWithPermission(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second, Version: "test"})
 	ctx := context.Background()
 	if c.ServerVersion() != "test" {
@@ -81,6 +82,7 @@ func TestClient_TurnWithPermission(t *testing.T) {
 }
 
 func TestClient_CancelEndsTurn(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Minute})
 	ctx := context.Background()
 	view, err := c.OpenSession(ctx, OpenOptions{})
@@ -107,6 +109,7 @@ func TestClient_CancelEndsTurn(t *testing.T) {
 }
 
 func TestClient_ErrorsCarryTheCode(t *testing.T) {
+	t.Parallel()
 	c, _ := dialFake(t, &Server{})
 	_, err := c.AttachSession(context.Background(), "nope")
 	var rpcErr *Error
@@ -134,6 +137,7 @@ func TestClient_ErrorsCarryTheCode(t *testing.T) {
 }
 
 func TestClient_WrongTokenIsRefused(t *testing.T) {
+	t.Parallel()
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Token: "secret"}
 	client, peer := net.Pipe()
 	go func() { _ = srv.ServeConn(context.Background(), peer) }()
@@ -145,6 +149,7 @@ func TestClient_WrongTokenIsRefused(t *testing.T) {
 }
 
 func TestClient_CloseFailsOpenTurn(t *testing.T) {
+	t.Parallel()
 	c, _ := dialFake(t, &Server{PermissionWait: time.Minute})
 	view, err := c.OpenSession(context.Background(), OpenOptions{})
 	if err != nil {
@@ -170,6 +175,7 @@ func TestClient_CloseFailsOpenTurn(t *testing.T) {
 // TestQueue pins the one property the reader relies on: push never
 // blocks, however far behind the consumer is, and order survives.
 func TestQueue(t *testing.T) {
+	t.Parallel()
 	q := newQueue[int]()
 	const n = 10_000
 	done := make(chan struct{})

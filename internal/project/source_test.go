@@ -11,6 +11,7 @@ import (
 )
 
 func TestInstructionSourcesShareBudgetAndOutline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": "# Local\n\nLocal rules.\n"})
 	source := project.InstructionSource{
@@ -45,6 +46,7 @@ func TestInstructionSourcesShareBudgetAndOutline(t *testing.T) {
 }
 
 func TestInstructionSourcesConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	pc, err := project.Load(context.Background(), t.TempDir(), project.WithGit(""), project.WithOverview(project.None{}))
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +78,7 @@ func (f summarizerFunc) Summarize(ctx context.Context, path, content string, lim
 }
 
 func TestAddInstructionSourcesDoesNotLockSummarizer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": strings.Repeat("Long rules.\n", 100)})
 	var pc *project.Context

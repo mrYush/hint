@@ -11,6 +11,7 @@ import (
 )
 
 func TestClient_CompleteAnswersAndCanBeCancelled(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
 	ctx := context.Background()
 
@@ -65,6 +66,7 @@ func TestClient_CompleteAnswersAndCanBeCancelled(t *testing.T) {
 // beside the connection's loop: while a completion waits on its model,
 // a permission answer and a cancel for a turn still get through.
 func TestClient_CompleteDoesNotBlockTheTurn(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: 5 * time.Second})
 	engine.setCompletion(3*time.Second, false)
 	ctx := context.Background()
@@ -100,6 +102,7 @@ func TestClient_CompleteDoesNotBlockTheTurn(t *testing.T) {
 }
 
 func TestClient_NewerCompleteCancelsTheOlder(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
 	engine.setCompletion(3*time.Second, false)
 	ctx := context.Background()
@@ -124,6 +127,7 @@ func TestClient_NewerCompleteCancelsTheOlder(t *testing.T) {
 }
 
 func TestClient_Models(t *testing.T) {
+	t.Parallel()
 	c, _ := dialFake(t, &Server{})
 	ctx := context.Background()
 	models, err := c.Models(ctx, "local")

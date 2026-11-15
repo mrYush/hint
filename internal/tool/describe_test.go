@@ -52,6 +52,7 @@ func call(name, args string) agentapi.ToolCall {
 }
 
 func TestDescribe_UsesDescriberThroughDecorator(t *testing.T) {
+	t.Parallel()
 	// The limits decorator hides the concrete tool; Describe must find the
 	// Describer through Unwrap, or every built-in would lose its preview.
 	tl := tool.WithLimits(previewTool{}, tool.DefaultLimits())
@@ -71,6 +72,7 @@ func TestDescribe_UsesDescriberThroughDecorator(t *testing.T) {
 }
 
 func TestDescribe_FallsBackToRawArgs(t *testing.T) {
+	t.Parallel()
 	req := tool.Describe(context.Background(), call("plain", `{ "path": "a.txt",   "n": 1 }`), plainTool{})
 	if err := req.Validate(); err != nil {
 		t.Fatal(err)
@@ -87,6 +89,7 @@ func TestDescribe_FallsBackToRawArgs(t *testing.T) {
 }
 
 func TestDescribe_PreviewErrorStillGates(t *testing.T) {
+	t.Parallel()
 	req := tool.Describe(context.Background(), call("sh", `{"command":"x"}`), previewTool{fail: true})
 	if err := req.Validate(); err != nil {
 		t.Fatal(err)
@@ -100,6 +103,7 @@ func TestDescribe_PreviewErrorStillGates(t *testing.T) {
 }
 
 func TestDescribe_LongArgsAreCut(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("x", 200)
 	req := tool.Describe(context.Background(), call("plain", `{"text":"`+long+`"}`), plainTool{})
 	if len(req.Summary) > 100 || !strings.HasSuffix(req.Summary, "...") {
@@ -108,6 +112,7 @@ func TestDescribe_LongArgsAreCut(t *testing.T) {
 }
 
 func TestDescribe_LongArgsCutOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("Привет", 50)
 	req := tool.Describe(context.Background(), call("plain", `{"text":"`+long+`"}`), plainTool{})
 	if !utf8.ValidString(req.Summary) {
@@ -122,6 +127,7 @@ func TestDescribe_LongArgsCutOnRuneBoundary(t *testing.T) {
 }
 
 func TestUnwrap(t *testing.T) {
+	t.Parallel()
 	inner := plainTool{}
 	if tool.Unwrap(inner) != nil {
 		t.Fatal("a plain tool unwraps to nil")

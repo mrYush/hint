@@ -10,6 +10,7 @@ import (
 )
 
 func TestInstructionDirs(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "repo")
 	j := func(parts ...string) string { return filepath.Join(append([]string{root}, parts...)...) }
 	cases := []struct {
@@ -31,6 +32,7 @@ func TestInstructionDirs(t *testing.T) {
 }
 
 func TestReadInstructions_PrecedenceAndOrder(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
 		"HINT.md":           "root hint\n",
@@ -59,6 +61,7 @@ func TestReadInstructions_PrecedenceAndOrder(t *testing.T) {
 }
 
 func TestReadInstructions_Budget(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
 		"HINT.md":       strings.Repeat("a", 10) + "\n",
@@ -95,6 +98,7 @@ func TestReadInstructions_Budget(t *testing.T) {
 }
 
 func TestReadInstructions_Unreadable(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": "x"})
 	// An unreadable file is a warning, not a failure of the run.
@@ -105,6 +109,7 @@ func TestReadInstructions_Unreadable(t *testing.T) {
 }
 
 func TestRenderInstructions(t *testing.T) {
+	t.Parallel()
 	if project.RenderInstructions(nil) != "" {
 		t.Fatal("no instructions must render nothing")
 	}

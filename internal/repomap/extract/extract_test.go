@@ -28,6 +28,7 @@ func extractWithWarmEngine(t *testing.T, source Source, limits Limits) (Result, 
 }
 
 func TestDeclarations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path, source string
 		names        []string
@@ -67,6 +68,7 @@ func TestDeclarations(t *testing.T) {
 }
 
 func TestSignatureAndEnclosing(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source, name, signature, enclosing string }{
 		{"x.go", "package p\nfunc (s *Store) Get(x int) string { return \"hidden\" }", "Get", "func (s *Store) Get(x int) string", "*Store"},
 		{"x.py", "class Store:\n    def get(self, x: int) -> str:\n        return 'hidden'\n", "get", "def get(self, x: int) -> str:", "Store"},
@@ -92,6 +94,7 @@ func TestSignatureAndEnclosing(t *testing.T) {
 }
 
 func TestNestedCallableBodiesAreRedacted(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source string }{
 		{"x.go", "package p; type Vec [len(func() string { return \"BODY_SENTINEL\" }())]int"},
 		{"x.js", "function open(callback = () => { return 'BODY_SENTINEL'; }) { return 'BODY_SENTINEL'; }"},
@@ -111,6 +114,7 @@ func TestNestedCallableBodiesAreRedacted(t *testing.T) {
 }
 
 func TestMalformedNeverPublishesPartialDeclarations(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source string }{
 		{"x.go", "package p; func Good() {}\nfunc Bad("},
 		{"x.py", "def good():\n    pass\ndef bad(:\n"},
@@ -129,6 +133,7 @@ func TestMalformedNeverPublishesPartialDeclarations(t *testing.T) {
 }
 
 func TestLimits(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"x.go", "x.js"} {
 		source := "function f() {} function g() {}"
 		if path == "x.go" {
@@ -160,6 +165,7 @@ func TestLimits(t *testing.T) {
 }
 
 func TestLanguageAndCancellation(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"x.go", "x.py", "x.js", "x.ts", "x.tsx", "x.rs"} {
 		if Language(path) == "" || PolicyVersion(Language(path)) == "" {
 			t.Errorf("missing policy for %s", path)
@@ -205,13 +211,19 @@ func BenchmarkExtract(b *testing.B) {
 }
 
 func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
+	// Keep cold compilation outside the parsing budget while initializing
+	// with the caller context whose lifetime this test exercises.
 	engine := &Engine{}
 	t.Cleanup(func() {
 		if err := engine.Close(); err != nil {
 			t.Error(err)
 		}
 	})
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if err := engine.initializeWASM(ctx, "javascript"); err != nil {
+		t.Fatal(err)
+	}
 	source := Source{"x.js", []byte("function Open() {}")}
 	first, err := engine.Extract(ctx, source, DefaultLimits())
 	if err != nil || !first.Complete {
@@ -223,7 +235,10 @@ func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
 	if err != nil || !second.Complete || session != engine.wasm {
 		t.Fatalf("second = %+v, %v; session reused=%v", second, err, session == engine.wasm)
 	}
-	third, err := engine.Extract(context.Background(), Source{"x.py", []byte("def Open():\n    pass\n")}, DefaultLimits())
+	if err := engine.initializeWASM(t.Context(), "python"); err != nil {
+		t.Fatal(err)
+	}
+	third, err := engine.Extract(t.Context(), Source{"x.py", []byte("def Open():\n    pass\n")}, DefaultLimits())
 	if err != nil || !third.Complete || engine.wasm == session {
 		t.Fatalf("language switch = %+v, %v", third, err)
 	}

@@ -22,6 +22,7 @@ import (
 )
 
 func TestCLIProcess(t *testing.T) {
+	// This entry point changes os.Args in a dedicated child process.
 	if os.Getenv("HINT_TEST_PROCESS") != "1" {
 		return
 	}
@@ -46,6 +47,7 @@ func cliProcess(t *testing.T, env []string, args ...string) *exec.Cmd {
 }
 
 func TestCLIExitCodes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -76,6 +78,7 @@ func TestCLIExitCodes(t *testing.T) {
 }
 
 func TestOneShotInterruptExit(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("os.Interrupt is not supported by os.Process.Signal on Windows")
 	}
@@ -128,6 +131,7 @@ func TestOneShotInterruptExit(t *testing.T) {
 }
 
 func TestEngineUsesInjectedEnvironment(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	fixed := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
 	home, cwd := t.TempDir(), t.TempDir()
 	values := map[string]string{"HINT_API_KEY": "fixture", "HINT_MODEL": "injected", "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_DATA_HOME": filepath.Join(home, "data")}
@@ -167,10 +171,12 @@ func TestEngineUsesInjectedEnvironment(t *testing.T) {
 }
 
 func TestRPCInterruptExit(t *testing.T) {
+	t.Parallel()
 	testServerSignalExit(t, []string{"--mode", "rpc"}, "hint: rpc on stdio")
 }
 
 func TestServeInterruptExit(t *testing.T) {
+	t.Parallel()
 	testServerSignalExit(t, []string{"serve", "--listen", "tcp:127.0.0.1:0"}, "hint: listening on tcp")
 }
 
@@ -249,6 +255,7 @@ func testServerSignalExit(t *testing.T, args []string, readyMessage string) {
 }
 
 func TestEngineDefaultsClock(t *testing.T) {
+	t.Parallel()
 	env := environment{home: t.TempDir(), cwd: t.TempDir(), lookupEnv: func(key string) (string, bool) {
 		values := map[string]string{"HINT_API_KEY": "fixture", "HINT_MODEL": "fixture"}
 		value, ok := values[key]
@@ -265,6 +272,7 @@ func TestEngineDefaultsClock(t *testing.T) {
 }
 
 func TestSetupUsesInjectedEnvironment(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home, cwd, configHome := t.TempDir(), t.TempDir(), t.TempDir()
 	values := map[string]string{"XDG_CONFIG_HOME": configHome, "HINT_API_KEY": "fixture", "HINT_MODEL": "snapshot-model", "SNAPSHOT_KEY": "fixture"}
 	env := environment{home: home, cwd: cwd, lookupEnv: func(key string) (string, bool) { value, ok := values[key]; return value, ok }}

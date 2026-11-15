@@ -19,6 +19,7 @@ import (
 )
 
 func TestPolicyFIFO(t *testing.T) {
+	t.Parallel()
 	if mode := os.Getenv("HINT_TEST_POLICY_FIFO"); mode != "" {
 		testPolicyFIFOChild(t, mode, os.Getenv("HINT_TEST_POLICY_DIR"))
 		return

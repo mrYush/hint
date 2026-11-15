@@ -9,6 +9,7 @@ import (
 )
 
 func TestFirstSentenceCutsRuneBoundary(t *testing.T) {
+	t.Parallel()
 	got := FirstSentence(strings.Repeat("Привет ", 100))
 	if !utf8.ValidString(got) {
 		t.Fatalf("FirstSentence returned invalid UTF-8: %q", got)
@@ -19,6 +20,7 @@ func TestFirstSentenceCutsRuneBoundary(t *testing.T) {
 }
 
 func TestCutLinesCutsRuneBoundary(t *testing.T) {
+	t.Parallel()
 	got := cutLines(strings.Repeat("Привет", 10), 11)
 	if !utf8.ValidString(got) {
 		t.Fatalf("cutLines returned invalid UTF-8: %q", got)
@@ -32,6 +34,7 @@ func TestCutLinesCutsRuneBoundary(t *testing.T) {
 }
 
 func TestReadBoundedCutsRuneBoundary(t *testing.T) {
+	t.Parallel()
 	p := filepath.Join(t.TempDir(), "HINT.md")
 	want := strings.Repeat("Привет", 10)
 	if err := os.WriteFile(p, []byte(want), 0o644); err != nil {
