@@ -81,7 +81,7 @@ func (s *setupInfo) unset(key string, project bool) (string, error) {
 	return fmt.Sprintf("%s removed from %s; the next layer down applies from the next start", key, path), nil
 }
 
-// show displays the effective configuration with API keys masked.
+// show displays the configuration the next start resolves, with API keys masked.
 func (s *setupInfo) show() (string, error) {
 	out, _, err := s.showWithWarnings()
 	return out, err
@@ -216,14 +216,19 @@ func newConfigCommand(flags *config.Flags, env environment) *cobra.Command {
 		Use:   "config",
 		Short: "Show, list, set and unset configuration keys",
 		Long: `hint config shows the effective configuration, with every layer
-applied and API keys masked. Its subcommands change one key of a
+applied and API keys masked. Display succeeds even when profiles are incomplete
+or invalid for execution, including unresolved keyring references. Exit status
+0 confirms display succeeded; it does not certify readiness to run. File reading,
+parsing and limit-resolution errors still fail the command.
+
+Its subcommands change one key of a
 config file at a time, keeping the file's comments: the global file by
 default, the repository's .hint/config.yaml with --project. Each value
 is checked against the key's type before anything is written.
 
 The keys, their defaults and their HINT_* variables: hint config keys,
 or config.example.yaml in the repository.`,
-		Example: `  hint config                                   # what the next start uses
+		Example: `  hint config                                   # resolved values, keys masked
   hint config keys                              # every key, with defaults
   hint config set overview.depth 3              # global
   hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct

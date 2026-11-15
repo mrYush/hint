@@ -104,6 +104,38 @@ instructions: {budget: 1000, summarize: true}
 	}
 }
 
+func TestConfigCLIDisplaysUnreadyConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, yaml, want, warning string
+	}{
+		{"empty", "", "default_provider = (unset)", ""},
+		{"invalid profile", "providers: [{name: hub, kind: bogus}]\ndefault_provider: nope\n", "providers.hub.kind = bogus", ""},
+		{"duplicate fallback", "providers: [{name: local, kind: ollama, model: m}]\ndefault_provider: local\nfallback_provider: local\n", "fallback_provider = (unset)", "hint: fallback_provider \"local\" equals default_provider and was ignored\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			cmd := cliProcess(t, []string{"HOME=" + home, "USERPROFILE=" + home}, "config")
+			dir := filepath.Join(cmd.Dir, ".hint")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(tt.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("config failed: %v, stderr: %s", err, &stderr)
+			}
+			if !strings.Contains(string(out), tt.want+"\n") || stderr.String() != tt.warning {
+				t.Errorf("stdout = %s, stderr = %s", out, &stderr)
+			}
+		})
+	}
+}
+
 func TestConfigCLIErrorCategories(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
