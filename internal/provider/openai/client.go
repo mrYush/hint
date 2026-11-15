@@ -14,6 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +40,7 @@ type Client struct {
 	profile     config.Profile
 	url         string
 	http        *http.Client
-	log         func(string)
+	log         *slog.Logger
 	idleTimeout time.Duration
 }
 
@@ -55,11 +57,13 @@ func WithHTTPClient(h *http.Client) Option {
 	}
 }
 
-// WithLogger installs a debug sink for one-line request/response notes. The
-// client masks the API key itself; the caller is still responsible for
-// redacting anything it appends.
-func WithLogger(log func(string)) Option {
-	return func(c *Client) { c.log = log }
+// WithSlogLogger installs a structured logger; nil keeps the discard logger.
+func WithSlogLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		if logger != nil {
+			c.log = logger
+		}
+	}
 }
 
 // WithIdleTimeout overrides how long the stream may stay silent between
@@ -74,6 +78,7 @@ func New(profile config.Profile, opts ...Option) *Client {
 		profile: profile,
 		url:     completionsURL(profile.BaseURL),
 		http:    defaultHTTPClient(profile.HeaderTimeout),
+		log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	for _, o := range opts {
 		o(c)
@@ -172,7 +177,7 @@ func (c *Client) attributed(err error) *agentapi.Error {
 }
 
 func (c *Client) debugf(format string, args ...any) {
-	if c.log != nil {
-		c.log(fmt.Sprintf(format, args...))
+	if c.log.Enabled(context.Background(), slog.LevelDebug) {
+		c.log.Debug(fmt.Sprintf(format, args...))
 	}
 }

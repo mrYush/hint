@@ -199,6 +199,17 @@ depend on them:
 
 ### WP0.3 — Provider layer — **done**
 
+Follow-up [#39](https://github.com/mrYush/hint/issues/39), branch `fix/issue-39-provider-hardening` (pending merge).
+
+- ✅ S13: synchronize stream timeout state with `atomic.Bool`.
+- ✅ S10: classify inline stream errors using HTTP-like numeric codes, symbolic codes and context-overflow messages; preserve the provider name.
+- ✅ S26: pass `*slog.Logger` through provider construction, with disabled debug logging by default and redacted text output when tracing.
+- ✅ S29: drive the router matrix from `agentapi.ErrorKinds()`, checked against source declarations by a contract test.
+
+Unknown errors inside HTTP 200 retain the historical transient classification: no failing HTTP status exists from which to infer an invalid request.
+Only recognized symbolic codes are classified; speculative substring aliases are excluded.
+Context overflow triggers compaction and retry only before text or thinking has been delivered; a later overflow ends the turn with an error to avoid splicing two answers.
+
 Replaces `internal/llm` with `internal/provider/openai` + `internal/provider/router`.
 
 - ✅ `openai-compatible` implementation of `ChatProvider`: streaming chat completions + tool calls (covers OpenAI, Azure, OpenRouter, vLLM, LM Studio, aggregator gateways such as api-bar.ru, and Ollama via `/v1`)
@@ -1020,12 +1031,10 @@ depend on them:
   permission requests, compactions, errors and usage. Every line passes
   through `config.Redact` with `Config.Secrets()` inside an `io.Writer`
   decorator (`internal/debuglog`), so a secret quoted in a body is
-  scrubbed even where a client forgot to mask. Plain timestamped text,
-  not `slog`: the file is read by a person chasing a bad answer, and a
-  request body reads better unescaped; structured logs come with the
-  core-as-a-service, where a line has more than one consumer. Failing to
-  open the file is a warning, not a refusal. The file and its directory
-  are owner-only: the trace holds the user's prompts and code.
+  scrubbed even where a client forgot to mask. Agent events remain timestamped text.
+  Provider diagnostics use a `slog` text handler on the same redacting writer, with string attributes scrubbed before encoding as well.
+  Failing to open the file is a warning, not a refusal.
+  The file and its directory are owner-only: the trace holds the user's prompts and code.
 - **Numeric and boolean flags are typed** ([#37](https://github.com/mrYush/hint/issues/37)).
   Cobra parses values; `Changed` determines whether a `*int` / `*bool` override reaches the loader, preserving explicit `--overview-depth=0` and `--summarize-instructions=false`.
   Invalid flag syntax exits 2; a parsed value outside the configuration range exits 1, as does an invalid file value.

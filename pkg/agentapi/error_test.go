@@ -231,3 +231,27 @@ func TestNilErrorIsSafe(t *testing.T) {
 	}
 	_ = e.Error()
 }
+
+func TestErrorKindsMatchesDeclarations(t *testing.T) {
+	declared := declaredConstants(t, "error.go", "ErrorKind")
+	seen := map[string]bool{}
+	for _, kind := range agentapi.ErrorKinds() {
+		if seen[string(kind)] || !kind.Valid() {
+			t.Errorf("duplicate or invalid kind %q", kind)
+		}
+		seen[string(kind)] = true
+	}
+	for name, value := range declared {
+		if !seen[value] {
+			t.Errorf("%s missing from ErrorKinds", name)
+		}
+	}
+	if len(seen) != len(declared) {
+		t.Fatalf("list has %d kinds, declarations have %d", len(seen), len(declared))
+	}
+	kinds := agentapi.ErrorKinds()
+	kinds[0] = "changed"
+	if agentapi.ErrorKinds()[0] == "changed" {
+		t.Fatal("caller mutated the shared kind list")
+	}
+}
