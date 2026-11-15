@@ -116,6 +116,8 @@ func TestConfigCLIDisplaysUnreadyConfiguration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
 			cmd := cliProcess(t, []string{"HOME=" + home, "USERPROFILE=" + home}, "config")
+			// Keep coverage-runtime diagnostics out of the CLI's stderr.
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+t.TempDir())
 			dir := filepath.Join(cmd.Dir, ".hint")
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				t.Fatal(err)
