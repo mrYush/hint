@@ -211,14 +211,19 @@ func BenchmarkExtract(b *testing.B) {
 }
 
 func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
-	// Cold WASM initialization must fit the real extraction deadline.
+	// Keep cold compilation outside the parsing budget while initializing
+	// with the caller context whose lifetime this test exercises.
 	engine := &Engine{}
 	t.Cleanup(func() {
 		if err := engine.Close(); err != nil {
 			t.Error(err)
 		}
 	})
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if err := engine.initializeWASM(ctx, "javascript"); err != nil {
+		t.Fatal(err)
+	}
 	source := Source{"x.js", []byte("function Open() {}")}
 	first, err := engine.Extract(ctx, source, DefaultLimits())
 	if err != nil || !first.Complete {
@@ -230,7 +235,10 @@ func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
 	if err != nil || !second.Complete || session != engine.wasm {
 		t.Fatalf("second = %+v, %v; session reused=%v", second, err, session == engine.wasm)
 	}
-	third, err := engine.Extract(context.Background(), Source{"x.py", []byte("def Open():\n    pass\n")}, DefaultLimits())
+	if err := engine.initializeWASM(t.Context(), "python"); err != nil {
+		t.Fatal(err)
+	}
+	third, err := engine.Extract(t.Context(), Source{"x.py", []byte("def Open():\n    pass\n")}, DefaultLimits())
 	if err != nil || !third.Complete || engine.wasm == session {
 		t.Fatalf("language switch = %+v, %v", third, err)
 	}

@@ -141,9 +141,14 @@ func TestStderrIsBounded(t *testing.T) {
 	if _, err := p.Extract(context.Background(), extract.Source{Path: "x.go", Content: []byte("package p")}, extract.DefaultLimits()); err != nil {
 		t.Fatal(err)
 	}
-	p.stderr.mu.Lock()
-	n := len(p.stderr.data)
-	p.stderr.mu.Unlock()
+	// Close waits for os/exec's stderr copier before inspecting its buffer.
+	stderr := p.stderr
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stderr.mu.Lock()
+	n := len(stderr.data)
+	stderr.mu.Unlock()
 	if n != maxStderrBytes {
 		t.Fatalf("stderr retained %d bytes", n)
 	}

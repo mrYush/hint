@@ -344,14 +344,31 @@ func TestMapEmptyPartialPageCanContinue(t *testing.T) {
 	if len(first.Entries) != 0 || first.Page.QueryComplete || first.Page.NextCursor == "" {
 		t.Fatalf("expected an empty partial page with a continuation: %+v", first)
 	}
-	args, err := json.Marshal(Request{Cursor: first.Page.NextCursor})
-	if err != nil {
-		t.Fatal(err)
+	// A page may stop on its time budget before it reaches Good. Follow
+	// every continuation, including empty pages, and reject lost or duplicate
+	// declarations when traversal completes.
+	page := first
+	var names []string
+	for range 100 {
+		if page.Page.NextCursor == "" {
+			t.Fatalf("incomplete page has no continuation: %+v", page)
+		}
+		args, err := json.Marshal(Request{Cursor: page.Page.NextCursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		page = runMap(t, wrapped, string(args), MaxOutputBytes)
+		for _, entry := range page.Entries {
+			names = append(names, entry.Name)
+		}
+		if page.Page.QueryComplete {
+			if len(names) != 1 || names[0] != "Good" {
+				t.Fatalf("continuation declarations = %v, want [Good]", names)
+			}
+			return
+		}
 	}
-	next := runMap(t, wrapped, string(args), MaxOutputBytes)
-	if !next.Page.QueryComplete || len(next.Entries) != 1 || next.Entries[0].Name != "Good" {
-		t.Fatalf("continuation did not reach the current declaration: %+v", next)
-	}
+	t.Fatalf("continuation did not complete: %+v", page)
 }
 
 func TestMapValidationReportsHashBudgetExhaustion(t *testing.T) {
