@@ -78,5 +78,6 @@ tmp
 # Local review scratch directories
 .review-ast/
 .review-gocache/
+.review-develop/
 
 __pycache__/
