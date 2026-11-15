@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"sync/atomic"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mrYush/hint/pkg/agentapi"

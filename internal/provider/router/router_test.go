@@ -110,29 +110,8 @@ func run(t *testing.T, r *Router) []agentapi.ChatEvent {
 	return collect(t, ch)
 }
 
-// allKinds is every defined ErrorKind. agentapi's own exhaustiveness test
-// guards the routing table; this list is checked against Valid so a kind
-// added there without a row here fails loudly.
-var allKinds = []agentapi.ErrorKind{
-	agentapi.ErrUnknown, agentapi.ErrNetwork, agentapi.ErrTimeout,
-	agentapi.ErrRateLimited, agentapi.ErrUnavailable, agentapi.ErrAuth,
-	agentapi.ErrInvalidRequest, agentapi.ErrModelNotFound,
-	agentapi.ErrContextOverflow, agentapi.ErrContentFiltered, agentapi.ErrCanceled,
-	agentapi.ErrTurnLimit,
-}
-
-func TestKindTableIsComplete(t *testing.T) {
-	const definedKinds = 12
-	if len(allKinds) != definedKinds { t.Fatalf("allKinds has %d entries; want %d", len(allKinds), definedKinds) }
-	seen := make(map[agentapi.ErrorKind]bool)
-	for _, k := range allKinds {
-		if seen[k] { t.Errorf("duplicate kind %q", k) }
-		seen[k] = true
-		if !k.Valid() {
-			t.Errorf("kind %q is not valid", k)
-		}
-	}
-}
+// allKinds comes from the source-checked public contract list.
+var allKinds = agentapi.ErrorKinds()
 
 // TestFailoverByKind exercises every ErrorKind arriving as the primary's
 // terminal error before any delta, with a fallback configured.

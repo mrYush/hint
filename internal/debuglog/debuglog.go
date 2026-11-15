@@ -8,11 +8,9 @@
 // reach the file even when a caller forgets to mask it — the client's own
 // masking of its key is the first layer, this writer the last.
 //
-// The trace is a plain timestamped text file rather than structured
-// logging: it is read by a person chasing a bad answer, not parsed by a
-// machine, and a request body is easier to read unescaped. Structured
-// logs can come with the core-as-a-service, where a log line has more
-// than one consumer.
+// Agent events use timestamped text. Provider diagnostics use slog's text
+// handler on the same redacting writer; string attributes are also scrubbed
+// before encoding so quoting cannot hide a secret from the writer.
 package debuglog
 
 import (
@@ -20,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,9 +42,10 @@ func DefaultDir(home string, lookupEnv func(string) (string, bool)) string {
 
 // Log is one run's trace file.
 type Log struct {
-	path string
-	f    *os.File
-	out  *log.Logger
+	path    string
+	f       *os.File
+	out     *log.Logger
+	secrets []string
 }
 
 // Open creates the trace file for a run started at now, named by the time
@@ -65,9 +65,10 @@ func Open(dir string, now time.Time, secrets []string) (*Log, error) {
 		return nil, fmt.Errorf("debuglog: %w", err)
 	}
 	l := &Log{
-		path: path,
-		f:    f,
-		out:  log.New(redactor{w: f, secrets: secrets}, "", log.LstdFlags|log.Lmicroseconds),
+		path:    path,
+		secrets: append([]string(nil), secrets...),
+		f:       f,
+		out:     log.New(redactor{w: f, secrets: secrets}, "", log.LstdFlags|log.Lmicroseconds),
 	}
 	if pruneErr != nil {
 		l.Printf("warning: pruning old debug logs: %v", pruneErr)
@@ -83,6 +84,23 @@ func (l *Log) Path() string { return l.path }
 // body) stays multi-line; the next entry's timestamp marks where it ends.
 func (l *Log) Printf(format string, args ...any) {
 	l.out.Printf(format, args...)
+}
+
+// Slog returns a debug logger using the same redacting writer as the trace.
+// A nil trace disables provider logging, including message formatting.
+func (l *Log) Slog() *slog.Logger {
+	if l == nil {
+		return slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return slog.New(slog.NewTextHandler(l.out.Writer(), &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Value.Kind() == slog.KindString {
+				a.Value = slog.StringValue(config.Redact(a.Value.String(), l.secrets))
+			}
+			return a
+		},
+	}))
 }
 
 // Close flushes and closes the file.

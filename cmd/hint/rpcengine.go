@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ type rpcEngine struct {
 	mcpWarned int
 	notices   io.Writer
 	trace     *debuglog.Log
-	debugLog  func(string)
+	debugLog  *slog.Logger
 	// setup describes the configuration the engine was built from, for a
 	// shell that has to say where a rejected key lives.
 	setup *setupInfo
@@ -170,10 +171,7 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 			trace.Printf("cwd %s", cwd)
 		}
 	}
-	var debugLog func(string)
-	if trace != nil {
-		debugLog = func(line string) { trace.Printf("%s", line) }
-	}
+	debugLog := trace.Slog()
 	chat, err := provider.Chat(cfg, notices, debugLog)
 	if err != nil {
 		cleanup()
@@ -267,13 +265,12 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 	if p, err := as.cfg.Default(); err == nil {
 		limits = limitsFor(p)
 	}
-	var debugLog func(string)
+	debugLog := as.trace.Slog()
 	if as.trace != nil {
 		for _, p := range as.cfg.Providers {
 			as.trace.Printf("profile %s", p)
 		}
 		as.trace.Printf("default %s fallback %q mode %s window %d", as.cfg.DefaultProvider, as.cfg.FallbackProvider, as.opts.mode, limits.MaxContextTokens)
-		debugLog = func(line string) { as.trace.Printf("%s", line) }
 	}
 	e := &rpcEngine{
 		primaryRoot: root,

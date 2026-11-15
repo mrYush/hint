@@ -57,26 +57,14 @@ func WithHTTPClient(h *http.Client) Option {
 	}
 }
 
-// WithLogger installs a debug sink for one-line request/response notes. The
-// client masks the API key itself; the caller is still responsible for
-// redacting anything it appends.
-func WithLogger(log func(string)) Option {
+// WithSlogLogger installs a structured logger; nil keeps the discard logger.
+func WithSlogLogger(logger *slog.Logger) Option {
 	return func(c *Client) {
-		if log != nil { c.log = slog.New(&legacyLogHandler{write: log}) }
+		if logger != nil {
+			c.log = logger
+		}
 	}
 }
-
-// WithSlogLogger installs a structured logger; nil discards output.
-func WithSlogLogger(logger *slog.Logger) Option {
- return func(c *Client) { if logger != nil { c.log = logger } }
-}
-
-// legacyLogHandler preserves the old callback option for existing callers.
-type legacyLogHandler struct { write func(string) }
-func (h *legacyLogHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *legacyLogHandler) Handle(_ context.Context, r slog.Record) error { h.write(r.Message); return nil }
-func (h *legacyLogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *legacyLogHandler) WithGroup(string) slog.Handler { return h }
 
 // WithIdleTimeout overrides how long the stream may stay silent between
 // chunks before it is treated as stalled. Zero keeps the default.
@@ -189,5 +177,7 @@ func (c *Client) attributed(err error) *agentapi.Error {
 }
 
 func (c *Client) debugf(format string, args ...any) {
-	c.log.Debug(fmt.Sprintf(format, args...))
+	if c.log.Enabled(context.Background(), slog.LevelDebug) {
+		c.log.Debug(fmt.Sprintf(format, args...))
+	}
 }

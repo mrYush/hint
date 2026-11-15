@@ -7,6 +7,7 @@ package provider
 import (
 	"context"
 	"io"
+	"log/slog"
 
 	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/internal/provider/ollama"
@@ -20,7 +21,7 @@ import (
 // configured. notice is where the router announces a failover (the CLI
 // passes os.Stderr; nil discards). debugLog, when non-nil, receives one-line
 // redacted request/response notes from the underlying clients.
-func Chat(cfg *config.Config, notice io.Writer, debugLog func(string)) (agentapi.ChatProvider, error) {
+func Chat(cfg *config.Config, notice io.Writer, debugLog *slog.Logger) (agentapi.ChatProvider, error) {
 	chat, _, err := ForProfile(cfg, cfg.DefaultProvider, "", notice, debugLog)
 	return chat, err
 }
@@ -31,7 +32,7 @@ func Chat(cfg *config.Config, notice io.Writer, debugLog func(string)) (agentapi
 // profile actually used is returned with the provider, so the caller can
 // read its context window. An unknown or unusable profile (no key, no
 // model) is an error from config.
-func ForProfile(cfg *config.Config, name, model string, notice io.Writer, debugLog func(string)) (agentapi.ChatProvider, config.Profile, error) {
+func ForProfile(cfg *config.Config, name, model string, notice io.Writer, debugLog *slog.Logger) (agentapi.ChatProvider, config.Profile, error) {
 	role := "default"
 	if name != cfg.DefaultProvider {
 		role = "selected"
@@ -52,12 +53,8 @@ func ForProfile(cfg *config.Config, name, model string, notice io.Writer, debugL
 	return router.New(primary, opts...), primaryProfile, nil
 }
 
-func forProfile(p config.Profile, debugLog func(string)) agentapi.ChatProvider {
-	var opts []openai.Option
-	if debugLog != nil {
-		opts = append(opts, openai.WithLogger(debugLog))
-	}
-	chat := openai.New(p, opts...)
+func forProfile(p config.Profile, debugLog *slog.Logger) agentapi.ChatProvider {
+	chat := openai.New(p, openai.WithSlogLogger(debugLog))
 	if p.Kind == config.KindOllama {
 		return ollamaProvider{
 			ChatProvider: chat,

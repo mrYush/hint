@@ -733,6 +733,11 @@ your convenience.
 The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
+**Fixed in `fix/issue-39-provider-hardening`, pending merge.** Errors such as `context_length_exceeded` or numeric `401` inside an HTTP 200 stream now retain their error kind instead of always triggering transient retries.
+Context overflow before output can trigger compaction; after partial output it ends the turn without repeating the answer.
+The stream-stall watchdog also synchronizes timeout state.
+These issues were present since `v0.2.0-alpha`; see [#39](https://github.com/mrYush/hint/issues/39).
+
 **Fixed in `fix/issue-37-config-diagnostics`, pending merge.** An unset or empty reference such as `api_key: ${API_BAR_KE}` now produces a warning naming the variable and field, including when loading fails or `hint config` displays a valid configuration.
 Errors no longer repeat `loading configuration: config:`.
 Silent expansion and repeated error context were present since `v0.2.0-alpha`.

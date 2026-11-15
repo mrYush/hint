@@ -73,25 +73,39 @@ func kindForStatus(status int, msg string) agentapi.ErrorKind {
 	}
 }
 
+// kindForWireError classifies errors inside HTTP 200 SSE. Numeric codes
+// carry HTTP status semantics; symbolic codes and overflow messages do not.
+func kindForWireError(e *wireError) agentapi.ErrorKind {
+	code := e.code()
+	if status, err := strconv.Atoi(code); err == nil && status >= 400 && status <= 599 {
+		return kindForStatus(status, e.Message)
+	}
+	if isContextOverflow(code + " " + e.Type + " " + e.Message) {
+		return agentapi.ErrContextOverflow
+	}
+	for _, value := range []string{code, e.Type} {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "invalid_api_key", "authentication_error":
+			return agentapi.ErrAuth
+		case "rate_limit_exceeded":
+			return agentapi.ErrRateLimited
+		case "model_not_found":
+			return agentapi.ErrModelNotFound
+		case "invalid_request", "invalid_request_error":
+			return agentapi.ErrInvalidRequest
+		case "content_filter":
+			return agentapi.ErrContentFiltered
+		}
+	}
+	// No failure status is available here. Preserve the historical transient
+	// classification for unrecognized upstream errors rather than inventing a
+	// client-side HTTP 400. Explicit invalid-request codes above never retry.
+	return agentapi.ErrUnavailable
+}
+
 // isContextOverflow recognises the request-too-long refusal inside a 400
 // body. There is no structured code for it across dialects, so this is a
 // substring match over the phrasings the supported providers actually use.
-// kindForWireError classifies provider errors sent inside HTTP 200 SSE.
-func kindForWireError(e *wireError) agentapi.ErrorKind {
- if e == nil { return agentapi.ErrUnknown }
- code := strings.ToLower(strings.Trim(strings.TrimSpace(string(e.Code)), "\""))
- detail := strings.ToLower(strings.Join([]string{code, e.Type, e.Message}, " "))
- switch {
- case isContextOverflow(detail): return agentapi.ErrContextOverflow
- case strings.Contains(detail, "invalid_api_key"), strings.Contains(detail, "authentication"), strings.Contains(detail, "unauthorized"), strings.Contains(detail, "forbidden"), strings.Contains(detail, "permission_denied"): return agentapi.ErrAuth
- case strings.Contains(detail, "rate_limit"), strings.Contains(detail, "rate limit"), strings.Contains(detail, "too_many_requests"), strings.Contains(detail, "quota_exceeded"): return agentapi.ErrRateLimited
- case strings.Contains(detail, "model_not_found"), strings.Contains(detail, "model not found"): return agentapi.ErrModelNotFound
- case strings.Contains(detail, "invalid_request"), strings.Contains(detail, "invalid request"): return agentapi.ErrInvalidRequest
- case strings.Contains(detail, "content_filter"), strings.Contains(detail, "content policy"): return agentapi.ErrContentFiltered
- default: return agentapi.ErrUnavailable
- }
-}
-
 func isContextOverflow(msg string) bool {
 	m := strings.ToLower(msg)
 	for _, needle := range []string{
@@ -148,15 +162,27 @@ func errorMessage(body []byte) string {
 	return strings.TrimSpace(string(body))
 }
 
+func (e *wireError) code() string {
+	code := strings.TrimSpace(string(e.Code))
+	if code == "null" {
+		return ""
+	}
+	var decoded string
+	if json.Unmarshal(e.Code, &decoded) == nil {
+		return strings.TrimSpace(decoded)
+	}
+	return code
+}
+
 func (e *wireError) describe() string {
 	msg := strings.TrimSpace(e.Message)
-	code := strings.Trim(strings.TrimSpace(string(e.Code)), `"`)
+	code := e.code()
 	switch {
-	case msg != "" && code != "" && code != "null":
+	case msg != "" && code != "":
 		return msg + " (" + code + ")"
 	case msg != "":
 		return msg
-	case code != "" && code != "null":
+	case code != "":
 		return "error code " + code
 	default:
 		return ""
