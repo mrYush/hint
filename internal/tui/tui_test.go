@@ -1187,9 +1187,12 @@ func TestConfigCommand(t *testing.T) {
 	if len(sets) != 1 || !strings.Contains(h.m.statusLine(), "/setup") {
 		t.Errorf("a key was accepted on the command line: %v, %q", sets, h.m.statusLine())
 	}
-	h.submit("/config")
-	if !strings.Contains(h.view(), "overview.depth = 2") {
-		t.Errorf("/config did not show the configuration:\n%s", h.view())
+	for _, command := range []string{"/config", "/config show"} {
+		before := len(h.m.entries)
+		h.submit(command)
+		if len(h.m.entries) <= before || !strings.Contains(h.m.entries[len(h.m.entries)-1].text, "overview.depth = 2") {
+			t.Errorf("%s did not add configuration to the transcript:\n%s", command, h.view())
+		}
 	}
 	h.submit("/config keys")
 	if !strings.Contains(h.view(), "providers.<profile>.header_timeout") {

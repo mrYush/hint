@@ -8,7 +8,51 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mrYush/hint/internal/config"
 )
+
+func TestConfigShowKeyring(t *testing.T) {
+	t.Parallel()
+	const secret = "sk-keyring-test-secret-123"
+	const reference = "keyring:hint-test"
+	env := environment{home: t.TempDir(), cwd: t.TempDir()}
+	dir := filepath.Join(env.cwd, ".hint")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(`
+providers:
+  - {name: hub, kind: openai, base_url: "https://example.invalid/v1", model: m, api_key: `+reference+`}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name string
+		ring config.Keyring
+		want string
+	}{
+		{"hit", config.MapKeyring{"hint-test": secret}, "sk-key…123"},
+		{"miss", config.MapKeyring{}, reference + " (no key came back)"},
+		{"nil keyring", nil, reference + " (no key came back)"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := newSetupInfoWithEnvironment(nil, config.Flags{}, env)
+			info.keyring = tt.ring
+			out, warnings, err := info.showWithWarnings()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out, secret) || strings.Contains(strings.Join(warnings, "\n"), secret) {
+				t.Fatal("config show exposed the API key")
+			}
+			if !strings.Contains(out+"\n", "providers.hub.api_key = "+tt.want+"\n") {
+				t.Errorf("missing API key display %q in:\n%s", tt.want, out)
+			}
+		})
+	}
+}
 
 func TestConfigCommandTypedFlagsAndWarnings(t *testing.T) {
 	t.Parallel()
