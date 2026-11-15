@@ -81,8 +81,7 @@ func (s *setupInfo) unset(key string, project bool) (string, error) {
 	return fmt.Sprintf("%s removed from %s; the next layer down applies from the next start", key, path), nil
 }
 
-// show is the configuration the next start resolves: every key of the
-// table with its value after all layers, keys masked.
+// show displays the configuration the next start resolves, with API keys masked.
 func (s *setupInfo) show() (string, error) {
 	out, _, err := s.showWithWarnings()
 	return out, err
@@ -91,7 +90,8 @@ func (s *setupInfo) show() (string, error) {
 // showWithWarnings separates diagnostics from configuration output so the CLI
 // can route them to stderr without mixing them into redirected stdout.
 func (s *setupInfo) showWithWarnings() (string, []string, error) {
-	opts, err := s.env.configOptions(s.flags, false)
+	// Show the resolved values even when the configuration is not ready to run.
+	opts, err := s.env.configOptions(s.flags, true)
 	if err != nil {
 		return "", nil, err
 	}
@@ -215,15 +215,20 @@ func newConfigCommand(flags *config.Flags, env environment) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show, list, set and unset configuration keys",
-		Long: `hint config shows the configuration the next start resolves, every
-layer applied and API keys masked. Its subcommands change one key of a
-config file at a time, keeping the file's comments: the global file by
-default, the repository's .hint/config.yaml with --project. Each value
-is checked against the key's type before anything is written.
+		Long: `hint config shows the effective configuration, with every layer
+applied and API keys masked. Display succeeds even when profiles are incomplete
+or invalid for execution, including unresolved keyring references. Exit status
+0 confirms display succeeded; it does not certify readiness to run. File reading,
+parsing and limit-resolution errors still fail the command.
+
+Its subcommands change one key of a config file at a time, keeping the
+file's comments. They update the global file by default, or the repository's
+.hint/config.yaml with --project. Each value is checked against the key's
+type before anything is written.
 
 The keys, their defaults and their HINT_* variables: hint config keys,
 or config.example.yaml in the repository.`,
-		Example: `  hint config                                   # what the next start uses
+		Example: `  hint config                                   # resolved values, keys masked
   hint config keys                              # every key, with defaults
   hint config set overview.depth 3              # global
   hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct

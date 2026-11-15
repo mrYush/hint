@@ -364,12 +364,18 @@ is checked against the key's type before anything is written, and the
 file keeps its comments:
 
 ```bash
-hint config                                     # what the next start uses, keys masked
+hint config                                     # resolved values, keys masked
 hint config keys                                # every key, default, HINT_* variable, flag
 hint config set overview.depth 3                # the global file
 hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct   # this repository only
 hint config unset --project overview.depth      # back to the global value
 ```
+
+`hint config` displays the resolved values even when profiles are incomplete or invalid for execution.
+Exit status 0 confirms that display succeeded, including for an empty configuration or an unresolved `keyring:<account>` reference.
+It does not certify that the configuration is ready to run.
+File reading, parsing and limit-resolution errors still fail the command.
+Resolved API keys stay masked, and unresolved keyring references appear as `keyring:<account> (no key came back)`.
 
 In the TUI the same is `/config show | keys | set | unset`, with Tab
 completing the subcommand, the key and, where there is a closed set, the
@@ -734,6 +740,11 @@ your convenience.
 
 The confirmed bugs this list tracked are fixed; the notes below say when.
 Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+
+**Fixed in `fix/config-show-keyring`, pending merge.**
+With `api_key: keyring:<account>`, configuration display could fail before producing output.
+It now displays unresolved references as `keyring:<account> (no key came back)` and masks resolved keys.
+The failure was present since `v0.3.0`; see [#94](https://github.com/mrYush/hint/issues/94).
 
 **Fixed in `fix/issue-39-provider-hardening`, pending merge.** Errors such as `context_length_exceeded` or numeric `401` inside an HTTP 200 stream now retain their error kind instead of always triggering transient retries.
 Context overflow before output can trigger compaction; after partial output it ends the turn without repeating the answer.

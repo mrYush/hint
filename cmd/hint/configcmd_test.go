@@ -8,7 +8,51 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mrYush/hint/internal/config"
 )
+
+func TestConfigShowKeyring(t *testing.T) {
+	t.Parallel()
+	const secret = "sk-keyring-test-secret-123"
+	const reference = "keyring:hint-test"
+	env := environment{home: t.TempDir(), cwd: t.TempDir()}
+	dir := filepath.Join(env.cwd, ".hint")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(`
+providers:
+  - {name: hub, kind: openai, base_url: "https://example.invalid/v1", model: m, api_key: `+reference+`}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name string
+		ring config.Keyring
+		want string
+	}{
+		{"hit", config.MapKeyring{"hint-test": secret}, "sk-key…123"},
+		{"miss", config.MapKeyring{}, reference + " (no key came back)"},
+		{"nil keyring", nil, reference + " (no key came back)"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := newSetupInfoWithEnvironment(nil, config.Flags{}, env)
+			info.keyring = tt.ring
+			out, warnings, err := info.showWithWarnings()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out, secret) || strings.Contains(strings.Join(warnings, "\n"), secret) {
+				t.Fatal("config show exposed the API key")
+			}
+			if !strings.Contains(out+"\n", "providers.hub.api_key = "+tt.want+"\n") {
+				t.Errorf("missing API key display %q in:\n%s", tt.want, out)
+			}
+		})
+	}
+}
 
 func TestConfigCommandTypedFlagsAndWarnings(t *testing.T) {
 	t.Parallel()
@@ -55,6 +99,40 @@ instructions: {budget: 1000, summarize: true}
 				if !strings.Contains(out.String(), want+"\n") {
 					t.Errorf("want %q in output:\n%s", want, &out)
 				}
+			}
+		})
+	}
+}
+
+func TestConfigCLIDisplaysUnreadyConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, yaml, want, warning string
+	}{
+		{"empty", "", "default_provider = (unset)", ""},
+		{"invalid profile", "providers: [{name: hub, kind: bogus}]\ndefault_provider: nope\n", "providers.hub.kind = bogus", ""},
+		{"duplicate fallback", "providers: [{name: local, kind: ollama, model: m}]\ndefault_provider: local\nfallback_provider: local\n", "fallback_provider = (unset)", "hint: fallback_provider \"local\" equals default_provider and was ignored\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			cmd := cliProcess(t, []string{"HOME=" + home, "USERPROFILE=" + home}, "config")
+			// Keep coverage-runtime diagnostics out of the CLI's stderr.
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+t.TempDir())
+			dir := filepath.Join(cmd.Dir, ".hint")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(tt.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("config failed: %v, stderr: %s", err, &stderr)
+			}
+			if !strings.Contains(string(out), tt.want+"\n") || stderr.String() != tt.warning {
+				t.Errorf("stdout = %s, stderr = %s", out, &stderr)
 			}
 		})
 	}

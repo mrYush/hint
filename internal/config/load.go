@@ -160,6 +160,12 @@ func LoadFrom(opts Options) (*Config, error) {
 		return nil, l.withDiagnostics(err)
 	}
 
+	// Normalize the effective fallback for both display and execution.
+	if cfg.FallbackProvider != "" && cfg.FallbackProvider == cfg.DefaultProvider {
+		l.warnf("fallback_provider %q equals default_provider and was ignored", cfg.FallbackProvider)
+		cfg.FallbackProvider = ""
+	}
+
 	if !opts.Draft {
 		if err := l.validate(cfg); err != nil {
 			return nil, l.withDiagnostics(err)
@@ -1107,10 +1113,6 @@ func (l *loader) validate(cfg *Config) error {
 	if cfg.FallbackProvider != "" {
 		if _, err := cfg.Profile(cfg.FallbackProvider); err != nil {
 			return &ValidationError{Key: "fallback_provider", Err: err}
-		}
-		if cfg.FallbackProvider == cfg.DefaultProvider {
-			l.warnf("fallback_provider %q equals default_provider and was ignored", cfg.FallbackProvider)
-			cfg.FallbackProvider = ""
 		}
 	}
 	if err := l.validateUsable(cfg, cfg.DefaultProvider, "default"); err != nil {

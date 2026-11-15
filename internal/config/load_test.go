@@ -228,6 +228,37 @@ func TestProviderSelection(t *testing.T) {
 	hasWarning(t, cfg, "fallback_provider")
 }
 
+func TestFallbackNormalization(t *testing.T) {
+	t.Parallel()
+	for _, draft := range []bool{false, true} {
+		for _, fallback := range []string{"", "local", "spare"} {
+			opts := dirs(t)
+			opts.Draft = draft
+			writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - {name: local, kind: ollama, model: m}
+  - {name: spare, kind: ollama, model: m}
+default_provider: local
+fallback_provider: "`+fallback+`"
+`)
+			cfg, err := LoadFrom(opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := fallback
+			if fallback == "local" {
+				want = ""
+				hasWarning(t, cfg, "fallback_provider")
+			} else if len(cfg.Warnings) != 0 {
+				t.Errorf("draft=%v fallback=%q: unexpected warnings %v", draft, fallback, cfg.Warnings)
+			}
+			if cfg.FallbackProvider != want {
+				t.Errorf("draft=%v fallback=%q: got %q, want %q", draft, fallback, cfg.FallbackProvider, want)
+			}
+		}
+	}
+}
+
 func TestMergeByName(t *testing.T) {
 	t.Parallel()
 	opts := dirs(t)
