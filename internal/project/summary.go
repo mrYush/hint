@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -30,6 +31,22 @@ const summarySystemPrompt = `You compress a project's instruction file for an AI
 Keep every rule, prohibition, command, path and name; drop explanations, examples and repetition.
 Keep the original headings and order so the assistant can ask for a section by name. Write plain Markdown, no preamble.`
 
+// summaryRequest builds the prompts shared by the model call and cache key.
+func summaryRequest(path, content string, maxBytes int) agentapi.ChatRequest {
+	// Four bytes per token and a token and a half per word approximates
+	// the byte limit, which the caller enforces.
+	words := max(maxBytes/6, 50)
+	return agentapi.ChatRequest{Messages: []agentapi.Message{
+		agentapi.SystemMessage(summarySystemPrompt),
+		agentapi.UserMessage(fmt.Sprintf("Summarize %s in at most %d words.\n\n%s", path, words, content)),
+	}}
+}
+
+// fallbackAwareProvider observes failover for one stream.
+type fallbackAwareProvider interface {
+	StreamWithFallback(context.Context, agentapi.ChatRequest, func()) (<-chan agentapi.ChatEvent, error)
+}
+
 // ChatSummarizer is the [Summarizer] over an [agentapi.ChatProvider]: one
 // plain-text request with no tools, the same shape as the agent's own
 // compaction summary.
@@ -39,20 +56,27 @@ type ChatSummarizer struct {
 
 // Summarize implements [Summarizer].
 func (s ChatSummarizer) Summarize(ctx context.Context, path, content string, maxBytes int) (string, error) {
+	summary, _, err := s.summarize(ctx, summaryRequest(path, content, maxBytes))
+	return summary, err
+}
+
+// summarize returns the text and whether it can populate the primary cache.
+func (s ChatSummarizer) summarize(ctx context.Context, req agentapi.ChatRequest) (string, bool, error) {
 	if s.Provider == nil {
-		return "", errors.New("no provider to summarize with")
+		return "", false, errors.New("no provider to summarize with")
 	}
-	// A byte budget means little to a model; words do. Four bytes a token
-	// and a token and a half a word is close enough for a limit the
-	// caller enforces anyway.
-	words := max(maxBytes/6, 50)
-	req := agentapi.ChatRequest{Messages: []agentapi.Message{
-		agentapi.SystemMessage(summarySystemPrompt),
-		agentapi.UserMessage(fmt.Sprintf("Summarize %s in at most %d words.\n\n%s", path, words, content)),
-	}}
-	events, err := s.Provider.Stream(ctx, req)
+	var (
+		events <-chan agentapi.ChatEvent
+		err    error
+	)
+	usedFallback := false
+	if routed, ok := s.Provider.(fallbackAwareProvider); ok {
+		events, err = routed.StreamWithFallback(ctx, req, func() { usedFallback = true })
+	} else {
+		events, err = s.Provider.Stream(ctx, req)
+	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	var text strings.Builder
 	for ev := range events {
@@ -60,23 +84,24 @@ func (s ChatSummarizer) Summarize(ctx context.Context, path, content string, max
 		case agentapi.ChatTextDelta:
 			text.WriteString(ev.Text)
 		case agentapi.ChatError:
-			return "", ev.Err
+			return "", false, ev.Err
 		case agentapi.ChatThinkingDelta, agentapi.ChatToolCall, agentapi.ChatUsage, agentapi.ChatDone:
 			// A summary is plain text; the rest of the stream is not
 			// part of it.
 		}
 	}
-	return text.String(), nil
+	// The closed stream synchronizes with the per-stream fallback callback.
+	return text.String(), !usedFallback && ctx.Err() == nil, nil
 }
 
-// CachedSummarizer keeps every summary Inner produces under Dir, keyed by
-// the SHA-256 of the file's content, and answers from the cache while the
-// file is unchanged. A summary costs a model call per file; the cache is
-// what makes the opt-in affordable across runs. A cache that cannot be
-// read or written is simply not used — the summary still comes back.
+// CachedSummarizer keeps primary summaries under Dir by exact prompts,
+// primary profile identity and byte budget. A cache miss costs a model call.
+// Cache failures leave summarization available.
 type CachedSummarizer struct {
 	Dir   string
 	Inner Summarizer
+	// ProviderKey identifies the configured primary profile, endpoint and model.
+	ProviderKey string
 }
 
 // DefaultSummaryCacheDir is $XDG_CACHE_HOME/hint/instructions when the
@@ -94,17 +119,50 @@ func DefaultSummaryCacheDir() (string, error) {
 
 // Summarize implements [Summarizer].
 func (c CachedSummarizer) Summarize(ctx context.Context, path, content string, maxBytes int) (string, error) {
-	sum := sha256.Sum256([]byte(content))
-	file := filepath.Join(c.Dir, hex.EncodeToString(sum[:])+".md")
+	req := summaryRequest(path, content, maxBytes)
+	hash := sha256.New()
+	// Use a new domain so older entries written after failover are ignored.
+	for _, field := range []string{"primary-summary-v1", c.ProviderKey, strconv.Itoa(maxBytes), req.Messages[0].Text(), req.Messages[1].Text()} {
+		fmt.Fprintf(hash, "%d:%s", len(field), field)
+	}
+	file := filepath.Join(c.Dir, hex.EncodeToString(hash.Sum(nil))+".md")
 	if data, err := os.ReadFile(file); err == nil && len(data) > 0 {
 		return string(data), nil
 	}
-	summary, err := c.Inner.Summarize(ctx, path, content, maxBytes)
-	if err != nil || strings.TrimSpace(summary) == "" {
+	var summary string
+	var err error
+	cacheable := true
+	if chat, ok := c.Inner.(interface {
+		summarize(context.Context, agentapi.ChatRequest) (string, bool, error)
+	}); ok {
+		summary, cacheable, err = chat.summarize(ctx, req)
+	} else {
+		summary, err = c.Inner.Summarize(ctx, path, content, maxBytes)
+	}
+	if !cacheable || err != nil || strings.TrimSpace(summary) == "" {
 		return summary, err
 	}
-	if err := os.MkdirAll(c.Dir, 0o755); err == nil {
-		_ = os.WriteFile(file, []byte(summary), 0o644)
-	}
+	// A cache write failure does not invalidate a successful summary.
+	_ = writeSummaryCache(file, summary)
 	return summary, nil
+}
+
+func writeSummaryCache(path, summary string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".summary-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	_, writeErr := tmp.WriteString(summary)
+	if writeErr == nil {
+		writeErr = tmp.Sync()
+	}
+	if err := errors.Join(writeErr, tmp.Close()); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

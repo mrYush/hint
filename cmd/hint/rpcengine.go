@@ -827,11 +827,17 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 	if as.cfg.Instructions.Summarize {
 		var s project.Summarizer = project.ChatSummarizer{Provider: as.chat}
 		if dir := as.opts.env.summaryCacheDir(); dir != "" {
-			s = project.CachedSummarizer{Dir: dir, Inner: s}
+			s = project.CachedSummarizer{Dir: dir, Inner: s, ProviderKey: summaryProviderKey(as.cfg)}
 		}
 		opts = append(opts, project.WithSummarizer(s))
 	}
 	return opts
+}
+
+// summaryProviderKey identifies the primary profile that can populate the cache.
+func summaryProviderKey(cfg *config.Config) string {
+	p, _ := cfg.Default()
+	return fmt.Sprintf("%q %q %q %q", p.Name, p.Kind, p.BaseURL, p.Model)
 }
 
 // addMCPResources joins configured resources to the same instruction layout

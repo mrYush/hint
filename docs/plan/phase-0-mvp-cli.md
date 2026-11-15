@@ -946,6 +946,16 @@ depend on them:
   [WP0.12](#wp012--instructions-beyond-the-budget--done); just-in-time loading
   of a subdirectory's instructions lives there too.
 
+#### Project context reliability follow-up — issue #40
+
+**Branch:** `fix/issue-40-project-reliability`
+
+Tracks [#40](https://github.com/mrYush/hint/issues/40).
+
+- ✅ Probe Git worktrees with a stable locale and preserve command and context errors under the existing time limits (S11).
+- ✅ Key instruction summaries by both prompts, primary profile and budget, sync and publish cache entries atomically, and skip caching fallback responses (S18).
+- ✅ Reuse compiled rule globs and report every rule warning (S21).
+
 ### WP0.9 — Run modes and CLI surface — **done**
 
 Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.

@@ -2,8 +2,6 @@ package project_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -196,20 +194,39 @@ func TestCachedSummarizer(t *testing.T) {
 	if len(inner.calls) != 1 {
 		t.Fatalf("inner summarizer called %d times for the same content, want 1", len(inner.calls))
 	}
-	sum := sha256.Sum256([]byte("long content"))
-	if _, err := os.Stat(filepath.Join(cache, hex.EncodeToString(sum[:])+".md")); err != nil {
-		t.Errorf("cache entry named by the content hash: %v", err)
+	for _, tc := range []struct {
+		name, path, content, provider string
+		budget                        int
+	}{
+		{"content", "/p/HINT.md", "other content", "", 100},
+		{"path", "/q/HINT.md", "long content", "", 100},
+		{"budget", "/p/HINT.md", "long content", "", 99},
+		{"provider", "/p/HINT.md", "long content", "different-model", 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c.ProviderKey = tc.provider
+			inner.summary = tc.name
+			for i := 0; i < 2; i++ {
+				got, err := c.Summarize(ctx, tc.path, tc.content, tc.budget)
+				if err != nil || got != tc.name {
+					t.Fatalf("call %d: %q, %v", i, got, err)
+				}
+			}
+		})
 	}
-	// Changed content is a new entry; a failing inner call caches nothing.
-	if _, _ = c.Summarize(ctx, "/p/HINT.md", "other content", 100); len(inner.calls) != 2 {
-		t.Errorf("changed content must be summarized again: %d calls", len(inner.calls))
+	if len(inner.calls) != 5 {
+		t.Errorf("inner summarizer called %d times, want 5", len(inner.calls))
 	}
 	inner.err = errors.New("down")
-	if _, err := c.Summarize(ctx, "/p/HINT.md", "third", 100); err == nil {
-		t.Error("inner error must surface")
+	if _, err := c.Summarize(ctx, "/p/HINT.md", "third", 100); !errors.Is(err, inner.err) {
+		t.Errorf("error = %v, want %v", err, inner.err)
 	}
-	if entries, _ := os.ReadDir(cache); len(entries) != 2 {
-		t.Errorf("cache holds %d entries, want 2", len(entries))
+	entries, err := os.ReadDir(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 5 {
+		t.Errorf("cache holds %d entries, want 5", len(entries))
 	}
 }
 

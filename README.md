@@ -465,7 +465,9 @@ than it can read. When the files do not fit, nothing is dropped blindly:
   true` or `--summarize-instructions`), a file that does not fit even as
   an outline is summarized by the model, marked `summary="true"` in the
   prompt, and the summary is cached under `~/.cache/hint/instructions/`
-  (`$XDG_CACHE_HOME` is respected) until the file changes.
+  (`$XDG_CACHE_HOME` is respected) when the primary profile responds.
+  The cache matches the primary profile name, kind, endpoint and model, the file path and content, the instruction budget and both prompts.
+  A fallback summary is used for the current request only.
 
 A warning on stderr names every file shown as less than itself.
 

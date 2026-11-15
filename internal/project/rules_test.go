@@ -72,6 +72,29 @@ func TestDiscoverRules(t *testing.T) {
 	}
 }
 
+func TestDiscoverRulesRetainsAllWarnings(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{
+		".hint/rules/large.md": "---\npaths: ['[', 'x/[', '*.go']\n---\n" + strings.Repeat("x", 64<<10),
+		".hint/rules/mixed.md": "---\npaths: ['[', 'x/[', '*.go']\n---\n",
+	})
+	rules, warnings := project.DiscoverRules([]string{dir})
+	if len(rules) != 2 || len(warnings) != 5 || !strings.Contains(warnings[2], "exceeds 64 KiB") {
+		t.Fatalf("rules = %+v, warnings = %v", rules, warnings)
+	}
+	goPath := filepath.Join(dir, "main.go")
+	if rules[0].Conditional() || rules[0].Matches(goPath) {
+		t.Errorf("oversized rule retained path conditions: %+v", rules[0])
+	}
+	if !rules[1].Conditional() || !rules[1].Matches(goPath) || rules[1].Matches(filepath.Join(dir, "main.ts")) {
+		t.Errorf("valid pattern was not preserved: %+v", rules[1])
+	}
+	rules[1].Paths[0] = "*.ts"
+	if rules[1].Matches(goPath) || !rules[1].Matches(filepath.Join(dir, "main.ts")) {
+		t.Errorf("matching ignored the updated paths: %+v", rules[1])
+	}
+}
+
 func TestRuleMatches(t *testing.T) {
 	r := project.Rule{Root: "/p", Paths: []string{"internal/**/*.go", "*.md"}}
 	cases := map[string]bool{
