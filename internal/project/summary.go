@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mrYush/hint/pkg/agentapi"
@@ -29,6 +30,9 @@ type Summarizer interface {
 const summarySystemPrompt = `You compress a project's instruction file for an AI coding assistant that will read the summary instead of the file.
 Keep every rule, prohibition, command, path and name; drop explanations, examples and repetition.
 Keep the original headings and order so the assistant can ask for a section by name. Write plain Markdown, no preamble.`
+
+// summaryPromptVersion tracks changes to the prompt format and budget conversion.
+const summaryPromptVersion = "1"
 
 // ChatSummarizer is the [Summarizer] over an [agentapi.ChatProvider]: one
 // plain-text request with no tools, the same shape as the agent's own
@@ -69,14 +73,15 @@ func (s ChatSummarizer) Summarize(ctx context.Context, path, content string, max
 	return text.String(), nil
 }
 
-// CachedSummarizer keeps every summary Inner produces under Dir, keyed by
-// the SHA-256 of the file's content, and answers from the cache while the
-// file is unchanged. A summary costs a model call per file; the cache is
+// CachedSummarizer keeps summaries under Dir by prompt, provider configuration,
+// path, content and byte budget. A summary costs a model call per file; the cache is
 // what makes the opt-in affordable across runs. A cache that cannot be
 // read or written is simply not used — the summary still comes back.
 type CachedSummarizer struct {
 	Dir   string
 	Inner Summarizer
+	// ProviderKey identifies the configured primary and fallback models and endpoints.
+	ProviderKey string
 }
 
 // DefaultSummaryCacheDir is $XDG_CACHE_HOME/hint/instructions when the
@@ -94,8 +99,11 @@ func DefaultSummaryCacheDir() (string, error) {
 
 // Summarize implements [Summarizer].
 func (c CachedSummarizer) Summarize(ctx context.Context, path, content string, maxBytes int) (string, error) {
-	sum := sha256.Sum256([]byte(content))
-	file := filepath.Join(c.Dir, hex.EncodeToString(sum[:])+".md")
+	hash := sha256.New()
+	for _, field := range []string{summaryPromptVersion, summarySystemPrompt, c.ProviderKey, path, strconv.Itoa(maxBytes), content} {
+		fmt.Fprintf(hash, "%d:%s", len(field), field)
+	}
+	file := filepath.Join(c.Dir, hex.EncodeToString(hash.Sum(nil))+".md")
 	if data, err := os.ReadFile(file); err == nil && len(data) > 0 {
 		return string(data), nil
 	}
@@ -103,8 +111,24 @@ func (c CachedSummarizer) Summarize(ctx context.Context, path, content string, m
 	if err != nil || strings.TrimSpace(summary) == "" {
 		return summary, err
 	}
-	if err := os.MkdirAll(c.Dir, 0o755); err == nil {
-		_ = os.WriteFile(file, []byte(summary), 0o644)
-	}
+	// A cache write failure does not invalidate a successful summary.
+	_ = writeSummaryCache(file, summary)
 	return summary, nil
+}
+
+func writeSummaryCache(path, summary string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".summary-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	_, writeErr := tmp.WriteString(summary)
+	if err := errors.Join(writeErr, tmp.Close()); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

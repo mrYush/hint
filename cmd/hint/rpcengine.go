@@ -830,11 +830,24 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 	if as.cfg.Instructions.Summarize {
 		var s project.Summarizer = project.ChatSummarizer{Provider: as.chat}
 		if dir := as.opts.env.summaryCacheDir(); dir != "" {
-			s = project.CachedSummarizer{Dir: dir, Inner: s}
+			s = project.CachedSummarizer{Dir: dir, Inner: s, ProviderKey: summaryProviderKey(as.cfg)}
 		}
 		opts = append(opts, project.WithSummarizer(s))
 	}
 	return opts
+}
+
+// summaryProviderKey describes both providers the chat router may use.
+func summaryProviderKey(cfg *config.Config) string {
+	identity := func(p config.Profile) string {
+		return fmt.Sprintf("%q %q %q %q", p.Name, p.Kind, p.BaseURL, p.Model)
+	}
+	primary, _ := cfg.Default()
+	key := identity(primary)
+	if fallback, ok := cfg.Fallback(); ok && fallback.Name != primary.Name {
+		key += "\n" + identity(fallback)
+	}
+	return key
 }
 
 // addMCPResources joins configured resources to the same instruction layout
