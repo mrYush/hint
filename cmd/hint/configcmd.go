@@ -221,10 +221,10 @@ or invalid for execution, including unresolved keyring references. Exit status
 0 confirms display succeeded; it does not certify readiness to run. File reading,
 parsing and limit-resolution errors still fail the command.
 
-Its subcommands change one key of a
-config file at a time, keeping the file's comments: the global file by
-default, the repository's .hint/config.yaml with --project. Each value
-is checked against the key's type before anything is written.
+Its subcommands change one key of a config file at a time, keeping the
+file's comments. They update the global file by default, or the repository's
+.hint/config.yaml with --project. Each value is checked against the key's
+type before anything is written.
 
 The keys, their defaults and their HINT_* variables: hint config keys,
 or config.example.yaml in the repository.`,

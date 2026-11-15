@@ -192,11 +192,6 @@ Decisions (2026-10-18):
 - ✅ `/completion [off|tab|idle|both]` sets the trigger for the session and alone reports the mode, its source, the profile and the requests and tokens spent so far
 - ✅ Command arguments that depend on the configuration: the model argument of `/profile` and the value of `/config set providers.<p>.model` complete from `profile.models`, fetched by the first Tab on it and cached for the session
 
-Follow-up (2026-11-15, [#94](https://github.com/mrYush/hint/issues/94), `fix/config-show-keyring`).
-Configuration display uses draft loading to show unresolved references as `keyring:<account> (no key came back)` instead of failing.
-Resolved keys stay masked, and fallback normalization applies to both display and execution.
-A successful display does not certify that the configuration is ready to run.
-
 Decisions (2026-10-19):
 
 - **Three triggers instead of one.**
@@ -313,6 +308,11 @@ tool results reached the model and the session file unmasked — only the `--deb
 - ✅ `tool.Root` opens files through `os.Root`, which closes the symlink-swap window between the check and the open ([risks.md](risks.md) R8)
 - ✅ Tests that pin each path: `env`, a tool output that contains the key (the model, the terminal and the session file), `read_file` from a root at `$HOME`, the symlink swap, setup with a store, without one and under each policy, `show-key`
 - ✅ A profile that keeps a literal key in a file while a store answers gets one warning at start; nothing migrates a key behind the user's back
+
+Follow-up (2026-11-15, [#94](https://github.com/mrYush/hint/issues/94), `fix/config-show-keyring`).
+Configuration display uses draft loading to show unresolved references as `keyring:<account> (no key came back)` instead of failing.
+Resolved keys stay masked, and fallback normalization applies to both display and execution.
+A successful display does not certify that the configuration is ready to run.
 
 Decisions (2026-10-19):
 
