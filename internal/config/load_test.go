@@ -75,6 +75,7 @@ fallback_provider: local
 `
 
 func TestSourcePriority(t *testing.T) {
+	t.Parallel()
 	// One field (model) walked through every layer of the overlay chain:
 	// flag > HINT_MODEL > project file > global file.
 	tests := []struct {
@@ -148,6 +149,7 @@ providers:
 }
 
 func TestUnsetFlagDoesNotOverrideFile(t *testing.T) {
+	t.Parallel()
 	// Regression for the pre-WP0.2 bug: --model had default "gpt-4", so the
 	// file value never won. Empty Flags must leave the file value intact.
 	opts := dirs(t)
@@ -168,6 +170,7 @@ providers:
 }
 
 func TestEnvOverlayTouchesOnlySelectedProfile(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), twoProfilesYAML)
 	opts.LookupEnv = lookup(map[string]string{"HINT_API_KEY": "env-key"})
@@ -189,6 +192,7 @@ func TestEnvOverlayTouchesOnlySelectedProfile(t *testing.T) {
 }
 
 func TestProviderSelection(t *testing.T) {
+	t.Parallel()
 	// --provider beats HINT_PROVIDER, and the field overlays land on the
 	// profile selected AFTER that resolution, not on the file's default.
 	opts := dirs(t)
@@ -224,7 +228,39 @@ func TestProviderSelection(t *testing.T) {
 	hasWarning(t, cfg, "fallback_provider")
 }
 
+func TestFallbackNormalization(t *testing.T) {
+	t.Parallel()
+	for _, draft := range []bool{false, true} {
+		for _, fallback := range []string{"", "local", "spare"} {
+			opts := dirs(t)
+			opts.Draft = draft
+			writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - {name: local, kind: ollama, model: m}
+  - {name: spare, kind: ollama, model: m}
+default_provider: local
+fallback_provider: "`+fallback+`"
+`)
+			cfg, err := LoadFrom(opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := fallback
+			if fallback == "local" {
+				want = ""
+				hasWarning(t, cfg, "fallback_provider")
+			} else if len(cfg.Warnings) != 0 {
+				t.Errorf("draft=%v fallback=%q: unexpected warnings %v", draft, fallback, cfg.Warnings)
+			}
+			if cfg.FallbackProvider != want {
+				t.Errorf("draft=%v fallback=%q: got %q, want %q", draft, fallback, cfg.FallbackProvider, want)
+			}
+		}
+	}
+}
+
 func TestMergeByName(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
 providers:
@@ -263,6 +299,7 @@ providers:
 }
 
 func TestEnvExpansionInFileValues(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -289,6 +326,7 @@ providers:
 }
 
 func TestUnsetVarExpandsToEmptyAndFailsValidation(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -297,8 +335,12 @@ providers:
     api_key: ${UNSET_KEY}
 `)
 	_, err := LoadFrom(opts)
-	if err == nil || !strings.Contains(err.Error(), "API key") {
-		t.Errorf("want an API-key validation error for the unset variable, got %v", err)
+	var noKey *NoKeyError
+	if !errors.As(err, &noKey) || noKey.Profile != "p" {
+		t.Fatalf("want a typed API-key validation error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "providers.p.api_key: environment variable UNSET_KEY is not set") {
+		t.Errorf("missing variable diagnostic: %v", err)
 	}
 }
 
@@ -306,6 +348,7 @@ providers:
 // complete still comes back as configured, base_url and model included,
 // while a file that does not parse is an error even for a draft.
 func TestDraftKeepsAProfileWithoutAKey(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
 default_provider: router
@@ -336,6 +379,7 @@ providers:
 }
 
 func TestFlatConfigMigration(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 api_url: https://api.openai.com/v1
@@ -357,6 +401,7 @@ model: gpt-4
 }
 
 func TestFlatKeysIgnoredWhenProvidersPresent(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 api_key: flat-key
@@ -377,6 +422,7 @@ providers:
 }
 
 func TestLegacyPaths(t *testing.T) {
+	t.Parallel()
 	t.Run("legacy global read with warning", func(t *testing.T) {
 		opts := dirs(t)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint.yaml"), `
@@ -446,6 +492,7 @@ providers:
 }
 
 func TestXDGConfigHome(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	xdg := t.TempDir()
 	opts.LookupEnv = lookup(map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -466,6 +513,7 @@ providers:
 }
 
 func TestZeroConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		env         map[string]string
@@ -574,13 +622,14 @@ func TestZeroConfig(t *testing.T) {
 	t.Run("nothing configured is an error", func(t *testing.T) {
 		opts := dirs(t)
 		_, err := LoadFrom(opts)
-		if err == nil || !strings.Contains(err.Error(), "no provider configured") {
+		if !errors.Is(err, ErrNoProvider) {
 			t.Errorf("want a no-provider error, got %v", err)
 		}
 	})
 }
 
 func TestOpenAIKindDefaultsToALocalServerNotOpenAICom(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -603,6 +652,7 @@ providers:
 }
 
 func TestUsabilityValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		yaml    string
@@ -729,14 +779,33 @@ providers:
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("LoadFrom error = %v, want it to contain %q", err, tt.wantErr)
+			var noKey *NoKeyError
+			var noModel *NoModelError
+			var ve *ValidationError
+			switch tt.wantErr {
+			case "API key", "fallback":
+				if !errors.As(err, &noKey) {
+					t.Fatalf("want NoKeyError, got %v", err)
+				}
+				if tt.wantErr == "fallback" && noKey.Role != "fallback" {
+					t.Errorf("key error role = %q, want fallback", noKey.Role)
+				}
+			case "model":
+				if !errors.As(err, &noModel) {
+					t.Errorf("want NoModelError, got %v", err)
+				}
+			default:
+				key := map[string]string{"unknown kind": "providers.bad.kind", "default_provider": "default_provider", "duplicate": "providers.p"}[tt.wantErr]
+				if !errors.As(err, &ve) || ve.Key != key {
+					t.Errorf("want ValidationError.Key=%q, got %v", key, err)
+				}
 			}
 		})
 	}
 }
 
 func TestSingleProfileIsImplicitDefault(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -755,6 +824,7 @@ providers:
 }
 
 func TestHintDebug(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -784,6 +854,7 @@ providers:
 }
 
 func TestMalformedYAMLErrorNamesThePath(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	path := filepath.Join(opts.WorkingDir, ".hint", "config.yaml")
 	writeFile(t, path, "providers: [not: valid: yaml")
@@ -794,6 +865,7 @@ func TestMalformedYAMLErrorNamesThePath(t *testing.T) {
 }
 
 func TestSecrets(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{Providers: []Profile{
 		{Name: "a", APIKey: "key-one"},
 		{Name: "b", APIKey: "key-two"},
@@ -807,6 +879,7 @@ func TestSecrets(t *testing.T) {
 }
 
 func TestLimits(t *testing.T) {
+	t.Parallel()
 	base := `
 providers:
   - name: p
@@ -873,7 +946,7 @@ overview:
 			"HINT_OVERVIEW_ENTRIES":   "50",
 			"HINT_CONTEXT_WINDOW":     "16000",
 		})
-		opts.Flags = Flags{InstructionBudget: "3000", ContextWindow: "32000"}
+		opts.Flags = Flags{InstructionBudget: intPtr(3000), ContextWindow: intPtr(32000)}
 		cfg, err := LoadFrom(opts)
 		if err != nil {
 			t.Fatalf("LoadFrom: %v", err)
@@ -900,7 +973,7 @@ overview:
 			t.Errorf("bad env changed the limits: %+v / %+v", cfg.Instructions, cfg.Overview)
 		}
 
-		for _, flags := range []Flags{{OverviewDepth: "deep"}, {OverviewDepth: "-1"}, {InstructionBudget: "0"}, {ContextWindow: "-1"}} {
+		for _, flags := range []Flags{{OverviewDepth: intPtr(-1)}, {InstructionBudget: intPtr(0)}, {ContextWindow: intPtr(-1)}} {
 			opts.LookupEnv = lookup(nil)
 			opts.Flags = flags
 			if _, err := LoadFrom(opts); err == nil {
@@ -916,13 +989,15 @@ overview:
   max_entries: -3
 `)
 		_, err := LoadFrom(opts)
-		if err == nil || !strings.Contains(err.Error(), "overview.max_entries") {
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Key != "overview.max_entries" {
 			t.Errorf("want an error naming overview.max_entries, got %v", err)
 		}
 	})
 }
 
 func TestGlobalDir(t *testing.T) {
+	t.Parallel()
 	if got := GlobalDir("/home/u", lookup(nil)); got != filepath.Join("/home/u", ".config", "hint") {
 		t.Errorf("GlobalDir = %q", got)
 	}
@@ -935,6 +1010,7 @@ func TestGlobalDir(t *testing.T) {
 }
 
 func TestHeaderTimeout(t *testing.T) {
+	t.Parallel()
 	t.Run("project file overrides the global profile", func(t *testing.T) {
 		opts := dirs(t)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
@@ -1001,6 +1077,7 @@ providers:
 }
 
 func TestCompletionBlockLayersAndGuards(t *testing.T) {
+	t.Parallel()
 	global := `
 providers:
   - name: big
@@ -1049,8 +1126,10 @@ completion:
 			t.Errorf("flag: mode = %v", cfg.Completion.Mode)
 		}
 		opts.Flags.Completion = "sometimes"
-		if _, err := LoadFrom(opts); err == nil || !strings.Contains(err.Error(), "--completion") {
-			t.Errorf("a bad flag value was accepted: %v", err)
+		_, err = LoadFrom(opts)
+		var ve *ValidationError
+		if !errors.As(err, &ve) || ve.Key != "completion.mode" {
+			t.Errorf("bad completion mode error = %v", err)
 		}
 	})
 	t.Run("an unusable completion profile switches the block off with a warning", func(t *testing.T) {
@@ -1078,6 +1157,7 @@ completion:
 }
 
 func TestKeyringReferencesAndKeySources(t *testing.T) {
+	t.Parallel()
 	file := `
 providers:
   - name: stored
@@ -1165,6 +1245,7 @@ default_provider: stored
 }
 
 func TestFilterEnviron(t *testing.T) {
+	t.Parallel()
 	env := []string{"PATH=/bin", "APIBAR_KEY=sk-1", "MY_KEY=sk-2", "COPY=sk-2", "EMPTY=", "PLAIN=hello", "NOEQ"}
 	got := FilterEnviron(env, []string{"APIBAR_KEY", "MY_KEY"}, []string{"sk-2", ""})
 	want := []string{"PATH=/bin", "EMPTY=", "PLAIN=hello", "NOEQ"}
@@ -1174,6 +1255,7 @@ func TestFilterEnviron(t *testing.T) {
 }
 
 func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), "providers:\n  - name: p\n    kind: openai\n    api_key: k-1234567890\n    model: m\nsecrets:\n  store: file\n")
 	cfg, err := LoadFrom(opts)
@@ -1203,11 +1285,81 @@ func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
 type failingKeyring struct{}
 
 func (failingKeyring) Get(string) (string, error) {
-	return "", errors.New("config: secret store: no D-Bus session")
+	return "", errors.New("secret store: no D-Bus session")
 }
 func (failingKeyring) Set(string, string) error {
-	return errors.New("config: secret store: no D-Bus session")
+	return errors.New("secret store: no D-Bus session")
 }
 func (failingKeyring) Delete(string) error {
-	return errors.New("config: secret store: no D-Bus session")
+	return errors.New("secret store: no D-Bus session")
+}
+
+func TestUnsetEnvReferenceWarningInDraft(t *testing.T) {
+	t.Parallel()
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: p
+    kind: openai
+    api_key: ${MISSING_API_KEY}
+    model: ${MISSING_MODEL}
+`)
+	opts.Draft = true
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasWarning(t, cfg, "MISSING_API_KEY")
+	hasWarning(t, cfg, "MISSING_MODEL")
+}
+
+func TestTypedProfileErrors(t *testing.T) {
+	t.Parallel()
+	cfg := &Config{}
+	_, err := cfg.Default()
+	if !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("Default error = %v", err)
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Key != "default_provider" {
+		t.Fatalf("Default validation = %v", err)
+	}
+	_, err = cfg.Profile("missing")
+	if !errors.Is(err, ErrUnknownProfile) {
+		t.Fatalf("Profile error = %v", err)
+	}
+	cfg.DefaultProvider = "missing"
+	_, err = cfg.Default()
+	if !errors.Is(err, ErrUnknownProfile) || !errors.As(err, &ve) || ve.Key != "default_provider" {
+		t.Fatalf("Default validation = %v", err)
+	}
+}
+
+func intPtr(v int) *int    { return &v }
+func boolPtr(v bool) *bool { return &v }
+
+func TestExplicitTypedFlagOverrides(t *testing.T) {
+	t.Parallel()
+	opts := dirs(t)
+	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
+providers:
+  - name: local
+    kind: ollama
+    model: qwen
+overview:
+  depth: 3
+instructions:
+  summarize: true
+`)
+	opts.Flags = Flags{OverviewDepth: intPtr(0), SummarizeInstructions: boolPtr(false)}
+	cfg, err := LoadFrom(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Overview.Depth != 0 {
+		t.Errorf("explicit depth 0 became %d", cfg.Overview.Depth)
+	}
+	if cfg.Instructions.Summarize {
+		t.Error("explicit false did not override file true")
+	}
 }

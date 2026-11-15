@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -44,7 +43,7 @@ func (e *rpcEngine) refresh() error {
 	}
 	e.cfg = cfg
 	e.providers = map[rpc.ProfileRef]agentapi.ChatProvider{}
-	e.setup = newSetupInfo(cfg, e.setup.cwd, e.setup.flags)
+	e.setup = newSetupInfoWithEnvironment(cfg, e.setup.flags, e.setup.env)
 	return nil
 }
 
@@ -63,7 +62,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	}
 	own, err := e.cfg.Profile(ref.Profile)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "config: "))
+		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, err.Error())
 	}
 	// The cache is keyed by the profile and the model that differs from
 	// its own: a switch to the default profile, with or without its model
@@ -74,7 +73,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	if chat := e.providers[ref]; chat != nil {
 		p, err := e.cfg.Usable(ref.Profile, "selected")
 		if err != nil {
-			return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "config: "))
+			return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
 		}
 		if ref.Model != "" {
 			p.Model = ref.Model
@@ -83,7 +82,7 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	}
 	chat, p, err := provider.ForProfile(e.cfg, ref.Profile, ref.Model, e.notices, e.debugLog)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, strings.TrimPrefix(err.Error(), "config: "))
+		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
 	}
 	chat = e.observeInference(chat)
 	e.providers[ref] = chat
@@ -109,7 +108,7 @@ func (e *rpcEngine) Profiles(context.Context) ([]rpc.ProfileInfo, error) {
 		}
 		if _, err := e.cfg.Usable(p.Name, "selected"); err != nil {
 			info.Usable = false
-			info.Problem = strings.TrimPrefix(err.Error(), "config: ")
+			info.Problem = err.Error()
 		}
 		out = append(out, info)
 	}
@@ -168,7 +167,7 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 	}
 	if profile.Name != "" {
 		if err := live.switchTo(rpc.ProfileRef{Profile: profile.Name, Model: profile.Model}, false); err != nil {
-			live.warnings = append(live.warnings, fmt.Sprintf("the source's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
+			live.warnings = append(live.warnings, fmt.Sprintf("the source's profile is not usable (%s); answering with the default profile instead", err.Error()))
 		}
 	}
 	return live, nil
@@ -178,19 +177,13 @@ func (e *rpcEngine) Fork(_ context.Context, opts rpc.ForkOptions) (rpc.Session, 
 // from the live session when it is open here, else from its file. An id
 // may be a unique prefix, as for session.attach.
 func (e *rpcEngine) source(id string) ([]agentapi.Message, session.ProfileRef, error) {
-	e.mu.Lock()
-	live := e.live[id]
-	e.mu.Unlock()
-	if live != nil {
+	if live := e.liveSession(id); live != nil {
 		ref := live.Asked()
 		return live.rec.Messages(), session.ProfileRef{Name: ref.Profile, Model: ref.Model}, nil
 	}
-	sess, err := e.store.Find(e.cwd, id)
+	sess, err := e.store.Peek(e.cwd, id)
 	if err != nil {
-		if errors.Is(err, session.ErrNoSessions) || errors.Is(err, session.ErrUnknownSession) {
-			return nil, session.ProfileRef{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "session: "))
-		}
-		return nil, session.ProfileRef{}, err
+		return nil, session.ProfileRef{}, sessionLookupError(err, id)
 	}
 	defer func() { _ = sess.Close() }()
 	return sess.Messages(), sess.Profile(), nil

@@ -12,6 +12,7 @@ import (
 )
 
 func TestConsentStore(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "mcp-consent.json")
 	store := NewConsentStore(path)
 	root := "/tmp/project"
@@ -70,6 +71,7 @@ func TestConsentStore(t *testing.T) {
 }
 
 func TestConsentStoreUnreadable(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "mcp-consent.json")
 	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
@@ -93,6 +95,7 @@ func TestConsentStoreUnreadable(t *testing.T) {
 }
 
 func TestManagerProjectConsent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	path := filepath.Join(t.TempDir(), "mcp-consent.json")
@@ -156,6 +159,7 @@ func TestManagerProjectConsent(t *testing.T) {
 }
 
 func TestConsentStoreResources(t *testing.T) {
+	t.Parallel()
 	store := NewConsentStore(filepath.Join(t.TempDir(), "mcp-consent.json"))
 	root := t.TempDir()
 	cfg := ServerConfig{Name: "proj", Transport: TransportStdio, Command: "unused", Permission: agentapi.ClassRead, Project: true, Resources: []string{"test://rules"}}

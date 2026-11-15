@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ type rpcEngine struct {
 	mcpWarned int
 	notices   io.Writer
 	trace     *debuglog.Log
-	debugLog  func(string)
+	debugLog  *slog.Logger
 	// setup describes the configuration the engine was built from, for a
 	// shell that has to say where a rejected key lives.
 	setup *setupInfo
@@ -108,6 +109,10 @@ type rpcEngine struct {
 	// listModels stands in for provider.Models in tests.
 	listModels func(context.Context, config.Profile) ([]provider.Model, error)
 
+	// attachMu serializes looking a session up and opening it, so two
+	// connections attaching one session do not open its file twice: the
+	// second open would collide with this process's own lock.
+	attachMu    sync.Mutex
 	mu          sync.Mutex
 	live        map[string]*rpcSession
 	workspace   *workspace.Registry
@@ -124,30 +129,30 @@ func (e *rpcEngine) tracef(format string, args ...any) {
 	}
 }
 
-// newRPCEngine assembles the engine from the process: configuration,
+// newRPCEngine assembles the engine from the injected environment: configuration,
 // home and working directory, the debug log. cleanup releases the log.
 func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEngine, func(), error) {
+	if opts.env.now == nil {
+		opts.env.now = time.Now
+	}
 	if opts.indexMaxBytes != 0 && opts.indexMaxBytes < 512<<10 {
 		return nil, nil, errors.New("--index-max-bytes must be at least 524288 bytes")
 	}
-	cfg, err := config.Load(opts.flags)
+	configOpts, err := opts.env.configOptions(opts.flags, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg, err := config.LoadFrom(configOpts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading configuration: %w", err)
 	}
 	for _, w := range cfg.Warnings {
 		fmt.Fprintf(notices, "warning: %s\n", w)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "" // sessions and logs then land under relative defaults; better than refusing to run
-	}
+	home, cwd := opts.env.home, opts.env.cwd
 	var mapPath string
-	if cache, cacheErr := os.UserCacheDir(); cacheErr == nil {
+	if cache := opts.env.cacheDir(); cache != "" {
 		mapPath = filepath.Join(cache, "hint", "index", "code-v2.sqlite")
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("working directory: %w", err)
 	}
 
 	// The trace is a debugging aid, so failing to open it is a warning,
@@ -156,32 +161,29 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 	var trace *debuglog.Log
 	cleanup := func() {}
 	if cfg.Debug || opts.debug {
-		trace, err = debuglog.Open(debuglog.DefaultDir(home, os.LookupEnv), time.Now(), cfg.Secrets())
+		trace, err = debuglog.Open(debuglog.DefaultDir(home, opts.env.lookup), opts.env.now(), cfg.Secrets())
 		if err != nil {
 			fmt.Fprintf(notices, "hint: warning: no debug log: %v\n", err)
 		} else {
 			cleanup = func() { _ = trace.Close() }
 			fmt.Fprintf(notices, "hint: debug log: %s\n", trace.Path())
-			trace.Printf("hint %s", strings.Join(os.Args[1:], " "))
+			trace.Printf("hint %s", strings.Join(opts.env.args[min(1, len(opts.env.args)):], " "))
 			trace.Printf("cwd %s", cwd)
 		}
 	}
-	var debugLog func(string)
-	if trace != nil {
-		debugLog = func(line string) { trace.Printf("%s", line) }
-	}
+	debugLog := trace.Slog()
 	chat, err := provider.Chat(cfg, notices, debugLog)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	global := ""
-	if dir := config.GlobalDir(home, os.LookupEnv); dir != "" {
+	if dir := config.GlobalDir(home, opts.env.lookup); dir != "" {
 		global = filepath.Join(dir, project.InstructionNames[0])
 	}
-	store := session.NewStore(session.DefaultDir(home, os.LookupEnv))
+	store := session.NewStore(session.DefaultDir(home, opts.env.lookup), session.WithClock(opts.env.now))
 	warnFileKeys(cfg, notices)
-	consent := mcpConsent(home)
+	consent := mcpConsent(home, opts.env.lookup)
 	eng, err := newEngine(ctx, assembly{
 		mapPath: mapPath,
 		chat:    chat,
@@ -192,8 +194,8 @@ func newRPCEngine(ctx context.Context, opts options, notices io.Writer) (*rpcEng
 		global:  global,
 		trace:   trace,
 		notices: notices,
-		reload:  func() (*config.Config, error) { return config.Load(opts.flags) },
-		denied:  deniedPaths(home, cwd, os.LookupEnv, store.Dir()),
+		reload:  func() (*config.Config, error) { return config.LoadFrom(configOpts) },
+		denied:  deniedPaths(home, cwd, opts.env.lookup, store.Dir()),
 		consent: consent,
 	})
 	if err != nil {
@@ -219,6 +221,10 @@ func deniedPaths(home, cwd string, lookupEnv func(string) (string, bool), sessio
 // project context, the tools, the limits. Warnings that belong to the
 // run (a cut HINT.md, git refusing to answer) are printed here once.
 func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error) {
+	as.opts.env.cwd = as.cwd
+	if as.opts.env.now == nil {
+		as.opts.env.now = time.Now
+	}
 	root, err := tool.NewRoot(as.cwd)
 	if err != nil {
 		return nil, fmt.Errorf("working directory: %w", err)
@@ -259,13 +265,12 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 	if p, err := as.cfg.Default(); err == nil {
 		limits = limitsFor(p)
 	}
-	var debugLog func(string)
+	debugLog := as.trace.Slog()
 	if as.trace != nil {
 		for _, p := range as.cfg.Providers {
 			as.trace.Printf("profile %s", p)
 		}
 		as.trace.Printf("default %s fallback %q mode %s window %d", as.cfg.DefaultProvider, as.cfg.FallbackProvider, as.opts.mode, limits.MaxContextTokens)
-		debugLog = func(line string) { as.trace.Printf("%s", line) }
 	}
 	e := &rpcEngine{
 		primaryRoot: root,
@@ -278,7 +283,7 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 		notices:     as.notices,
 		trace:       as.trace,
 		debugLog:    debugLog,
-		setup:       newSetupInfo(as.cfg, as.cwd, as.opts.flags),
+		setup:       newSetupInfoWithEnvironment(as.cfg, as.opts.flags, as.opts.env),
 		cfg:         as.cfg,
 		reload:      as.reload,
 		providers:   map[rpc.ProfileRef]agentapi.ChatProvider{{Profile: as.cfg.DefaultProvider}: as.chat},
@@ -461,17 +466,50 @@ func (e *rpcEngine) Open(_ context.Context, opts rpc.OpenOptions) (rpc.Session, 
 }
 
 func (e *rpcEngine) Attach(_ context.Context, id string) (rpc.Session, error) {
-	e.mu.Lock()
-	if live := e.live[id]; live != nil {
-		e.mu.Unlock()
+	if live := e.liveSession(id); live != nil {
 		return live, nil
 	}
-	e.mu.Unlock()
-	sess, err := e.store.Find(e.cwd, id)
+	e.attachMu.Lock()
+	defer e.attachMu.Unlock()
+	if live := e.liveSession(id); live != nil {
+		return live, nil
+	}
+	// Resolve picks the file without opening it. Only the live session
+	// with that exact full id answers for it: a prefix must never reach a
+	// different conversation because an ephemeral session happens to
+	// share the first characters.
+	info, err := e.store.Resolve(e.cwd, id)
 	if err != nil {
-		return nil, err
+		return nil, sessionLookupError(err, id)
+	}
+	if live := e.liveSession(info.ID); live != nil {
+		return live, nil
+	}
+	sess, err := e.store.Open(info.Path)
+	if err != nil {
+		return nil, sessionLookupError(err, id)
 	}
 	return e.adopt(sess, sess.ID()), nil
+}
+
+// liveSession returns the live session with exactly id.
+func (e *rpcEngine) liveSession(id string) *rpcSession {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.live[id]
+}
+
+// sessionLookupError maps the store's errors onto the engine's: a missing
+// session is not found, and one another hint process records is busy.
+func sessionLookupError(err error, id string) error {
+	switch {
+	case errors.Is(err, session.ErrLocked):
+		return fmt.Errorf("%w: session %s is open in another hint process", rpc.ErrBusy, id)
+	case errors.Is(err, session.ErrNoSessions), errors.Is(err, session.ErrUnknownSession):
+		return fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "session: "))
+	default:
+		return err
+	}
 }
 
 // adopt registers sess under id, or returns the session already
@@ -495,7 +533,7 @@ func (e *rpcEngine) adopt(sess *session.Session, id string) *rpcSession {
 	if sess != nil {
 		if rec := sess.Profile(); rec.Name != "" {
 			if err := live.switchTo(rpc.ProfileRef{Profile: rec.Name, Model: rec.Model}, false); err != nil {
-				live.warnings = append(live.warnings, fmt.Sprintf("the session's profile is not usable (%s); answering with the default profile instead", strings.TrimPrefix(err.Error(), "config: ")))
+				live.warnings = append(live.warnings, fmt.Sprintf("the session's profile is not usable (%s); answering with the default profile instead", err.Error()))
 			}
 		}
 	}
@@ -525,7 +563,7 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	live := &rpcSession{
 		workspace: e.workspace.NewSession(),
 		id:        id,
-		created:   time.Now(),
+		created:   e.setup.env.now(),
 		eng:       e,
 		file:      sess,
 		rec:       session.NewRecorder(sess, len(initial)),
@@ -788,12 +826,18 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 	}
 	if as.cfg.Instructions.Summarize {
 		var s project.Summarizer = project.ChatSummarizer{Provider: as.chat}
-		if dir, err := project.DefaultSummaryCacheDir(); err == nil {
-			s = project.CachedSummarizer{Dir: dir, Inner: s}
+		if dir := as.opts.env.summaryCacheDir(); dir != "" {
+			s = project.CachedSummarizer{Dir: dir, Inner: s, ProviderKey: summaryProviderKey(as.cfg)}
 		}
 		opts = append(opts, project.WithSummarizer(s))
 	}
 	return opts
+}
+
+// summaryProviderKey identifies the primary profile that can populate the cache.
+func summaryProviderKey(cfg *config.Config) string {
+	p, _ := cfg.Default()
+	return fmt.Sprintf("%q %q %q %q", p.Name, p.Kind, p.BaseURL, p.Model)
 }
 
 // addMCPResources joins configured resources to the same instruction layout

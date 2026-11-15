@@ -16,6 +16,7 @@ import (
 // the messages it observed, and a compaction replaces the lot with the
 // checkpoint minus the preamble — in memory as well as on disk.
 func TestRecorderConversation(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	sess, err := store.Create(t.TempDir())
 	if err != nil {
@@ -76,6 +77,7 @@ func TestRecorderConversation(t *testing.T) {
 // TestRecorderAppendReportsWriteFailure: a prompt that cannot be
 // journaled is an error the caller sees, and the memory keeps it anyway.
 func TestRecorderAppendReportsWriteFailure(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	sess, err := store.Create(t.TempDir())
 	if err != nil {
@@ -92,6 +94,7 @@ func TestRecorderAppendReportsWriteFailure(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	cwd := t.TempDir()
 
@@ -135,6 +138,7 @@ func TestFind(t *testing.T) {
 }
 
 func TestPrint(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	cwd := t.TempDir()
 	s, err := store.Create(cwd)

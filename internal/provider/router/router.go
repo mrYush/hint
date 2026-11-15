@@ -105,16 +105,22 @@ func (r *Router) Name() string { return r.primary.Name() }
 // a failure to start — arrives on the channel as the terminal ChatError after
 // the retry and failover policy is exhausted.
 func (r *Router) Stream(ctx context.Context, req agentapi.ChatRequest) (<-chan agentapi.ChatEvent, error) {
+	return r.StreamWithFallback(ctx, req, nil)
+}
+
+// StreamWithFallback streams with the normal routing policy and calls onFallback,
+// if supplied, from the stream goroutine before attempting the fallback profile.
+func (r *Router) StreamWithFallback(ctx context.Context, req agentapi.ChatRequest, onFallback func()) (<-chan agentapi.ChatEvent, error) {
 	out := make(chan agentapi.ChatEvent)
 	go func() {
 		defer close(out)
-		r.run(ctx, req, out)
+		r.run(ctx, req, out, onFallback)
 	}()
 	return out, nil
 }
 
 // run drives one turn: primary with retries, then fallback with retries.
-func (r *Router) run(ctx context.Context, req agentapi.ChatRequest, out chan<- agentapi.ChatEvent) {
+func (r *Router) run(ctx context.Context, req agentapi.ChatRequest, out chan<- agentapi.ChatEvent, onFallback func()) {
 	err := r.attemptWithRetries(ctx, r.primary, req, out)
 	if err == nil {
 		return
@@ -124,6 +130,9 @@ func (r *Router) run(ctx context.Context, req agentapi.ChatRequest, out chan<- a
 		return
 	}
 
+	if onFallback != nil {
+		onFallback()
+	}
 	_, _ = fmt.Fprintf(r.noticeWriter(), "hint: provider %q failed (%s), falling back to %q\n",
 		r.primary.Name(), err.Kind, r.fallback.Name())
 

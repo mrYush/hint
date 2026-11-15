@@ -102,7 +102,7 @@ func (m model) switchProfile(ref rpc.ProfileRef) (model, tea.Cmd) {
 // header and a line in the transcript, or why it did not happen.
 func (m model) profileSwitched(msg profileMsg) model {
 	if msg.err != nil {
-		m.status = strings.TrimPrefix(msg.err.Error(), "config: ")
+		m.status = msg.err.Error()
 		return m
 	}
 	m.profile = msg.ref

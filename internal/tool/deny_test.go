@@ -14,6 +14,7 @@ import (
 )
 
 func TestRoot_DenyRefusesHintsOwnFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, d := range []string{".config/hint", ".local/share/hint/sessions/abc", ".hint", "src"} {
 		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
@@ -91,6 +92,7 @@ func (echoTool) Run(_ context.Context, callID string, args json.RawMessage) (age
 }
 
 func TestRedactingScrubsEveryResult(t *testing.T) {
+	t.Parallel()
 	secrets := []string{"sk-live-1234567890"}
 	wrapped := tool.Redacting(echoTool{}, func() []string { return secrets })
 	if wrapped.Name() != "echo" || wrapped.Class() != agentapi.ClassRead {
@@ -122,6 +124,7 @@ func TestRedactingScrubsEveryResult(t *testing.T) {
 // os.Root — the kernel resolves the path under the directory, so the
 // window between the check and the open closes nothing.
 func TestRoot_OpenHoldsAfterASymlinkSwap(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation needs privileges on Windows")
 	}

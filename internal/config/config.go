@@ -253,15 +253,19 @@ func (c *Config) Profile(name string) (Profile, error) {
 			return p, nil
 		}
 	}
-	return Profile{}, fmt.Errorf("config: unknown provider profile %q", name)
+	return Profile{}, fmt.Errorf("%w: %q", ErrUnknownProfile, name)
 }
 
 // Default returns the profile selected as default_provider.
 func (c *Config) Default() (Profile, error) {
 	if c.DefaultProvider == "" {
-		return Profile{}, fmt.Errorf("config: no default provider configured")
+		return Profile{}, &ValidationError{Key: "default_provider", Err: ErrNoProvider}
 	}
-	return c.Profile(c.DefaultProvider)
+	p, err := c.Profile(c.DefaultProvider)
+	if err != nil {
+		return Profile{}, &ValidationError{Key: "default_provider", Err: err}
+	}
+	return p, nil
 }
 
 // Usable returns the profile named name after checking that a run can
@@ -362,10 +366,26 @@ func FilterEnviron(environ, names, values []string) []string {
 	return out
 }
 
+// ErrUnknownProfile identifies a reference to a provider that is not configured.
+var ErrUnknownProfile = errors.New("unknown provider profile")
+
+// ValidationError identifies the configuration field responsible for a failure.
+type ValidationError struct {
+	Key string
+	Err error
+}
+
+func (e *ValidationError) Error() string { return fmt.Sprintf("%s: %v", e.Key, e.Err) }
+func (e *ValidationError) Unwrap() error { return e.Err }
+
+func validationErrorf(key, format string, args ...any) error {
+	return &ValidationError{Key: key, Err: fmt.Errorf(format, args...)}
+}
+
 // ErrNoProvider is what loading returns when nothing says which provider
 // to use: no file, no key in the environment, no flag. A shell that can
 // ask questions answers it with the interactive setup.
-var ErrNoProvider = errors.New("config: no provider configured: run `hint setup`, set APIBAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
+var ErrNoProvider = errors.New("no provider configured: run `hint setup`, set APIBAR_KEY (or OPENAI_API_KEY), pass --api-key, or create ~/.config/hint/config.yaml (see config.example.yaml)")
 
 // NoKeyError is a profile the run needs that has no API key — none in
 // the file, a ${VAR} that expands to nothing, or a keyring:<account>
@@ -389,17 +409,17 @@ type NoModelError struct {
 }
 
 func (e *NoModelError) Error() string {
-	return fmt.Sprintf("config: %s profile %q needs a model: set model (hint models lists what the server serves), HINT_MODEL, or --model", e.Role, e.Profile)
+	return fmt.Sprintf("%s profile %q needs a model: set model (hint models lists what the server serves), HINT_MODEL, or --model", e.Role, e.Profile)
 }
 
 func (e *NoKeyError) Error() string {
 	switch {
 	case e.Cause != nil:
-		return fmt.Sprintf("config: %s profile %q refers to the secret store (%s) but no key came back: %v; run `hint setup` to store one", e.Role, e.Profile, e.Ref, e.Cause)
+		return fmt.Sprintf("%s profile %q refers to the secret store (%s) but no key came back: %v; run `hint setup` to store one", e.Role, e.Profile, e.Ref, e.Cause)
 	case e.Ref != "":
-		return fmt.Sprintf("config: %s profile %q needs an API key: %s expands to nothing; export it, or run `hint setup`", e.Role, e.Profile, e.Ref)
+		return fmt.Sprintf("%s profile %q needs an API key: %s expands to nothing; export it, or run `hint setup`", e.Role, e.Profile, e.Ref)
 	}
-	return fmt.Sprintf("config: %s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${VLLM_API_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
+	return fmt.Sprintf("%s profile %q needs an API key: run `hint setup`, or set api_key (e.g. ${VLLM_API_KEY}), HINT_API_KEY, or --api-key", e.Role, e.Profile)
 }
 
 // Unwrap exposes the secret store's error.

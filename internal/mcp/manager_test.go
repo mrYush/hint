@@ -29,6 +29,7 @@ func echoTool() fakeTool {
 }
 
 func TestManagerListsAndCallsTools(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	fail := fakeTool{
 		name:        "fail",
@@ -75,6 +76,7 @@ func TestManagerListsAndCallsTools(t *testing.T) {
 }
 
 func TestManagerAllowAndDeny(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	tools := []fakeTool{echoTool(), {name: "other", description: "Other.", schema: objectSchema(), handler: func(context.Context, json.RawMessage) (*sdk.CallToolResult, error) { return textResult("other"), nil }}}
 
@@ -101,6 +103,7 @@ func TestManagerAllowAndDeny(t *testing.T) {
 }
 
 func TestManagerBudgetHidesWholeServers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	long := strings.Repeat("d", 300)
 	tool := fakeTool{
@@ -171,6 +174,7 @@ func TestManagerBudgetHidesWholeServers(t *testing.T) {
 }
 
 func TestManagerSchemaFidelity(t *testing.T) {
+	t.Parallel()
 	schemaWith := func(number any) map[string]any {
 		return map[string]any{
 			"type": "object",
@@ -216,6 +220,7 @@ func TestManagerSchemaFidelity(t *testing.T) {
 }
 
 func TestManagerDescriptionCap(t *testing.T) {
+	t.Parallel()
 	m, _ := testManager(t, []fakeTool{{
 		name: "long", description: strings.Repeat("x", 100), schema: objectSchema(),
 		handler: func(context.Context, json.RawMessage) (*sdk.CallToolResult, error) { return textResult("ok"), nil },
@@ -237,6 +242,7 @@ func TestManagerDescriptionCap(t *testing.T) {
 }
 
 func TestManagerRestartRetriesReadsOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, tt := range []struct {
 		name    string
@@ -301,6 +307,7 @@ func (c callWriteFailureConn) Write(ctx context.Context, msg jsonrpc.Message) er
 }
 
 func TestManagerClosedPipeRetriesReadsOnly(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name      string
 		class     agentapi.ActionClass
@@ -345,6 +352,7 @@ func TestManagerClosedPipeRetriesReadsOnly(t *testing.T) {
 }
 
 func TestIsConnectionClosedPipe(t *testing.T) {
+	t.Parallel()
 	for _, err := range []error{io.ErrClosedPipe, fmt.Errorf("calling tools/call: %w", io.ErrClosedPipe)} {
 		if !isConnectionClosed(err) {
 			t.Errorf("closed pipe not recognized: %v", err)
@@ -356,6 +364,7 @@ func TestIsConnectionClosedPipe(t *testing.T) {
 }
 
 func TestManagerConnectBackoff(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dials := 0
 	now := time.Unix(0, 0)
@@ -386,6 +395,7 @@ func TestManagerConnectBackoff(t *testing.T) {
 }
 
 func TestManagerNoServers(t *testing.T) {
+	t.Parallel()
 	m, err := NewManager(nil, Options{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
@@ -418,6 +428,7 @@ func hasWarning(m *Manager, substr string) bool {
 }
 
 func TestManagerWarnsOnSchemaReferences(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{"value": map[string]any{"$ref": "#/$defs/value"}},
@@ -440,6 +451,7 @@ func TestManagerWarnsOnSchemaReferences(t *testing.T) {
 }
 
 func TestManagerConnectTimeout(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	m, err := NewManager([]ServerConfig{{Name: "slow", Transport: TransportStdio, Command: "unused"}}, Options{
 		ConnectTimeout: 20 * time.Millisecond,
@@ -469,6 +481,7 @@ func TestManagerConnectTimeout(t *testing.T) {
 }
 
 func TestManagerLegacyServer(t *testing.T) {
+	t.Parallel()
 	// A server that speaks only the 2024-11-05 revision exercises the
 	// SDK's initialize fallback; hint must not implement that handshake
 	// itself, but it must still list and call the server's tools.

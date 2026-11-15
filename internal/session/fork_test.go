@@ -24,6 +24,7 @@ func twoTurns() []agentapi.Message {
 }
 
 func TestTurnsAndUpToTurn(t *testing.T) {
+	t.Parallel()
 	msgs := twoTurns()
 	if got := session.Turns(msgs); got != 2 {
 		t.Fatalf("Turns = %d, want 2", got)
@@ -54,6 +55,7 @@ func TestTurnsAndUpToTurn(t *testing.T) {
 }
 
 func TestForkWritesAStandaloneSession(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "src1", "fork")
 	src, err := store.Create("/p")
 	if err != nil {
@@ -126,6 +128,7 @@ func TestForkWritesAStandaloneSession(t *testing.T) {
 }
 
 func TestProfileRecordIsOptionalAndLast(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "s1")
 	sess, err := store.Create("/p")
 	if err != nil {

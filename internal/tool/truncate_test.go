@@ -24,6 +24,7 @@ func itoa(i int) string {
 }
 
 func TestTruncate_WithinLimitUnchanged(t *testing.T) {
+	t.Parallel()
 	s := lines(10)
 	if got := tool.Truncate(s, len(s)); got != s {
 		t.Fatalf("changed a string at its limit")
@@ -34,6 +35,7 @@ func TestTruncate_WithinLimitUnchanged(t *testing.T) {
 }
 
 func TestTruncate_KeepsHeadAndTailWithMarker(t *testing.T) {
+	t.Parallel()
 	s := lines(200) // 30 bytes per line, 6000 bytes
 	got := tool.Truncate(s, 1000)
 
@@ -62,6 +64,7 @@ func TestTruncate_KeepsHeadAndTailWithMarker(t *testing.T) {
 }
 
 func TestTruncate_NeverSplitsUTF8(t *testing.T) {
+	t.Parallel()
 	s := strings.Repeat("→", 2000) // 3-byte runes, no newlines
 	got := tool.Truncate(s, 400)
 	if !utf8.ValidString(got) {
@@ -73,6 +76,7 @@ func TestTruncate_NeverSplitsUTF8(t *testing.T) {
 }
 
 func TestBoundedBuffer_MatchesTruncate(t *testing.T) {
+	t.Parallel()
 	s := lines(200)
 	want := tool.Truncate(s, 1000)
 
@@ -94,6 +98,7 @@ func TestBoundedBuffer_MatchesTruncate(t *testing.T) {
 }
 
 func TestBoundedBuffer_SmallOutputIntact(t *testing.T) {
+	t.Parallel()
 	b := tool.NewBoundedBuffer(1000)
 	_, _ = b.Write([]byte("hello "))
 	_, _ = b.Write([]byte("world\n"))

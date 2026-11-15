@@ -11,6 +11,7 @@ import (
 )
 
 func TestInstructionsReadsMemorySource(t *testing.T) {
+	t.Parallel()
 	source := project.InstructionSource{Path: "mcp://fake/?uri=test%3A%2F%2Frules", Content: rulesDoc}
 	tl := builtin.NewInstructions([]string{source.Path}, source)
 	if got := ok(t, run(t, tl, `{}`)); !strings.Contains(got, source.Path) || !strings.Contains(got, "Testing") {
@@ -29,6 +30,7 @@ func TestInstructionsReadsMemorySource(t *testing.T) {
 }
 
 func TestInstructionsReadsDiskAndMemoryTogether(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "HINT.md")
 	if err := os.WriteFile(path, []byte("Disk rules.\n"), 0o644); err != nil {
 		t.Fatal(err)

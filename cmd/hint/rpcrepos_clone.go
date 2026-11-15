@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mrYush/hint/internal/processtree"
 )
 
 // cloneRepo never invokes a shell, initializes submodules, or stores a URL with
@@ -42,7 +44,7 @@ func cloneRepo(ctx context.Context, source, destination string, environ []string
 	cmd.WaitDelay = time.Second
 	// Output can echo URLs and credential-helper diagnostics, so it is neither
 	// persisted nor returned. The process exit/cancellation is enough to retry.
-	if err := runCloneProcess(cmd); err != nil {
+	if err := processtree.Run(cmd); err != nil {
 		if parent.Err() != nil {
 			return fmt.Errorf("clone stopped; incomplete destination retained: %w", parent.Err())
 		}

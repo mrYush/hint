@@ -81,6 +81,7 @@ func managerWrite(t *testing.T, path, text string) {
 }
 
 func TestManagerGlobalAdmissionBeforeSourceOpen(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	lease, err := space.Resolve("", "not-present.go")
 	if err != nil {
@@ -99,6 +100,7 @@ func TestManagerGlobalAdmissionBeforeSourceOpen(t *testing.T) {
 }
 
 func TestManagerRechecksSameStatMutationAfterParse(t *testing.T) {
+	t.Parallel()
 	var sourcePath string
 	runner := &managerTestExtractor{run: func(ctx context.Context, s extract.Source, l extract.Limits) (extract.Result, error) {
 		info, err := os.Stat(sourcePath)
@@ -133,6 +135,7 @@ func TestManagerRechecksSameStatMutationAfterParse(t *testing.T) {
 }
 
 func TestManagerDeclarationPublicationRevocation(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{})
 	resume := make(chan struct{})
 	runner := &managerTestExtractor{run: func(ctx context.Context, s extract.Source, l extract.Limits) (extract.Result, error) {
@@ -168,6 +171,7 @@ func TestManagerDeclarationPublicationRevocation(t *testing.T) {
 }
 
 func TestManagerWideDiscoveryPrioritizesFilesAndSkipsSymlinks(t *testing.T) {
+	t.Parallel()
 	var parsed atomic.Int32
 	runner := &managerTestExtractor{run: func(ctx context.Context, s extract.Source, l extract.Limits) (extract.Result, error) {
 		parsed.Add(1)
@@ -214,6 +218,7 @@ func TestManagerWideDiscoveryPrioritizesFilesAndSkipsSymlinks(t *testing.T) {
 }
 
 func TestManagerGitIgnoreNULAndTrackedSemantics(t *testing.T) {
+	t.Parallel()
 	git, err := exec.LookPath("git")
 	if err != nil {
 		t.Skip("git unavailable")
@@ -287,6 +292,7 @@ func TestManagerGitIgnoreNULAndTrackedSemantics(t *testing.T) {
 }
 
 func TestManagerPrimarySubdirectoryUsesEnclosingGitPolicy(t *testing.T) {
+	t.Parallel()
 	git, err := exec.LookPath("git")
 	if err != nil {
 		t.Skip("git unavailable")
@@ -346,6 +352,7 @@ func TestManagerPrimarySubdirectoryUsesEnclosingGitPolicy(t *testing.T) {
 }
 
 func TestManagerTinyRootProgressesBesideWideRoot(t *testing.T) {
+	t.Parallel()
 	m, space, path := managerFixture(t, &managerTestExtractor{run: extract.Extract})
 	if err := m.acquire(context.Background()); err != nil {
 		t.Fatal(err)
@@ -403,6 +410,7 @@ func TestManagerTinyRootProgressesBesideWideRoot(t *testing.T) {
 }
 
 func TestManagerWideDirectoriesAdvanceWithoutBlockedQueueChurn(t *testing.T) {
+	t.Parallel()
 	m, space, path := managerFixture(t, nil)
 	if err := m.acquire(context.Background()); err != nil {
 		t.Fatal(err)
@@ -443,7 +451,9 @@ func TestManagerWideDirectoriesAdvanceWithoutBlockedQueueChurn(t *testing.T) {
 }
 
 func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *testing.T) {
+	t.Parallel()
 	m, space, path := managerFixture(t, &managerTestExtractor{run: extract.Extract})
+	stopManagerTestScheduler(t, m)
 	if err := m.acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -458,9 +468,39 @@ func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *te
 	m.mu.Lock()
 	work := *m.roots[roots[0].ID]
 	m.mu.Unlock()
-	// Explicit queue order makes this independent of filesystem enumeration
-	// order: the blocked child precedes a ready file and the retained parent.
-	for _, path := range []string{"child-000", "ready.go"} {
+	// Choose a child from the parent's first page. Rediscovering a prequeued
+	// child on a later page advances its revision and prevents that visit's
+	// rotation, so a fixed child name cannot guarantee this three-step fixture.
+	lease, err := space.Resolve(work.info.ID, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := lease.OpenDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := &directoryStream{lease: lease, file: directory}
+	m.streams[work.info.ID+"\x00."] = stream
+	stream.item, err = m.store.QueueLookup(context.Background(), work.info.ID, []byte("."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream.pending, stream.readErr = directory.ReadDir(32)
+	if stream.readErr != nil {
+		t.Fatal(stream.readErr)
+	}
+	blockedChild := ""
+	for _, entry := range stream.pending {
+		if entry.IsDir() {
+			blockedChild = entry.Name()
+			break
+		}
+	}
+	if blockedChild == "" {
+		t.Fatal("fixture has no child directory in the first page")
+	}
+	// The first step consumes this exact page before the blocked child visit.
+	for _, path := range []string{blockedChild, "ready.go"} {
 		if err := m.store.Enqueue(context.Background(), work.info.ID, []byte(path)); err != nil {
 			t.Fatal(err)
 		}
@@ -480,6 +520,7 @@ func TestManagerBlockedDirectoryDoesNotDelayQueuedFileUntilParentCompletes(t *te
 }
 
 func TestManagerDirectoryStreamCapacityRetriesWithoutLosingTail(t *testing.T) {
+	t.Parallel()
 	m, space, primary := managerFixture(t, nil)
 	stopManagerTestScheduler(t, m)
 	if err := m.acquire(context.Background()); err != nil {
@@ -530,6 +571,7 @@ func TestManagerDirectoryStreamCapacityRetriesWithoutLosingTail(t *testing.T) {
 }
 
 func TestManagerFocusedEmergencyPreservesCatalog(t *testing.T) {
+	t.Parallel()
 	for _, resource := range []string{"memory", "disk"} {
 		t.Run(resource, func(t *testing.T) {
 			var calls atomic.Int32
@@ -587,6 +629,7 @@ func TestManagerFocusedEmergencyPreservesCatalog(t *testing.T) {
 }
 
 func TestManagerFocusedEmergencyCancelsActiveWorker(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{})
 	runner := &managerTestExtractor{run: func(ctx context.Context, _ extract.Source, _ extract.Limits) (extract.Result, error) {
 		close(started)
@@ -640,6 +683,7 @@ func (s *growingSource) Read(p []byte) (int, error) {
 }
 
 func TestManagerRejectsSourceGrowthDuringBoundedRead(t *testing.T) {
+	t.Parallel()
 	const original = 1024
 	limit := extract.DefaultLimits().MaxInputBytes
 	for _, growth := range []int{original, 2 * limit} {
@@ -672,6 +716,7 @@ func TestManagerRejectsSourceGrowthDuringBoundedRead(t *testing.T) {
 }
 
 func TestManagerInferenceCancellationHoldsLeaseUntilRunnerStops(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{})
 	canceled := make(chan struct{})
 	finish := make(chan struct{})

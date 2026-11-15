@@ -219,6 +219,7 @@ func countEvents(events []agentapi.Event, kind agentapi.EventKind) int {
 }
 
 func TestRunTurn_PlainText(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{
 		delta("hel"), delta("lo"), usageEvent(10), done(agentapi.FinishStop),
 	}}}}
@@ -246,6 +247,7 @@ func TestRunTurn_PlainText(t *testing.T) {
 }
 
 func TestRunTurn_MultiTool(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{
 			toolCallEvent("c1", "echo", `{"text":"a"}`),
@@ -277,6 +279,7 @@ func TestRunTurn_MultiTool(t *testing.T) {
 }
 
 func TestRunTurn_IterationLimit(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	// ct counts its own invocations so the test can assert the (limit+1)th
 	// round of tool calls never runs.
@@ -309,6 +312,7 @@ func TestRunTurn_IterationLimit(t *testing.T) {
 }
 
 func TestRunTurn_UnknownToolContinuesTurn(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{
 			toolCallEvent("c1", "does-not-exist", `{}`),
@@ -334,6 +338,7 @@ func TestRunTurn_UnknownToolContinuesTurn(t *testing.T) {
 }
 
 func TestRunTurn_ToolMachineryErrorAbortsTurn(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{
 		toolCallEvent("c1", "broken", `{}`),
 		done(agentapi.FinishToolCalls),
@@ -352,6 +357,7 @@ func TestRunTurn_ToolMachineryErrorAbortsTurn(t *testing.T) {
 }
 
 func TestRunTurn_FinishLengthAndContentFilterSkipTools(t *testing.T) {
+	t.Parallel()
 	for _, reason := range []agentapi.FinishReason{agentapi.FinishLength, agentapi.FinishContentFilter} {
 		t.Run(string(reason), func(t *testing.T) {
 			p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{
@@ -376,6 +382,7 @@ func TestRunTurn_FinishLengthAndContentFilterSkipTools(t *testing.T) {
 }
 
 func TestRunTurn_CancelMidStream(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p := &blockingProvider{before: []agentapi.ChatEvent{delta("partial")}}
@@ -397,6 +404,7 @@ func TestRunTurn_CancelMidStream(t *testing.T) {
 }
 
 func TestRunTurn_CancelBetweenToolCalls(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{
@@ -455,6 +463,7 @@ func history4() []agentapi.Message {
 }
 
 func TestRunTurn_ProactiveCompaction(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{
@@ -503,6 +512,7 @@ func TestRunTurn_ProactiveCompaction(t *testing.T) {
 }
 
 func TestRunTurn_OverflowCompactsAndRetries(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY2"}
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{failure(agentapi.ErrContextOverflow)}},
@@ -533,6 +543,7 @@ func TestRunTurn_OverflowCompactsAndRetries(t *testing.T) {
 }
 
 func TestRunTurn_SecondOverflowWithNothingLeftToCompactIsFatal(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY3"}
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{failure(agentapi.ErrContextOverflow)}},
@@ -582,6 +593,7 @@ func (messageCounter) EstimateTools([]agentapi.ToolSchema) int64  { return 0 }
 // with "slice bounds out of range"; here it must estimate afresh, retry
 // once, and finish.
 func TestRunTurn_ReactiveCompactionWithWindowDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY2"}
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{
@@ -642,4 +654,27 @@ func (countingTool) Class() agentapi.ActionClass  { return agentapi.ClassRead }
 func (t countingTool) Run(_ context.Context, callID string, _ json.RawMessage) (agentapi.ToolResult, error) {
 	*t.count++
 	return agentapi.TextResult(callID, "count", "ok"), nil
+}
+
+func TestRunTurn_OverflowAfterOutputDoesNotRetry(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []agentapi.ChatEventKind{agentapi.ChatTextDelta, agentapi.ChatThinkingDelta} {
+		t.Run(string(kind), func(t *testing.T) {
+			compactor := &stubCompactor{summary: "SUMMARY"}
+			p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{{Kind: kind, Text: "partial"}, failure(agentapi.ErrContextOverflow)}}}}
+			a := agent.New(p, agent.WithCompactor(compactor), agent.WithLimits(agent.Limits{MaxIterations: 10}))
+			events := collect(t, a.RunTurn(context.Background(), history4()))
+			if len(p.calls) != 1 || compactor.calls != 0 {
+				t.Fatalf("calls=%d compactions=%d", len(p.calls), compactor.calls)
+			}
+			errEv := lastEvent(events, agentapi.EventError)
+			if errEv == nil || errEv.Err.Kind != agentapi.ErrContextOverflow {
+				t.Fatalf("error=%+v", errEv)
+			}
+			end := lastEvent(events, agentapi.EventTurnEnd)
+			if end == nil || end.FinishReason != agentapi.FinishError {
+				t.Fatalf("end=%+v", end)
+			}
+		})
+	}
 }

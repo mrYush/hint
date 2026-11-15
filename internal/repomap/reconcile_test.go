@@ -15,6 +15,7 @@ import (
 )
 
 func TestPolicyFingerprintRegularAdmission(t *testing.T) {
+	t.Parallel()
 	_, space, path := managerFixture(t, nil)
 	lease, err := space.Resolve("", ".gitignore")
 	if err != nil {
@@ -38,6 +39,7 @@ func TestPolicyFingerprintRegularAdmission(t *testing.T) {
 }
 
 func TestManagerReconciliationRetiresDeletedSubtree(t *testing.T) {
+	t.Parallel()
 	m, space, path := managerFixture(t, &managerTestExtractor{run: extract.Extract})
 	if err := os.Mkdir(filepath.Join(path, "gone"), 0700); err != nil {
 		t.Fatal(err)
@@ -70,6 +72,7 @@ func TestManagerReconciliationRetiresDeletedSubtree(t *testing.T) {
 }
 
 func TestManagerPolicyRevisionChangesOnlyOnObservedPolicy(t *testing.T) {
+	t.Parallel()
 	m, space, path := managerFixture(t, nil)
 	roots, _ := space.Snapshot()
 	m.mu.Lock()
@@ -107,6 +110,7 @@ func TestManagerPolicyRevisionChangesOnlyOnObservedPolicy(t *testing.T) {
 }
 
 func TestPolicyRevisionBeyondCacheCapacityAndReattachment(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	dir := t.TempDir()
 	root, err := space.AttachLocal(dir, "policies")
@@ -163,6 +167,7 @@ func TestPolicyRevisionBeyondCacheCapacityAndReattachment(t *testing.T) {
 }
 
 func TestManagerDetachReleasesDirectoryStream(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	other := t.TempDir()
 	for n := range 40 {
@@ -205,6 +210,7 @@ func TestManagerDetachReleasesDirectoryStream(t *testing.T) {
 }
 
 func TestManagerMaintenanceRetainsPinsThenCollects(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	roots, _ := space.Snapshot()
 	root := roots[0].ID

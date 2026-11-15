@@ -12,6 +12,7 @@ import (
 )
 
 func TestCloneValidationNeverTouchesExistingDestination(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{"https://token@example.com/a.git", "https://example.com/a?token=secret", "ssh://git:secret@example.com/a.git", "ext::evil", "--upload-pack=evil", "/local/path"} {
 		destination := filepath.Join(t.TempDir(), "new")
 		if err := cloneRepo(context.Background(), source, destination, os.Environ()); err == nil {
@@ -35,6 +36,7 @@ func TestCloneValidationNeverTouchesExistingDestination(t *testing.T) {
 }
 
 func TestCloneArgvEnvironmentAndCancellation(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	if runtime.GOOS == "windows" {
 		t.Skip("test executable is a POSIX script")
 	}

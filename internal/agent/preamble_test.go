@@ -31,6 +31,7 @@ func (p *countingPreamble) Prefix(_ context.Context, messages []agentapi.Message
 }
 
 func TestRunTurn_PreambleRebuildsPrefixBeforeEveryRequest(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{
 		toolRound(toolCallEvent("c1", "echo", `{"text":"a"}`)),
 		{events: []agentapi.ChatEvent{delta("done"), done(agentapi.FinishStop)}},
@@ -61,6 +62,7 @@ func TestRunTurn_PreambleRebuildsPrefixBeforeEveryRequest(t *testing.T) {
 }
 
 func TestRunTurn_PreambleFailureKeepsThePrefix(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{delta("ok"), done(agentapi.FinishStop)}}}}
 	a := agent.New(p, agent.WithPreamble(&countingPreamble{err: errors.New("rules unreadable")}))
 
@@ -98,6 +100,7 @@ func (p *shiftingPreamble) Prefix(context.Context, []agentapi.Message) ([]agenta
 // is the one that matters — the refresh before it is the first to run
 // after the summary exists.
 func TestRunTurn_CompactionSummarySurvivesPreambleRefresh(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	p := &fakeProvider{scripts: []script{
 		{events: []agentapi.ChatEvent{
@@ -155,6 +158,7 @@ func TestRunTurn_CompactionSummarySurvivesPreambleRefresh(t *testing.T) {
 // session: the CLI prepends the run's preamble in front of a stored
 // conversation that opens with a compaction summary.
 func TestRunTurn_SummaryAtStartOfHistorySurvivesPreamble(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{delta("ok"), done(agentapi.FinishStop)}}}}
 	pre := &countingPreamble{}
 	a := agent.New(p, agent.WithPreamble(pre))

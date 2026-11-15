@@ -55,6 +55,7 @@ func repoPrefix(t *testing.T, s *rpcSession) string {
 }
 
 func TestRepoPreparationRequiresDeliveredFreshInstructions(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	rules := filepath.Join(dir, "AGENTS.md")
 	if err := os.WriteFile(rules, []byte("# Library\nUse the library style.\n"), 0600); err != nil {
@@ -103,6 +104,7 @@ func TestRepoPreparationRequiresDeliveredFreshInstructions(t *testing.T) {
 }
 
 func TestRepoPreparationAncestorsRulesAndIsolation(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	for path, content := range map[string]string{"AGENTS.md": "ROOT_DIRECTIVE", "src/AGENTS.md": "CHILD_DIRECTIVE", ".hint/rules/go.md": "---\npaths: '**/*.go'\n---\nGO_RULE", ".cursor/rules/js.mdc": "---\nglobs: '**/*.js'\n---\nJS_RULE"} {
 		abs := filepath.Join(dir, path)
@@ -146,6 +148,7 @@ func TestRepoPreparationAncestorsRulesAndIsolation(t *testing.T) {
 }
 
 func TestRepoRoutingDefaultsPreviewsAndBoundaries(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	if result := repoRun(t, s, "write_file", `{"path":"primary.txt","content":"primary"}`); result.IsError {
 		t.Fatalf("primary needs preparation: %+v", result)
@@ -189,6 +192,7 @@ func TestRepoRoutingDefaultsPreviewsAndBoundaries(t *testing.T) {
 }
 
 func TestRepoPreparationLimitsAndRootReplacement(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), make([]byte, repoInstructionBytes+1), 0600); err != nil {
 		t.Fatal(err)
@@ -217,6 +221,7 @@ func TestRepoPreparationLimitsAndRootReplacement(t *testing.T) {
 }
 
 func TestRepoInstructionRenderedEnvelopeIsBounded(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	for i := 0; i < 60; i++ {
 		path := filepath.Join(dir, ".hint/rules", fmt.Sprintf("%03d-%s.md", i, strings.Repeat("long", 40)))
@@ -240,6 +245,7 @@ func TestRepoInstructionRenderedEnvelopeIsBounded(t *testing.T) {
 }
 
 func TestRepoPreparationIncludesCanonicalSymlinkAncestors(t *testing.T) {
+	t.Parallel()
 	s, dir := repoTestSession(t)
 	if err := os.MkdirAll(filepath.Join(dir, "physical/deep"), 0700); err != nil {
 		t.Fatal(err)
@@ -259,6 +265,7 @@ func TestRepoPreparationIncludesCanonicalSymlinkAncestors(t *testing.T) {
 }
 
 func TestAttachedOrdinaryFolderDoesNotInheritAncestorGitIgnore(t *testing.T) {
+	t.Parallel()
 	git, err := exec.LookPath("git")
 	if err != nil {
 		t.Skip("git unavailable")

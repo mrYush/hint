@@ -29,6 +29,7 @@ func choose(t *testing.T, input string) (session.Info, string, error) {
 }
 
 func TestChoose(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		wantID  string
 		wantErr error
@@ -61,6 +62,7 @@ func TestChoose(t *testing.T) {
 }
 
 func TestChooseListing(t *testing.T) {
+	t.Parallel()
 	_, out, _ := choose(t, "1\n")
 	for _, want := range []string{"sessions in /p", "  1. ", "beefbeefbeefbeef", "4 msgs", "second session...", "  2. ", "xxxxxxxxxx..."} {
 		if !strings.Contains(out, want) {
@@ -73,6 +75,7 @@ func TestChooseListing(t *testing.T) {
 }
 
 func TestChooseListingKeepsUTF8(t *testing.T) {
+	t.Parallel()
 	infos := []session.Info{{
 		Path:        "/s/1.jsonl",
 		ID:          "beefbeefbeefbeef",
@@ -94,6 +97,7 @@ func TestChooseListingKeepsUTF8(t *testing.T) {
 }
 
 func TestChooseEmptyAndCancel(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	if _, err := session.Choose(context.Background(), &out, console.NewLineReader(strings.NewReader("1\n")), nil); !errors.Is(err, session.ErrNoSessions) {
 		t.Errorf("Choose with nothing to choose = %v, want ErrNoSessions", err)
@@ -106,6 +110,7 @@ func TestChooseEmptyAndCancel(t *testing.T) {
 }
 
 func TestChooseCapsTheList(t *testing.T) {
+	t.Parallel()
 	var infos []session.Info
 	for i := 0; i < 25; i++ {
 		infos = append(infos, session.Info{ID: strings.Repeat(string(rune('a'+i%26)), 16), Cwd: "/p"})

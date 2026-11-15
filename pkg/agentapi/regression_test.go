@@ -21,6 +21,7 @@ import (
 // one provider call later as a non-retryable invalid_request that aborted the
 // whole turn.
 func TestSilentToolResultStaysSendable(t *testing.T) {
+	t.Parallel()
 	r := agentapi.ToolResult{CallID: "c1", Name: "write_file"}
 
 	if err := r.Validate(); err != nil {
@@ -55,6 +56,7 @@ func TestSilentToolResultStaysSendable(t *testing.T) {
 // call before it was written to a session file and accepted the same call
 // after it was read back, and a tool unmarshalling null got zeroed arguments.
 func TestNilRawMessageDoesNotBecomeNull(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		value any
@@ -95,6 +97,7 @@ func TestNilRawMessageDoesNotBecomeNull(t *testing.T) {
 // null, scalars and arrays, which a tool then unmarshals into a zeroed struct
 // and acts on — write_file against the empty path, for instance.
 func TestArgumentsMustBeAnObject(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{`null`, `123`, `"oops"`, `[]`, `true`} {
 		call := agentapi.ToolCall{ID: "c1", Name: "write_file", Arguments: json.RawMessage(raw)}
 		if err := call.Validate(); err == nil {
@@ -112,6 +115,7 @@ func TestArgumentsMustBeAnObject(t *testing.T) {
 // indistinguishable prompts, and an approval meant for one can authorise the
 // other.
 func TestPermissionRequestNeedsCallID(t *testing.T) {
+	t.Parallel()
 	r := agentapi.PermissionRequest{Tool: "bash", Class: agentapi.ClassExecute, Summary: `run "go test"`}
 	if err := r.Validate(); err == nil {
 		t.Fatal("a permission request without a call id must be rejected")
@@ -126,6 +130,7 @@ func TestPermissionRequestNeedsCallID(t *testing.T) {
 // natural thing to do, since that is what an HTTP client reports — must not
 // make the router treat the user's Ctrl-C as a reason to fall back and retry.
 func TestCancellationOutranksProviderClassification(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -155,6 +160,7 @@ func TestCancellationOutranksProviderClassification(t *testing.T) {
 // Without a sentinel, a decoder could not tell "written by a newer version"
 // from "malformed" and would have to string-match the error message.
 func TestUnknownKindIsDistinguishable(t *testing.T) {
+	t.Parallel()
 	unknown := []struct {
 		name string
 		err  error
@@ -201,6 +207,7 @@ func TestUnknownKindIsDistinguishable(t *testing.T) {
 // events, which ChatProvider forbids. A provider implementing the doc
 // literally would block forever on the second send.
 func TestFinishErrorIsAgentLevelOnly(t *testing.T) {
+	t.Parallel()
 	if err := (agentapi.ChatEvent{Kind: agentapi.ChatDone, FinishReason: agentapi.FinishError}).Validate(); err == nil {
 		t.Error("a provider stream must not end with done/error; ChatError is the terminal event")
 	}
@@ -213,6 +220,7 @@ func TestFinishErrorIsAgentLevelOnly(t *testing.T) {
 // separator off "the buffer is still empty" swallowed the line break after
 // one, so Text() silently disagreed with its own documentation.
 func TestEmptyPartKeepsTheSeparator(t *testing.T) {
+	t.Parallel()
 	msg := agentapi.Message{Role: agentapi.RoleAssistant, Content: []agentapi.ContentPart{
 		agentapi.Text(""),
 		agentapi.Text("line two"),

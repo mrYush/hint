@@ -25,6 +25,7 @@ var globFixture = map[string]string{
 }
 
 func TestGlob_PureGo(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, globFixture)
 	tl := builtin.NewGlob(root, builtin.WithRipgrep(""))
 	if tl.Class() != agentapi.ClassRead {
@@ -63,6 +64,7 @@ func TestGlob_PureGo(t *testing.T) {
 }
 
 func TestGlob_NewestFirst(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"old.txt": "", "new.txt": ""})
 	old := time.Now().Add(-time.Hour)
 	if err := os.Chtimes(filepath.Join(root.Dir(), "old.txt"), old, old); err != nil {
@@ -75,6 +77,7 @@ func TestGlob_NewestFirst(t *testing.T) {
 }
 
 func TestGlob_Errors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"a.go": ""})
 	tl := builtin.NewGlob(root, builtin.WithRipgrep(""))
 	failed(t, run(t, tl, `{}`), "pattern is required")
@@ -84,6 +87,7 @@ func TestGlob_Errors(t *testing.T) {
 }
 
 func TestGlob_RipgrepAgreesWithPureGo(t *testing.T) {
+	t.Parallel()
 	rg := ripgrep(t)
 	root := newRoot(t, globFixture)
 	withRg := builtin.NewGlob(root, builtin.WithRipgrep(rg))

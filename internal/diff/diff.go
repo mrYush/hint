@@ -82,13 +82,13 @@ func myers(a, b []string) []Edit {
 
 	limit := min(n+m, maxEdits)
 	// v[k] is the furthest x reached on diagonal k (= x - y); k ranges over
-	// [-d, d] at step d, so it is stored with an offset. One copy of v is
-	// kept per step for the backtrack.
+	// [-d, d] at step d, so it is stored with an offset. Only that active
+	// range is copied per step for the backtrack, with its own offset d.
 	offset := limit
 	v := make([]int, 2*limit+2)
 	var trace [][]int
 	for d := 0; d <= limit; d++ {
-		trace = append(trace, append([]int(nil), v...))
+		trace = append(trace, append([]int(nil), v[offset-d:offset+d+1]...))
 		for k := -d; k <= d; k += 2 {
 			var x int
 			// Prefer moving down (an insert) at the left edge or when the
@@ -107,7 +107,7 @@ func myers(a, b []string) []Edit {
 			}
 			v[offset+k] = x
 			if x >= n && y >= m {
-				return backtrack(a, b, trace, offset)
+				return backtrack(a, b, trace)
 			}
 		}
 	}
@@ -116,19 +116,19 @@ func myers(a, b []string) []Edit {
 
 // backtrack walks the recorded frontiers from the end back to the start,
 // emitting the edit script in reverse, then flips it.
-func backtrack(a, b []string, trace [][]int, offset int) []Edit {
+func backtrack(a, b []string, trace [][]int) []Edit {
 	var rev []Edit
 	x, y := len(a), len(b)
 	for d := len(trace) - 1; d > 0; d-- {
 		v := trace[d]
 		k := x - y
 		var prevK int
-		if k == -d || (k != d && v[offset+k-1] < v[offset+k+1]) {
+		if k == -d || (k != d && v[d+k-1] < v[d+k+1]) {
 			prevK = k + 1
 		} else {
 			prevK = k - 1
 		}
-		prevX := v[offset+prevK]
+		prevX := v[d+prevK]
 		prevY := prevX - prevK
 		for x > prevX && y > prevY {
 			x--

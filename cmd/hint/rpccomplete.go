@@ -50,7 +50,7 @@ func (e *rpcEngine) Complete(ctx context.Context, req rpc.CompleteRequest) (rpc.
 	}
 	e.cfgMu.Unlock()
 	if unusable != nil {
-		return rpc.CompleteResult{Disabled: true, Reason: strings.TrimPrefix(unusable.Error(), "config: ")}, nil
+		return rpc.CompleteResult{Disabled: true, Reason: unusable.Error()}, nil //nolint:nilerr // An unusable profile disables completion through the result, not an RPC failure.
 	}
 	chat, question, err := e.completionSource(req.SessionID, settings)
 	if err != nil {
@@ -157,7 +157,7 @@ func (e *rpcEngine) Models(ctx context.Context, name string) ([]string, error) {
 	p, err := e.cfg.Profile(name)
 	e.cfgMu.Unlock()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", rpc.ErrNotFound, strings.TrimPrefix(err.Error(), "config: "))
+		return nil, fmt.Errorf("%w: %s", rpc.ErrNotFound, err.Error())
 	}
 	models, err := e.models(ctx, p)
 	if err != nil {

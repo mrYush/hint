@@ -19,6 +19,7 @@ import (
 )
 
 func TestSourceFIFO(t *testing.T) {
+	t.Parallel()
 	if mode := os.Getenv("HINT_TEST_SOURCE_FIFO"); mode != "" {
 		if mode == "directory" {
 			testDirectoryFIFOChild(t, os.Getenv("HINT_TEST_SOURCE_DIR"))

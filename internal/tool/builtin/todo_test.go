@@ -9,6 +9,7 @@ import (
 )
 
 func TestTodo_SetsAndRenders(t *testing.T) {
+	t.Parallel()
 	list := builtin.NewTodoList()
 	tl := builtin.NewTodo(builtin.WithTodoList(list))
 	if tl.Class() != agentapi.ClassRead {
@@ -44,6 +45,7 @@ func TestTodo_SetsAndRenders(t *testing.T) {
 }
 
 func TestTodo_Errors(t *testing.T) {
+	t.Parallel()
 	tl := builtin.NewTodo()
 	failed(t, run(t, tl, `{"items":[{"content":"","status":"pending"}]}`), "items[0]: content is empty")
 	failed(t, run(t, tl, `{"items":[{"content":"x","status":"done"}]}`), `status "done" is not one of`)

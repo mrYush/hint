@@ -81,12 +81,29 @@ func (s *setupInfo) unset(key string, project bool) (string, error) {
 	return fmt.Sprintf("%s removed from %s; the next layer down applies from the next start", key, path), nil
 }
 
-// show is the configuration the next start resolves: every key of the
-// table with its value after all layers, keys masked.
+// show displays the configuration the next start resolves, with API keys masked.
 func (s *setupInfo) show() (string, error) {
-	cfg, err := config.LoadFrom(config.Options{HomeDir: homeDir(), WorkingDir: s.cwd, LookupEnv: os.LookupEnv, Flags: s.flags})
+	out, _, err := s.showWithWarnings()
+	return out, err
+}
+
+// showWithWarnings separates diagnostics from configuration output so the CLI
+// can route them to stderr without mixing them into redirected stdout.
+func (s *setupInfo) showWithWarnings() (string, []string, error) {
+	// Show the resolved values even when the configuration is not ready to run.
+	opts, err := s.env.configOptions(s.flags, true)
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+	opts.Keyring = s.keyring
+	cfg, err := config.LoadFrom(opts)
+	if err != nil {
+		return "", nil, err
+	}
+	warnings := make([]string, 0, len(cfg.Warnings))
+	secrets := cfg.Secrets()
+	for _, warning := range cfg.Warnings {
+		warnings = append(warnings, config.Redact(warning, secrets))
 	}
 	var b strings.Builder
 	if len(s.locs.Read) == 0 {
@@ -136,7 +153,7 @@ func (s *setupInfo) show() (string, error) {
 			fmt.Fprintf(&b, "providers.%s.%s = %s\n", p.Name, field, orUnset(fields[field]))
 		}
 	}
-	return strings.TrimRight(b.String(), "\n"), nil
+	return strings.TrimRight(b.String(), "\n"), warnings, nil
 }
 
 func orUnset(v string) string {
@@ -182,28 +199,36 @@ func homeDir() string {
 
 // newConfigCommand is `hint config`: show, list, set and unset keys of
 // the config files without opening them in an editor.
-func newConfigCommand(flags *config.Flags) *cobra.Command {
+func newConfigCommand(flags *config.Flags, env environment) *cobra.Command {
 	info := func() (*setupInfo, error) {
-		cwd, err := os.Getwd()
+		if err := env.validate(); err != nil {
+			return nil, err
+		}
+		configOpts, err := env.configOptions(*flags, true)
 		if err != nil {
 			return nil, err
 		}
-		cfg, _ := config.LoadDraft(*flags) // a broken config is one reason to be here
-		return newSetupInfo(cfg, cwd, *flags), nil
+		cfg, _ := config.LoadFrom(configOpts) // A broken config is one reason to be here.
+		return newSetupInfoWithEnvironment(cfg, *flags, env), nil
 	}
 	var project bool
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show, list, set and unset configuration keys",
-		Long: `hint config shows the configuration the next start resolves, every
-layer applied and API keys masked. Its subcommands change one key of a
-config file at a time, keeping the file's comments: the global file by
-default, the repository's .hint/config.yaml with --project. Each value
-is checked against the key's type before anything is written.
+		Long: `hint config shows the effective configuration, with every layer
+applied and API keys masked. Display succeeds even when profiles are incomplete
+or invalid for execution, including unresolved keyring references. Exit status
+0 confirms display succeeded; it does not certify readiness to run. File reading,
+parsing and limit-resolution errors still fail the command.
+
+Its subcommands change one key of a config file at a time, keeping the
+file's comments. They update the global file by default, or the repository's
+.hint/config.yaml with --project. Each value is checked against the key's
+type before anything is written.
 
 The keys, their defaults and their HINT_* variables: hint config keys,
 or config.example.yaml in the repository.`,
-		Example: `  hint config                                   # what the next start uses
+		Example: `  hint config                                   # resolved values, keys masked
   hint config keys                              # every key, with defaults
   hint config set overview.depth 3              # global
   hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct
@@ -215,11 +240,14 @@ or config.example.yaml in the repository.`,
 			if err != nil {
 				return err
 			}
-			out, err := s.show()
+			out, warnings, err := s.showWithWarnings()
 			if err != nil {
 				return err
 			}
-			fmt.Println(out)
+			for _, warning := range warnings {
+				fmt.Fprintln(cmd.ErrOrStderr(), "hint:", warning)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), out)
 			return nil
 		},
 	}
@@ -283,7 +311,11 @@ on a terminal. No RPC method and no tool reaches it.`,
 			if !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 				return errors.New("show-key prints a secret: it needs a terminal on stdin and stdout")
 			}
-			cfg, err := config.Load(*flags)
+			opts, err := env.configOptions(*flags, false)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.LoadFrom(opts)
 			if err != nil {
 				return err
 			}

@@ -25,6 +25,7 @@ func (engineMapExtractor) Extract(ctx context.Context, source extract.Source, li
 func (engineMapExtractor) Close() error { return nil }
 
 func TestMapToolThroughEngineAndProvider(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "located" }, call: func(n int) *agentapi.ToolCall {
 		if n == 1 {
 			return &agentapi.ToolCall{ID: "map", Name: "repo_map", Arguments: json.RawMessage(`{"path":"source.go"}`)}
@@ -71,6 +72,7 @@ func TestMapToolThroughEngineAndProvider(t *testing.T) {
 }
 
 func TestIndexModeChangesCatalogBetweenTurns(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "ready" }}
 	as, _, _, _ := testAssembly(t, chat, "")
 	as.cfg.Providers[0].ContextWindow = 32768
@@ -105,6 +107,7 @@ func TestIndexModeChangesCatalogBetweenTurns(t *testing.T) {
 }
 
 func TestExtractionCommandRegisteredWithoutConfiguration(t *testing.T) {
+	t.Parallel()
 	request, err := json.Marshal(struct {
 		Source extract.Source `json:"source"`
 		Limits extract.Limits `json:"limits"`

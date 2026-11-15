@@ -73,6 +73,36 @@ func kindForStatus(status int, msg string) agentapi.ErrorKind {
 	}
 }
 
+// kindForWireError classifies errors inside HTTP 200 SSE. Numeric codes
+// carry HTTP status semantics; symbolic codes and overflow messages do not.
+func kindForWireError(e *wireError) agentapi.ErrorKind {
+	code := e.code()
+	if status, err := strconv.Atoi(code); err == nil && status >= 400 && status <= 599 {
+		return kindForStatus(status, e.Message)
+	}
+	if isContextOverflow(code + " " + e.Type + " " + e.Message) {
+		return agentapi.ErrContextOverflow
+	}
+	for _, value := range []string{code, e.Type} {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "invalid_api_key", "authentication_error":
+			return agentapi.ErrAuth
+		case "rate_limit_exceeded":
+			return agentapi.ErrRateLimited
+		case "model_not_found":
+			return agentapi.ErrModelNotFound
+		case "invalid_request", "invalid_request_error":
+			return agentapi.ErrInvalidRequest
+		case "content_filter":
+			return agentapi.ErrContentFiltered
+		}
+	}
+	// No failure status is available here. Preserve the historical transient
+	// classification for unrecognized upstream errors rather than inventing a
+	// client-side HTTP 400. Explicit invalid-request codes above never retry.
+	return agentapi.ErrUnavailable
+}
+
 // isContextOverflow recognises the request-too-long refusal inside a 400
 // body. There is no structured code for it across dialects, so this is a
 // substring match over the phrasings the supported providers actually use.
@@ -132,15 +162,27 @@ func errorMessage(body []byte) string {
 	return strings.TrimSpace(string(body))
 }
 
+func (e *wireError) code() string {
+	code := strings.TrimSpace(string(e.Code))
+	if code == "null" {
+		return ""
+	}
+	var decoded string
+	if json.Unmarshal(e.Code, &decoded) == nil {
+		return strings.TrimSpace(decoded)
+	}
+	return code
+}
+
 func (e *wireError) describe() string {
 	msg := strings.TrimSpace(e.Message)
-	code := strings.Trim(strings.TrimSpace(string(e.Code)), `"`)
+	code := e.code()
 	switch {
-	case msg != "" && code != "" && code != "null":
+	case msg != "" && code != "":
 		return msg + " (" + code + ")"
 	case msg != "":
 		return msg
-	case code != "" && code != "null":
+	case code != "":
 		return "error code " + code
 	default:
 		return ""

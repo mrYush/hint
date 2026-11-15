@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ func loadMCP(t *testing.T, global, project string, env map[string]string, draft 
 }
 
 func TestMCPServersLoad(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   fs:
@@ -95,6 +97,7 @@ mcp_servers:
 }
 
 func TestMCPServersProjectAddsAndCannotOverride(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   fs:
@@ -129,6 +132,7 @@ mcp_servers:
 }
 
 func TestMCPServersProjectCredentialsRejected(t *testing.T) {
+	t.Parallel()
 	project := `
 mcp_servers:
   leaky:
@@ -148,6 +152,7 @@ mcp_servers:
 }
 
 func TestMCPServersProjectValuesNotExpanded(t *testing.T) {
+	t.Parallel()
 	project := `
 mcp_servers:
   p:
@@ -171,6 +176,7 @@ mcp_servers:
 }
 
 func TestMCPServersMissingVariableWarns(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   web:
@@ -183,13 +189,14 @@ mcp_servers:
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	hasWarning(t, cfg, "MISSING expands to nothing")
+	hasWarning(t, cfg, "environment variable MISSING is not set")
 	if got := cfg.MCPServers[0].Headers["Authorization"]; got != "Bearer " {
 		t.Errorf("Authorization = %q; want the empty expansion", got)
 	}
 }
 
 func TestMCPServersValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		yaml string
@@ -254,8 +261,13 @@ func TestMCPServersValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := loadMCP(t, mcpProviderYAML+tt.yaml, "", nil, false)
-			if err == nil {
-				t.Fatalf("LoadFrom accepted the config")
+			key := "mcp_servers.s"
+			if tt.name == "bad server name" {
+				key = "mcp_servers.bad.name"
+			}
+			var ve *ValidationError
+			if !errors.As(err, &ve) || ve.Key != key {
+				t.Fatalf("want ValidationError.Key=%q, got %v", key, err)
 			}
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("error = %v; want %q", err, tt.want)
@@ -265,6 +277,7 @@ func TestMCPServersValidation(t *testing.T) {
 }
 
 func TestMCPServersDuplicateRejected(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   s:
@@ -289,6 +302,7 @@ func containsString(values []string, want string) bool {
 }
 
 func TestMCPServersEmptySection(t *testing.T) {
+	t.Parallel()
 	cfg, err := loadMCP(t, "mcp_servers:\n", "", nil, true)
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -299,6 +313,7 @@ func TestMCPServersEmptySection(t *testing.T) {
 }
 
 func TestMCPServersLiteralHeaderIsSecret(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   web:
@@ -320,6 +335,7 @@ mcp_servers:
 }
 
 func TestMCPServersBareTokenRedacted(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   web:
@@ -344,6 +360,7 @@ mcp_servers:
 }
 
 func TestMCPServersSecretValueFiltersEnviron(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   web:
@@ -366,6 +383,7 @@ mcp_servers:
 }
 
 func TestMCPServersURLSecret(t *testing.T) {
+	t.Parallel()
 	global := `
 mcp_servers:
   web:
@@ -382,6 +400,7 @@ mcp_servers:
 }
 
 func TestMCPServersResourceExpansion(t *testing.T) {
+	t.Parallel()
 	global := mcpProviderYAML + `
 mcp_servers:
   fs:
@@ -402,6 +421,7 @@ mcp_servers:
 }
 
 func TestMCPServersProjectResourceNotExpanded(t *testing.T) {
+	t.Parallel()
 	project := `
 mcp_servers:
   p:
@@ -423,6 +443,7 @@ mcp_servers:
 }
 
 func TestMCPServersDuplicateResource(t *testing.T) {
+	t.Parallel()
 	global := mcpProviderYAML + `
 mcp_servers:
   fs:

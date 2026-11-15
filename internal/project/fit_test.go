@@ -2,8 +2,6 @@ package project_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -26,6 +24,7 @@ func bigDoc(sections int) string {
 }
 
 func TestInstructionBudgetFor(t *testing.T) {
+	t.Parallel()
 	cases := map[int]int{
 		0:         project.DefaultInstructionBudget, // unknown window
 		131072:    project.DefaultInstructionBudget, // 128k: the default is a sixteenth of it
@@ -41,6 +40,7 @@ func TestInstructionBudgetFor(t *testing.T) {
 }
 
 func TestFit_NearestFileSurvivesAsOutline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	root, leaf := bigDoc(20), "# Leaf\n\nBe brief. Always.\n"
 	writeTree(t, dir, map[string]string{"HINT.md": root, "a/HINT.md": leaf})
@@ -79,6 +79,7 @@ func TestFit_NearestFileSurvivesAsOutline(t *testing.T) {
 }
 
 func TestFit_WholeFileFitsUnchanged(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": guideDoc})
 	got, warnings := project.ReadInstructions([]string{dir}, project.InstructionNames, len(guideDoc))
@@ -88,6 +89,7 @@ func TestFit_WholeFileFitsUnchanged(t *testing.T) {
 }
 
 func TestFit_OutlinesOnlyWhenTheyDoNotFit(t *testing.T) {
+	t.Parallel()
 	// Even the outlines overflow: the outer one is cut at a line and the
 	// nearer file is skipped, as before WP0.12.
 	dir := t.TempDir()
@@ -108,6 +110,7 @@ func TestFit_OutlinesOnlyWhenTheyDoNotFit(t *testing.T) {
 }
 
 func TestFit_HeadlessFileIsCutNotOutlined(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	text := strings.Repeat("a rule without any heading\n", 100)
 	writeTree(t, dir, map[string]string{"HINT.md": text})
@@ -133,6 +136,7 @@ func (f *fakeSummarizer) Summarize(_ context.Context, path, _ string, maxBytes i
 }
 
 func TestFit_SummarizesOnlyWhatOutlinesCannotFit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	root, leaf := bigDoc(20), "# Leaf\n\nBe brief.\n"
 	writeTree(t, dir, map[string]string{"HINT.md": root, "a/HINT.md": leaf})
@@ -169,6 +173,7 @@ func TestFit_SummarizesOnlyWhatOutlinesCannotFit(t *testing.T) {
 }
 
 func TestFit_SummaryFailureFallsBackToOutline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": bigDoc(20)})
 	sum := &fakeSummarizer{err: errors.New("model offline")}
@@ -182,6 +187,7 @@ func TestFit_SummaryFailureFallsBackToOutline(t *testing.T) {
 }
 
 func TestCachedSummarizer(t *testing.T) {
+	t.Parallel()
 	cache := filepath.Join(t.TempDir(), "instructions")
 	inner := &fakeSummarizer{summary: "short"}
 	c := project.CachedSummarizer{Dir: cache, Inner: inner}
@@ -196,24 +202,44 @@ func TestCachedSummarizer(t *testing.T) {
 	if len(inner.calls) != 1 {
 		t.Fatalf("inner summarizer called %d times for the same content, want 1", len(inner.calls))
 	}
-	sum := sha256.Sum256([]byte("long content"))
-	if _, err := os.Stat(filepath.Join(cache, hex.EncodeToString(sum[:])+".md")); err != nil {
-		t.Errorf("cache entry named by the content hash: %v", err)
+	for _, tc := range []struct {
+		name, path, content, provider string
+		budget                        int
+	}{
+		{"content", "/p/HINT.md", "other content", "", 100},
+		{"path", "/q/HINT.md", "long content", "", 100},
+		{"budget", "/p/HINT.md", "long content", "", 99},
+		{"provider", "/p/HINT.md", "long content", "different-model", 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c.ProviderKey = tc.provider
+			inner.summary = tc.name
+			for i := 0; i < 2; i++ {
+				got, err := c.Summarize(ctx, tc.path, tc.content, tc.budget)
+				if err != nil || got != tc.name {
+					t.Fatalf("call %d: %q, %v", i, got, err)
+				}
+			}
+		})
 	}
-	// Changed content is a new entry; a failing inner call caches nothing.
-	if _, _ = c.Summarize(ctx, "/p/HINT.md", "other content", 100); len(inner.calls) != 2 {
-		t.Errorf("changed content must be summarized again: %d calls", len(inner.calls))
+	if len(inner.calls) != 5 {
+		t.Errorf("inner summarizer called %d times, want 5", len(inner.calls))
 	}
 	inner.err = errors.New("down")
-	if _, err := c.Summarize(ctx, "/p/HINT.md", "third", 100); err == nil {
-		t.Error("inner error must surface")
+	if _, err := c.Summarize(ctx, "/p/HINT.md", "third", 100); !errors.Is(err, inner.err) {
+		t.Errorf("error = %v, want %v", err, inner.err)
 	}
-	if entries, _ := os.ReadDir(cache); len(entries) != 2 {
-		t.Errorf("cache holds %d entries, want 2", len(entries))
+	entries, err := os.ReadDir(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 5 {
+		t.Errorf("cache holds %d entries, want 5", len(entries))
 	}
 }
 
 func TestLoad_ScalesBudgetToWindow(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"HINT.md": bigDoc(20)})
 
@@ -239,6 +265,7 @@ func TestLoad_ScalesBudgetToWindow(t *testing.T) {
 }
 
 func TestRenderInstructions_MarksReducedFiles(t *testing.T) {
+	t.Parallel()
 	got := project.RenderInstructions([]project.Instruction{
 		{Path: "/p/HINT.md", Content: "# A\nfirst. [...]\n", Outlined: true},
 		{Path: "/p/sub/HINT.md", Content: "Summary.", Summarized: true, Size: 9000},

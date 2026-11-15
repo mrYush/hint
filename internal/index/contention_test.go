@@ -14,6 +14,7 @@ import (
 )
 
 func TestOpenContentionIsBoundedAndRecovers(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	conn, err := s.db.Conn(t.Context())
 	if err != nil {
@@ -75,6 +76,7 @@ func TestOpenContentionIsBoundedAndRecovers(t *testing.T) {
 }
 
 func TestOpenCancellationAndPermanentFailure(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	path := filepath.Join(t.TempDir(), "cancel", "index.db")
@@ -94,6 +96,7 @@ func TestOpenCancellationAndPermanentFailure(t *testing.T) {
 }
 
 func TestSharedCatalogRejectsConflictingAllowances(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{MaxBytes: 1 << 20, MaxPins: 4})
 	for _, opts := range []Options{{MaxBytes: 2 << 20, MaxPins: 4}, {MaxBytes: 512 << 10, MaxPins: 4}, {MaxBytes: 1 << 20, MaxPins: 5}} {
 		other, err := Open(path, opts)
@@ -113,6 +116,7 @@ func TestSharedCatalogRejectsConflictingAllowances(t *testing.T) {
 }
 
 func TestCatalogProcessPeer(t *testing.T) {
+	// This entry point runs in a dedicated child process.
 	path := os.Getenv("HINT_INDEX_TEST_PATH")
 	if path == "" {
 		t.Skip("subprocess helper")
@@ -130,7 +134,14 @@ func TestCatalogProcessPeer(t *testing.T) {
 		case <-time.After(time.Millisecond):
 		}
 	}
-	s, err := OpenContext(ctx, path, Options{})
+	// A peer may exhaust one bounded open attempt while the other initializes
+	// or writes. Retry transient contention within the overall peer deadline.
+	var s *Store
+	err := retryPeerBusy(ctx, func() error {
+		var err error
+		s, err = OpenContext(ctx, path, Options{})
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,24 +152,128 @@ func TestCatalogProcessPeer(t *testing.T) {
 	}()
 	for i := range 20 {
 		file, symbols := testSource(fmt.Sprintf("%s-%02d.go", os.Getenv("HINT_INDEX_TEST_PEER"), i), "Keep")
-		for {
+		if err := retryPeerBusy(ctx, func() error {
 			_, err := s.PutSource(ctx, file, symbols)
-			if err == nil {
-				break
-			}
-			if !errors.Is(err, ErrBusy) {
-				t.Fatal(err)
-			}
-			select {
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			case <-time.After(2 * time.Millisecond):
-			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
 
+// TestPeerOpenRetriesAfterAttemptDeadline exercises a real SQLite lock rather
+// than relying on process scheduling to exhaust the first open attempt.
+func TestPeerOpenRetriesAfterAttemptDeadline(t *testing.T) {
+	// The SQLite peer uses a short real attempt deadline.
+	owner, path := openTestStore(t, Options{})
+	conn, err := owner.db.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := false
+	t.Cleanup(func() {
+		if locked {
+			if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := conn.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := conn.ExecContext(t.Context(), "BEGIN EXCLUSIVE"); err != nil {
+		t.Fatal(err)
+	}
+	locked = true
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	calls := 0
+	err = retryPeerBusy(ctx, func() error {
+		calls++
+		peer, err := OpenContext(ctx, path, Options{OperationTimeout: 50 * time.Millisecond})
+		if peer != nil {
+			t.Cleanup(func() {
+				if err := peer.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+		}
+		if calls == 1 {
+			if !errors.Is(err, ErrBusy) || !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("locked open = %v; want busy and attempt deadline", err)
+			}
+			if _, unlockErr := conn.ExecContext(ctx, "ROLLBACK"); unlockErr != nil {
+				t.Fatal(unlockErr)
+			}
+			locked = false
+		}
+		return err
+	})
+	if err != nil || calls != 2 {
+		t.Fatalf("open after lock release = %v, calls = %d; want success after two attempts", err, calls)
+	}
+}
+
+func retryPeerBusy(ctx context.Context, operation func() error) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := operation()
+		if !errors.Is(err, ErrBusy) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(err, ctx.Err())
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+}
+
+func TestPeerBusyRetry(t *testing.T) {
+	// The SQLite peer uses short real attempt deadlines.
+	for _, tt := range []struct {
+		name string
+		err  error
+	}{
+		{"busy", ErrBusy},
+		{"attempt deadline", errors.Join(ErrBusy, context.DeadlineExceeded)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			err := retryPeerBusy(t.Context(), func() error {
+				calls++
+				if calls == 1 {
+					return tt.err
+				}
+				return nil
+			})
+			if err != nil || calls != 2 {
+				t.Fatalf("retry = %v, calls = %d; want success after two attempts", err, calls)
+			}
+		})
+	}
+	for _, want := range []error{ErrInitialization, ErrConfigConflict, context.DeadlineExceeded} {
+		calls := 0
+		err := retryPeerBusy(t.Context(), func() error { calls++; return want })
+		if !errors.Is(err, want) || calls != 1 {
+			t.Fatalf("permanent error = %v, calls = %d; want %v without retry", err, calls, want)
+		}
+	}
+	t.Run("peer deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+		defer cancel()
+		err := retryPeerBusy(ctx, func() error { return ErrBusy })
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("unbounded contention = %v", err)
+		}
+	})
+}
+
 func TestIndependentProcessesInitializeMigrateAndWrite(t *testing.T) {
+	t.Parallel()
 	for _, migrate := range []bool{false, true} {
 		t.Run(fmt.Sprint(migrate), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "catalog.db")

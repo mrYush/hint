@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
-	"time"
 
+	"github.com/mrYush/hint/internal/console"
 	"github.com/mrYush/hint/internal/permission"
 )
 
@@ -25,6 +27,7 @@ func promptWith(t *testing.T, input string, ask permission.Ask) (permission.Deci
 }
 
 func TestReaderPrompter_Answers(t *testing.T) {
+	t.Parallel()
 	ask := permission.Ask{Request: execReq("go test ./...")}
 	ask.Request.Always = `commands starting with "go test"`
 	cases := map[string]permission.Decision{
@@ -55,6 +58,7 @@ func TestReaderPrompter_Answers(t *testing.T) {
 }
 
 func TestReaderPrompter_ShowsSummaryDetailAndAlways(t *testing.T) {
+	t.Parallel()
 	ask := permission.Ask{Request: execReq("go test ./...")}
 	ask.Request.Always = `commands starting with "go test"`
 	ask.Request.Summary = "edit main.go"
@@ -68,6 +72,7 @@ func TestReaderPrompter_ShowsSummaryDetailAndAlways(t *testing.T) {
 }
 
 func TestReaderPrompter_AlwaysNotOfferedIsRejected(t *testing.T) {
+	t.Parallel()
 	ask := permission.Ask{Request: execReq("go test; rm -rf ~")}
 	got, out := promptWith(t, "a\ny\n", ask)
 	if got != permission.Allow {
@@ -79,6 +84,7 @@ func TestReaderPrompter_AlwaysNotOfferedIsRejected(t *testing.T) {
 }
 
 func TestReaderPrompter_LongDetailIsTruncatedOnScreen(t *testing.T) {
+	t.Parallel()
 	ask := permission.Ask{Request: writeReq("write_file", "big.txt")}
 	ask.Request.Detail = strings.Repeat("+line of a very long diff\n", 2000)
 	_, out := promptWith(t, "y\n", ask)
@@ -91,39 +97,61 @@ func TestReaderPrompter_LongDetailIsTruncatedOnScreen(t *testing.T) {
 }
 
 func TestReaderPrompter_StaleLineIsNotAnAnswer(t *testing.T) {
-	pr, pw := io.Pipe()
-	defer func() { _ = pw.Close() }()
-	var out bytes.Buffer
-	p := permission.NewReaderPrompter(pr, &out)
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		var out bytes.Buffer
+		lines := console.NewLineReader(pr)
+		p := permission.NewLinePrompter(lines, &out)
+		ask := permission.Ask{Request: execReq("ls")}
 
-	// First prompt: interrupted. The user then types "y" into the void.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := p.Prompt(ctx, permission.Ask{Request: execReq("ls")}); !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v", err)
-	}
-	go func() { _, _ = io.WriteString(pw, "y\n") }()
-	// Give the reader goroutine time to collect the stray line.
-	time.Sleep(50 * time.Millisecond)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if _, err := p.Prompt(ctx, ask); !errors.Is(err, context.Canceled) {
+			t.Fatalf("first prompt = %v, want context.Canceled", err)
+		}
+		if _, err := io.WriteString(pw, "y\n"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait() // The reader is blocked offering the stale approval.
 
-	// Second prompt must not take that "y": it waits for a real answer.
-	answered := make(chan permission.Decision, 1)
-	go func() {
-		d, _ := p.Prompt(context.Background(), permission.Ask{Request: execReq("rm -rf /")})
-		answered <- d
-	}()
-	select {
-	case d := <-answered:
-		t.Fatalf("stale line accepted as %v", d)
-	case <-time.After(50 * time.Millisecond):
-	}
-	_, _ = io.WriteString(pw, "n\n")
-	if d := <-answered; d != permission.Deny {
-		t.Fatalf("decision = %v, want Deny from the fresh line", d)
-	}
+		answered := make(chan struct{})
+		go func() {
+			defer close(answered)
+			d, err := p.Prompt(t.Context(), ask)
+			if d != permission.Deny || err != nil {
+				t.Errorf("second prompt = %v, %v; want Deny from the fresh line", d, err)
+			}
+		}()
+		synctest.Wait()
+		select {
+		case <-answered:
+			t.Error("second prompt answered before the fresh line was written")
+		default:
+		}
+		if _, err := io.WriteString(pw, "n\n"); err != nil {
+			t.Fatal(err)
+		}
+		<-answered
+		if err := pw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		// Drain through EOF even if the prompt returned before consuming "n".
+		for {
+			_, err := lines.ReadLine(t.Context())
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
 }
 
 func TestReaderPrompter_EOFStaysDeniedAfterDrain(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	p := permission.NewReaderPrompter(strings.NewReader(""), &out)
 	for i := 0; i < 2; i++ {
@@ -135,13 +163,45 @@ func TestReaderPrompter_EOFStaysDeniedAfterDrain(t *testing.T) {
 }
 
 func TestReaderPrompter_EOFDeniesAndSaysSo(t *testing.T) {
+	t.Parallel()
 	got, out := promptWith(t, "", permission.Ask{Request: execReq("ls")})
 	if got != permission.Deny || !strings.Contains(out, "no answer") {
 		t.Fatalf("decision = %v, output:\n%s", got, out)
 	}
 }
 
+func TestReaderPrompter_InputErrors(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("input failed")
+	for _, tc := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"read failure", cause, cause},
+		{"wrapped read failure", fmt.Errorf("reader: %w", cause), cause},
+		{"EOF", io.EOF, nil},
+		{"wrapped EOF", fmt.Errorf("reader: %w", io.EOF), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			p := permission.NewReaderPrompter(iotest.ErrReader(tc.err), &out)
+			g := permission.New(permission.ModeAsk, p)
+			for i := 0; i < 2; i++ {
+				allowed, err := g.Authorize(context.Background(), execReq("go test"))
+				if allowed || !errors.Is(err, tc.want) {
+					t.Fatalf("prompt %d = %v, %v; want denied, %v", i, allowed, err, tc.want)
+				}
+				if tc.want != nil && strings.Contains(out.String(), "; denied") {
+					t.Fatalf("input failure reported as an ordinary denial: %s", out.String())
+				}
+			}
+		})
+	}
+}
+
 func TestReaderPrompter_CancelWhileWaiting(t *testing.T) {
+	t.Parallel()
 	// The pipe stays quiet until the answer is written, so the only way
 	// out of the first prompt is the context. The answer is written
 	// after that next prompt is already waiting: Prompt drops a line
@@ -155,14 +215,17 @@ func TestReaderPrompter_CancelWhileWaiting(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+		canceled := make(chan struct{})
 		go func() {
-			time.Sleep(time.Second)
-			cancel()
+			defer close(canceled)
+			d, err := p.Prompt(ctx, permission.Ask{Request: execReq("ls")})
+			if d != permission.Deny || !errors.Is(err, context.Canceled) {
+				t.Errorf("= %v, %v; want Deny, context.Canceled", d, err)
+			}
 		}()
-		d, err := p.Prompt(ctx, permission.Ask{Request: execReq("ls")})
-		if d != permission.Deny || !errors.Is(err, context.Canceled) {
-			t.Fatalf("= %v, %v; want Deny, context.Canceled", d, err)
-		}
+		synctest.Wait()
+		cancel()
+		<-canceled
 
 		// The same prompter is usable for the next question: the reader
 		// goroutine survived the cancel and picks up the next line.
@@ -189,7 +252,7 @@ func TestReaderPrompter_CancelWhileWaiting(t *testing.T) {
 		if err := pw.Close(); err != nil {
 			t.Fatal(err)
 		}
-		d, err = p.Prompt(context.Background(), permission.Ask{Request: execReq("ls")})
+		d, err := p.Prompt(context.Background(), permission.Ask{Request: execReq("ls")})
 		if d != permission.Deny || err != nil {
 			t.Fatalf("prompt after EOF = %v, %v; want Deny", d, err)
 		}

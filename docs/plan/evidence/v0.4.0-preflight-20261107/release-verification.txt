@@ -130,7 +130,7 @@ Actual tool response:
 {"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":116,"end_line":4,"file_id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","id":"s_8buX4Fc0lnO8kHoJnZtyKnxL_WFTwrJqOktH_c1AHVk","kind":"function","name":"LookupBeacon","signature":"func LookupBeacon(s string) string","start_byte":57,"start_line":4}],"files":[{"checked_at":"2026-11-08T00:35:07Z","freshness":"content_checked","id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","path_display":"alpha.go","source_version":"sha256:OYQMIRdZ1TbFjGjofvz6jz_qxQ4gEs2bLRGI6jWitbU"}],"generation":1,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_lXnEvgM9sznAKLn37gaBblFAP2LQwJnj1T0OhsIwGe0","scope":{"entry_id":"e_mllJnXFenmqlVbawGiOrinA5cbsufRK5gbvfEkc-hXU","path_display":"alpha.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":139,"files_checked":1}}
 Actual tool response:
      1	package alpha
-     2	
+     2
      3	func Shared() string { return "primary" }
      4	func LookupBeacon(s string) string { return "beacon:" + s }
      5	type Catalog struct{}
@@ -163,7 +163,7 @@ Actual tool response:
 {"coverage":{"discovery_complete":false},"entries":[{"enclosing":"alpha","end_byte":162,"end_line":5,"file_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","id":"s_C7QM5Iq4PVLH0ELEbFF8iMC_WStN8WKqD0LYksU_TcM","kind":"function","name":"Mutable","signature":"func Mutable(s string) string","start_byte":111,"start_line":5}],"files":[{"checked_at":"2026-11-08T00:37:49Z","freshness":"content_checked","id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go","source_version":"sha256:fZ60OMW-cOTl9UB9pk8IHNpSrJRrSnf-P3JRf6fKD6U"}],"generation":3,"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_I7EtdnG65wyi7PfedAabYUTk4MllAggsYxBx7QlvH_o","scope":{"entry_id":"e_0he9aSak4V2wzJpBJW0_-mr2F3YWfs30rJ30erlFOeM","path_display":"methods.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":163,"files_checked":1}}
 Actual tool response:
      1	package alpha
-     2	
+     2
      3	func (Catalog) Open() string { return "open" }
      4	func (Catalog) Close() string { return "close" }
      5	func Mutable(s string) string { return "new:" + s }
@@ -370,3 +370,110 @@ go vet ./...: pass.
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...: pass.
 golangci-lint v2.13.2 run ./...: 0 issues.
 go test -race ./internal/tui ./internal/repomap ./cmd/hint: pass.
+
+=== Pinned A3/A4 follow-up recovered during release closeout ===
+
+Recorded on 2026-11-08; reconciled on 2026-11-08.
+Source SHA: 73c11e6885f32bdfb655e181be24c7c3c4b5504f
+Executable SHA-256: b8567df6e7c77139054c4f12dbe58b19f3f8ae38db761f50d167b460289b3dc2
+Embedded vcs.revision matched the source; vcs.modified=false.
+Live model: hub / glm-5.3-flash-local.
+Historical local checks: gofmt, pinned lint, vet and full race suite passed.
+Historical remote CI: https://github.com/mrYush/hint/actions/runs/42432277867
+This intermediate run failed in MCP closed-pipe handling; it is not the final release CI.
+
+A3 live TUI command sequence:
+Prompt: Write 1200 words explaining Go slices and arrays.
+While the turn was active: /repos index; /repos index off.
+Expected: status visible; mutation refused; running turn preserved.
+Terminal excerpt (ANSI controls removed):
+hint: Index mode applies to all sessions in this Hint process.
+Index mode: auto (shared by all sessions)
+Background: paused; reason: inference_active
+Profile: experimental (manual opt-in; acceptance unmeasured)
+Telemetry: known=false; age=unknown
+Roots: 0; foreground requests: 0; inference requests: 1
+Limits: one worker, 32 directory entries/slice, 8 directory streams total and at
+Storage: 134217728 bytes total allowance including journals; approximately one t
+A3_BUSY_STATUS_VISIBLE
+/repos is not available right now
+A3_BUSY_MUTATION_REFUSED
+Original terminal SHA-256: 6adb3365db64620e5ffa52cfeb478dc43bc88556dc7ce8fb8374dc5b0cc891c6
+
+A4 fixture operations:
+Create a.go with Old000 through Old519; create z.go with Good and Last.
+Seed both scopes through the first prompt below, then replace a.go with its package declaration.
+A root query must return an empty incomplete page and then continue to Good and Last.
+For the retained z.go cursor, temporarily replace z.go with a self-referential symlink.
+After the retryable error, remove that symlink and restore the original z.go; retry the exact same cursor.
+Expected: retry succeeds and returns Last.
+The following are saved user prompts, actual tool calls and actual tool results, not reconstructed model answers.
+Fixture paths are redacted; expired fixture cursors are retained for comparison.
+Original session SHA-256: 7c21173be668c4aa57ce9745d59fb4c543199a6a200be865cbca99c76d704b69
+user: Make two actual repo_map calls, with {"path":"a.go","limit":1} and {"path":"z.go","limit":1}. Report the first symbol from each and retain the exact next_cursor for z.go for use later.
+tool call: repo_map {"limit": 1, "path": "a.go"}
+tool call: repo_map {"limit": 1, "path": "z.go"}
+tool: {"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":26,"end_line":2,"file_id":"e__9DuCgl5pGlF52DA-0ItQqBb2sAUvKOolDBTL-mmgzw","id":"s_zG6LCGDq_Xrw-UCyPrfYmDdho_pAdZOAIYSLGKQK-a4","kind":"function","name":"Old000","signature":"func Old000()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:58:16Z","freshness":"content_checked","id":"e__9DuCgl5pGlF52DA-0ItQqBb2sAUvKOolDBTL-mmgzw","path_display":"a.go","source_version":"sha256:aCU4qhCa15C4gY1a1-WuvQH3esmSaYI7egQNtEd7kbA"}],"generation":1,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:08:16Z","next_cursor":"LHVK7TM-pnYtOGxKISGNPMxuiwhg6v168PlAsj632Jg3YaP6QHWTgCGEixikCvmuAAAAAAAAAAG1vtfuRdLh-uN_fPPPTCbv","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_cVDSUIU-1kfx7JiBRxj3zAbHvbel0L-bzSly0zwI9gU","scope":{"entry_id":"e__9DuCgl5pGlF52DA-0ItQqBb2sAUvKOolDBTL-mmgzw","path_display":"a.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":8850,"files_checked":1}}
+tool: {"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":24,"end_line":2,"file_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","id":"s_vD3Ssq-74JmYvZfBX7855_4hAOZulrAyGx8Ex_fC96s","kind":"function","name":"Good","signature":"func Good()","start_byte":10,"start_line":2}],"files":[{"checked_at":"2026-11-08T00:58:16Z","freshness":"content_checked","id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","path_display":"z.go","source_version":"sha256:8vqqCjI0gsGqtrh-zRAs5BN-h4F95ue7ug6K_Dw83AM"}],"generation":2,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:08:16Z","next_cursor":"cIzv_APfB4kOu6LMCTS-Dbw90rKvu-CZmL2XwV-_Oef-IQDmbpawMhsfBMf3wverAAAAAAAAAALcIYNB55rfpebgtrVR-9xh","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_cVDSUIU-1kfx7JiBRxj3zAbHvbel0L-bzSly0zwI9gU","scope":{"entry_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","path_display":"z.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":40,"files_checked":1}}
+user: Call repo_map exactly with {}. Inspect the actual page. If it has no entries and query_complete is false, call repo_map again using only its exact next_cursor. Report both pages.
+tool call: repo_map {}
+tool: {"coverage":{"discovery_complete":false,"indexed_files":2,"known_files":2,"omitted_files":0,"pending_files":0},"entries":[],"files":[],"generation":2,"invalidations":{"source_changed":1},"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:08:21Z","next_cursor":"Kg2hZ6GF3-KlkXeby3tOI0rkTqVnpNGXVWPUOnb6YN4XW0WzXulPCeYIghYDWY1qAAAAAAAAAAFmvrxZ6H-L8SLU0iCCKbqP","query_complete":false,"stop_reason":"work_budget","truncated":true},"root_id":"r_cVDSUIU-1kfx7JiBRxj3zAbHvbel0L-bzSly0zwI9gU","scope":{"path_display":"."},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false}}
+tool call: repo_map {"cursor": "Kg2hZ6GF3-KlkXeby3tOI0rkTqVnpNGXVWPUOnb6YN4XW0WzXulPCeYIghYDWY1qAAAAAAAAAAFmvrxZ6H-L8SLU0iCCKbqP"}
+tool: {"coverage":{"discovery_complete":false,"indexed_files":2,"known_files":2,"omitted_files":0,"pending_files":0},"entries":[{"enclosing":"p","end_byte":24,"end_line":2,"file_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","id":"s_vD3Ssq-74JmYvZfBX7855_4hAOZulrAyGx8Ex_fC96s","kind":"function","name":"Good","signature":"func Good()","start_byte":10,"start_line":2},{"enclosing":"p","end_byte":39,"end_line":3,"file_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","id":"s_kB3MkN8nOYL40rF4QB26EATESixu9z8-6EcKNeM0LkE","kind":"function","name":"Last","signature":"func Last()","start_byte":25,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:58:23Z","freshness":"content_checked","id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","path_display":"z.go","source_version":"sha256:8vqqCjI0gsGqtrh-zRAs5BN-h4F95ue7ug6K_Dw83AM"}],"generation":2,"invalidations":{"source_changed":1},"membership_revision":1,"order":"path","page":{"query_complete":true,"truncated":false},"root_id":"r_cVDSUIU-1kfx7JiBRxj3zAbHvbel0L-bzSly0zwI9gU","scope":{"path_display":"."},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":40,"files_checked":1}}
+user: Make one real repo_map call using only the exact z.go cursor from the first turn, not the root-scope cursor. Report its error if any.
+tool call: repo_map {"cursor": "cIzv_APfB4kOu6LMCTS-Dbw90rKvu-CZmL2XwV-_Oef-IQDmbpawMhsfBMf3wverAAAAAAAAAALcIYNB55rfpebgtrVR-9xh"}
+tool: {"error":{"code":"index_unavailable","message":"tool: resolve \"<fixture>/z.go\": too many levels of symbolic links","retryable":true}}
+user: Retry that exact same z.go cursor unchanged. Report the actual next declaration.
+tool call: repo_map {"cursor": "cIzv_APfB4kOu6LMCTS-Dbw90rKvu-CZmL2XwV-_Oef-IQDmbpawMhsfBMf3wverAAAAAAAAAALcIYNB55rfpebgtrVR-9xh"}
+tool: {"coverage":{"discovery_complete":false},"entries":[{"enclosing":"p","end_byte":39,"end_line":3,"file_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","id":"s_kB3MkN8nOYL40rF4QB26EATESixu9z8-6EcKNeM0LkE","kind":"function","name":"Last","signature":"func Last()","start_byte":25,"start_line":3}],"files":[{"checked_at":"2026-11-08T00:58:37Z","freshness":"content_checked","id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","path_display":"z.go","source_version":"sha256:8vqqCjI0gsGqtrh-zRAs5BN-h4F95ue7ug6K_Dw83AM"}],"generation":2,"membership_revision":1,"order":"path","page":{"expires_at":"2026-11-08T01:08:16Z","next_cursor":"cIzv_APfB4kOu6LMCTS-DZAdzJDfJzmC-NKxeEAduhAExEosbvc_PuhHCjXjNC5BAAAAAAAAAAKweqjKppNLvkau_Yu7QisW","query_complete":false,"stop_reason":"limit","truncated":true},"root_id":"r_cVDSUIU-1kfx7JiBRxj3zAbHvbel0L-bzSly0zwI9gU","scope":{"entry_id":"e_ZVeQTo3N0Ad4LyHlsI7atzkcWsE_hCxCsJqz4aWId7c","path_display":"z.go"},"status":{"reason":"telemetry_unavailable","state":"paused"},"verification":{"budget_exhausted":false,"bytes_read":40,"files_checked":1}}
+
+=== Published release and synchronization verification ===
+
+Verified 2026-11-08 via the GitHub API and local Git objects.
+Tag: v0.4.0 (annotated tag object baf8125221479e11749a5f7068270844976b8fa5)
+Source SHA: 7d1f34783c42278a893f862b2422f7e00901e827
+Tree SHA: 21bc52e95ca04a980a1698a212c71a17407c28c6
+The systemPrompt function and TestSystemPrompt are identical between fa4d298 and the final tag.
+The final source retains the resource_profile_unvalidated auto-admission gate.
+The complete live manual suite was not repeated at the tag; F/R results keep their original provenance.
+
+CI: https://github.com/mrYush/hint/actions/runs/42471947871
+head_sha: 7d1f34783c42278a893f862b2422f7e00901e827
+event: push; attempt: 1; conclusion: success
+Jobs: Lint, Test and all six linux/darwin/windows amd64/arm64 builds succeeded.
+
+Release: https://github.com/mrYush/hint/actions/runs/42472203232
+head_sha: 7d1f34783c42278a893f862b2422f7e00901e827
+event: push; attempt: 2; conclusion: success
+Test before publishing, GoReleaser and Publish apt repository succeeded.
+Attempt 1 failed in TestIndependentProcessesInitializeMigrateAndWrite with SQLITE_BUSY and a per-operation deadline.
+Attempt 2 passed on unchanged source; the separate contention-test fix remains outside this tag.
+
+Published: https://github.com/mrYush/hint/releases/tag/v0.4.0
+published_at: 2026-11-08T10:46:01Z; draft: false; prerelease: false
+Assets:
+checksums.txt
+hint_0.4.0_darwin_amd64.tar.gz
+hint_0.4.0_darwin_arm64.tar.gz
+hint_0.4.0_linux_amd64.deb
+hint_0.4.0_linux_amd64.tar.gz
+hint_0.4.0_linux_arm64.deb
+hint_0.4.0_linux_arm64.tar.gz
+hint_0.4.0_windows_amd64.zip
+hint_0.4.0_windows_arm64.zip
+Package-manager installation/upgrade smoke: not measured in this closeout.
+
+Synchronization PR: https://github.com/mrYush/hint/pull/104
+Result commit: 54bd7fd9b48992d74c872d9047093de5b97ac842
+Tree SHA: 21bc52e95ca04a980a1698a212c71a17407c28c6 (matches release)
+Parents: [4a8645df20a9e19006775d1589f064fcd6443ae1]
+Content synchronized; main ancestry not preserved by this squash merge.
+PR #103 was closed without merging on 2026-11-08 as superseded by #104.
+
+B1 and B2: release timing waived by the owner on 2026-11-08.
+Reason: no qualifying pairs; stable and comparable Pi thermal conditions are required.
+Qualifying pairs: 0.
+Additional indexing RSS: null; median inference degradation: null.
+Isolated schema/interference effect: null; reviewed experimental seam unavailable.
+Pi cooling, power supply and ambient temperature: null.
+Auto: remains paused pending measurement, review and explicit owner approval.

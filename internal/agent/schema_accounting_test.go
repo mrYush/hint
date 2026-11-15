@@ -49,6 +49,7 @@ func (t *changingCatalogTool) Run(ctx context.Context, callID string, args json.
 }
 
 func TestRunTurnColdCatalogTriggersCompaction(t *testing.T) {
+	t.Parallel()
 	tool := &changingCatalogTool{description: strings.Repeat("x", 90), schema: json.RawMessage(`{}`)}
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{done(agentapi.FinishStop)}}}}
@@ -67,6 +68,7 @@ func TestRunTurnColdCatalogTriggersCompaction(t *testing.T) {
 }
 
 func TestRunTurnWarmCatalogAccounting(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name        string
 		before      int
@@ -119,6 +121,7 @@ func (c callbackCompactor) Compact(context.Context, []agentapi.Message) (string,
 }
 
 func TestRunTurnReactiveRetryPreservesCatalogSnapshot(t *testing.T) {
+	t.Parallel()
 	before := json.RawMessage(`{"type":"object","title":"before"}`)
 	tool := &changingCatalogTool{description: "original", schema: append(json.RawMessage(nil), before...)}
 	compactor := callbackCompactor{mutate: func() {

@@ -219,6 +219,8 @@ Silence denies.
 {"jsonrpc":"2.0","id":4,"method":"permission.reply","params":{"turn_id":"<id>","call_id":"<call>","decision":"allow"}}
 ```
 
+A client that cannot obtain an answer — its own prompt failed, say — sends `turn.cancel` instead of staying silent, so the turn ends with that failure at once rather than after the two-minute wait.
+
 `decision` is `allow`, `deny`, or `always`.
 `always` remembers the grant for the rest of that session only.
 It is offered only when the request carries `always`, a label of what would be remembered (`commands starting with "go test"`); the core decides that, the client only shows it.

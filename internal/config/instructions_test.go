@@ -9,6 +9,7 @@ import (
 // package scales the default to the model's window, never an explicit
 // value) and the opt-in summarize switch.
 func TestInstructions_ExplicitBudgetAndSummarize(t *testing.T) {
+	t.Parallel()
 	withKey := func(extra map[string]string) func(string) (string, bool) {
 		env := map[string]string{"OPENAI_API_KEY": "k"}
 		for k, v := range extra {
@@ -71,18 +72,14 @@ func TestInstructions_ExplicitBudgetAndSummarize(t *testing.T) {
 		opts := dirs(t)
 		opts.LookupEnv = withKey(map[string]string{"HINT_INSTRUCTIONS_SUMMARIZE": "true"})
 		writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), "instructions:\n  summarize: true\n")
-		opts.Flags.SummarizeInstructions = "false"
-		opts.Flags.InstructionBudget = "4096"
+		opts.Flags.SummarizeInstructions = boolPtr(false)
+		opts.Flags.InstructionBudget = intPtr(4096)
 		cfg, err := LoadFrom(opts)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if cfg.Instructions.Summarize || cfg.Instructions.Budget != 4096 || !cfg.Instructions.BudgetExplicit {
 			t.Errorf("Instructions = %+v", cfg.Instructions)
-		}
-		opts.Flags.SummarizeInstructions = "maybe"
-		if _, err := LoadFrom(opts); err == nil {
-			t.Error("a flag that is not a boolean must be an error")
 		}
 	})
 }

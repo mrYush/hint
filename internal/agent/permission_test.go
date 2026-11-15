@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/mrYush/hint/internal/agent"
+	"github.com/mrYush/hint/internal/permission"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -86,6 +89,7 @@ func toolRound(calls ...agentapi.ChatEvent) script {
 }
 
 func TestRunTurn_DeniedCallContinuesTurnWithoutRunning(t *testing.T) {
+	t.Parallel()
 	runs := 0
 	auth := &fakeAuthorizer{ask: map[string]bool{"write": true}, allow: false}
 	p := &fakeProvider{scripts: []script{
@@ -134,6 +138,7 @@ func TestRunTurn_DeniedCallContinuesTurnWithoutRunning(t *testing.T) {
 }
 
 func TestRunTurn_AllowedCallRunsAfterPrompt(t *testing.T) {
+	t.Parallel()
 	runs := 0
 	auth := &fakeAuthorizer{ask: map[string]bool{"write": true}, allow: true}
 	p := &fakeProvider{scripts: []script{
@@ -172,6 +177,7 @@ func kindsToStrings(k []agentapi.EventKind) []string {
 }
 
 func TestRunTurn_NoPromptMeansNoPermissionEvent(t *testing.T) {
+	t.Parallel()
 	runs := 0
 	auth := &fakeAuthorizer{ask: map[string]bool{}, allow: false}
 	p := &fakeProvider{scripts: []script{
@@ -194,6 +200,7 @@ func TestRunTurn_NoPromptMeansNoPermissionEvent(t *testing.T) {
 }
 
 func TestRunTurn_CancelAtPromptEndsCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runs := 0
@@ -234,25 +241,50 @@ func TestRunTurn_CancelAtPromptEndsCanceled(t *testing.T) {
 }
 
 func TestRunTurn_AuthorizerFailureAbortsTurn(t *testing.T) {
-	auth := &fakeAuthorizer{ask: map[string]bool{"write": true}, err: errors.New("prompt channel broke")}
-	runs := 0
-	p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "write", `{}`))}}
-	a := agent.New(p, agent.WithTools(writeTool{runs: &runs}), agent.WithAuthorizer(auth))
+	t.Parallel()
+	cause := errors.New("prompt channel broke")
+	for _, tc := range []struct {
+		name string
+		auth agent.Authorizer
+	}{
+		{"fake", &fakeAuthorizer{ask: map[string]bool{"write": true}, err: cause}},
+		{"gate", permission.New(permission.ModeAsk, failingPrompter{err: cause})},
+		{"reader gate", permission.New(permission.ModeAsk, permission.NewReaderPrompter(iotest.ErrReader(cause), io.Discard))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runs := 0
+			p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "write", `{}`))}}
+			a := agent.New(p, agent.WithTools(writeTool{runs: &runs}), agent.WithAuthorizer(tc.auth))
 
-	events := collect(t, a.RunTurn(context.Background(), question("q")))
+			events := collect(t, a.RunTurn(context.Background(), question("q")))
 
-	if end := lastEvent(events, agentapi.EventTurnEnd); end == nil || end.FinishReason != agentapi.FinishError {
-		t.Fatalf("turn_end = %+v, want FinishError", end)
-	}
-	if runs != 0 {
-		t.Fatal("tool ran without an answer")
-	}
-	if e := lastEvent(events, agentapi.EventError); e == nil || !strings.Contains(e.Err.Message, "prompt channel broke") {
-		t.Fatalf("error event = %+v", e)
+			if end := lastEvent(events, agentapi.EventTurnEnd); end == nil || end.FinishReason != agentapi.FinishError {
+				t.Fatalf("turn_end = %+v, want FinishError", end)
+			}
+			if runs != 0 {
+				t.Fatal("tool ran without an answer")
+			}
+			if e := lastEvent(events, agentapi.EventError); e == nil || !strings.Contains(e.Err.Message, "prompt channel broke") {
+				t.Fatalf("error event = %+v", e)
+			}
+			if countEvents(events, agentapi.EventToolStart) != 0 || countEvents(events, agentapi.EventToolEnd) != 0 {
+				t.Fatal("failed prompt started a tool or reported an ordinary denial")
+			}
+			if len(p.calls) != 1 {
+				t.Fatalf("provider called %d times after prompt failure, want 1", len(p.calls))
+			}
+		})
 	}
 }
 
+type failingPrompter struct{ err error }
+
+func (p failingPrompter) Prompt(context.Context, permission.Ask) (permission.Decision, error) {
+	return permission.AllowAlways, p.err
+}
+
 func TestRunTurn_ToolPassingThroughCancelEndsCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p := &fakeProvider{scripts: []script{
@@ -278,6 +310,7 @@ func TestRunTurn_ToolPassingThroughCancelEndsCanceled(t *testing.T) {
 const millisecond = time.Millisecond
 
 func TestRunTurn_ToolPassingThroughDeadlineEndsCanceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*millisecond)
 	defer cancel()
 	p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "passthrough", `{}`))}}
@@ -291,6 +324,7 @@ func TestRunTurn_ToolPassingThroughDeadlineEndsCanceled(t *testing.T) {
 }
 
 func TestRunTurn_MachineryErrorKeepsItsKind(t *testing.T) {
+	t.Parallel()
 	p := &fakeProvider{scripts: []script{toolRound(toolCallEvent("c1", "kind", `{}`))}}
 	a := agent.New(p, agent.WithTools(kindTool{kind: agentapi.ErrUnavailable}))
 

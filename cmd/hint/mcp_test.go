@@ -19,6 +19,7 @@ import (
 )
 
 func TestMCPServersConversion(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{MCPServers: []config.MCPServer{{
 		Name:           "files",
 		Transport:      config.MCPTransportStdio,
@@ -68,6 +69,7 @@ func (registryTestTool) Run(context.Context, string, json.RawMessage) (agentapi.
 }
 
 func TestToolRegistryIncludesMCPTools(t *testing.T) {
+	t.Parallel()
 	root, err := tool.NewRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +87,7 @@ func TestToolRegistryIncludesMCPTools(t *testing.T) {
 }
 
 func TestEngineMCPStartsOnFirstTurn(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "ok" }}
 	as, _, _, _ := testAssembly(t, chat, "")
 	server := newMCPTestServer(t)
@@ -182,6 +185,7 @@ func connectMCPTestClient(ctx context.Context, server *sdk.Server) (*sdk.ClientS
 }
 
 func TestMCPToolNameCollision(t *testing.T) {
+	t.Parallel()
 	root, err := tool.NewRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -199,6 +203,7 @@ func TestMCPToolNameCollision(t *testing.T) {
 }
 
 func TestPrintMCPList(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	err := printMCPList(&out, []mcp.ServerInfo{
 		{Name: "files", Transport: mcp.TransportStdio, Permission: agentapi.ClassRead, Enabled: true},
@@ -215,6 +220,7 @@ func TestPrintMCPList(t *testing.T) {
 }
 
 func TestPrintMCPStatus(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	err := printMCPStatus(&out, []mcp.ServerStatus{
 		{Name: "files", Transport: mcp.TransportStdio, Permission: agentapi.ClassRead, State: mcp.StateRunning, Protocol: "2026-07-28", ServerName: "fs", Tools: 14, Bytes: 8647, Health: "ping"},
@@ -231,6 +237,7 @@ func TestPrintMCPStatus(t *testing.T) {
 }
 
 func TestEnableMCPServer(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	store := mcp.NewConsentStore(filepath.Join(t.TempDir(), "mcp-consent.json"))
 	srv := mcp.ServerConfig{Name: "proj", Transport: mcp.TransportStdio, Command: "npx", Permission: agentapi.ClassExecute, Project: true}
@@ -261,6 +268,7 @@ func TestEnableMCPServer(t *testing.T) {
 }
 
 func TestMCPListCommand(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home := t.TempDir()
 	xdg := filepath.Join(home, "xdg")
 	t.Setenv("HOME", home)

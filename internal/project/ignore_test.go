@@ -12,6 +12,7 @@ import (
 )
 
 func TestBasic(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		rel   string
 		isDir bool
@@ -46,6 +47,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestRules_NoGit(t *testing.T) {
+	t.Parallel()
 	ig, err := project.NewRules("").Ignorer(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +58,7 @@ func TestRules_NoGit(t *testing.T) {
 }
 
 func TestRules_OutsideRepository(t *testing.T) {
+	t.Parallel()
 	git := gitPath(t)
 	dir := t.TempDir()
 	ig, err := project.NewRules(git).Ignorer(context.Background(), dir)
@@ -68,6 +71,7 @@ func TestRules_OutsideRepository(t *testing.T) {
 }
 
 func TestRules_Gitignore(t *testing.T) {
+	t.Parallel()
 	git := gitPath(t)
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
@@ -131,6 +135,7 @@ func TestRules_Gitignore(t *testing.T) {
 }
 
 func TestRules_Submodule(t *testing.T) {
+	t.Parallel()
 	git := gitPath(t)
 	dir := t.TempDir()
 	// A gitlink shows up in ls-files as one entry at the mount point; its
@@ -153,6 +158,7 @@ func TestRules_Submodule(t *testing.T) {
 }
 
 func TestRulesTrackedFileUnderIgnoredDirectory(t *testing.T) {
+	t.Parallel()
 	git := gitPath(t)
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{"build/kept.go": "package kept", "build/ignored.go": "package ignored", "odd\nname.go": "package odd"})
@@ -174,6 +180,7 @@ func TestRulesTrackedFileUnderIgnoredDirectory(t *testing.T) {
 }
 
 func TestRulesNeverRunRepositoryFSMonitorHook(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture hook uses a POSIX shell")
 	}

@@ -15,6 +15,7 @@ import (
 )
 
 func TestFrontierTerminalAndRetryOutcomes(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"denied", "unreadable", "nested", "offline"} {
 		t.Run(mode, func(t *testing.T) {
 			root, err := tool.NewRoot(t.TempDir())

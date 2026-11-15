@@ -13,6 +13,7 @@ import (
 )
 
 func TestLineReader_ReadsLinesAndThenEOF(t *testing.T) {
+	t.Parallel()
 	r := console.NewLineReader(strings.NewReader("one\r\ntwo\nthree"))
 	ctx := context.Background()
 
@@ -31,57 +32,91 @@ func TestLineReader_ReadsLinesAndThenEOF(t *testing.T) {
 }
 
 func TestLineReader_CancelLeavesReaderUsable(t *testing.T) {
-	pr, pw := io.Pipe()
-	defer func() { _ = pw.Close() }()
-	r := console.NewLineReader(pr)
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		r := console.NewLineReader(pr)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(20 * time.Millisecond)
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		canceled := make(chan error, 1)
+		go func() {
+			_, err := r.ReadLine(ctx)
+			canceled <- err
+		}()
+		synctest.Wait()
 		cancel()
-	}()
-	if _, err := r.ReadLine(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("ReadLine on a silent pipe = %v, want context.Canceled", err)
-	}
+		if err := <-canceled; !errors.Is(err, context.Canceled) {
+			t.Fatalf("ReadLine on a silent pipe = %v, want context.Canceled", err)
+		}
 
-	go func() { _, _ = io.WriteString(pw, "later\n") }()
-	got, err := r.ReadLine(context.Background())
-	if err != nil || got != "later" {
-		t.Fatalf("ReadLine after cancel = %q, %v; want %q", got, err, "later")
-	}
+		go func() {
+			_, _ = io.WriteString(pw, "later\n")
+			_ = pw.Close()
+		}()
+		requireLine(t, r, pw, "later")
+	})
 }
 
 func TestLineReader_DiscardPending(t *testing.T) {
-	pr, pw := io.Pipe()
-	defer func() { _ = pw.Close() }()
-	r := console.NewLineReader(pr)
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		r := console.NewLineReader(pr)
 
-	// A line typed while nobody was asking.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, _ = r.ReadLine(ctx) // starts the goroutine, returns at once
-	go func() { _, _ = io.WriteString(pw, "stray\n") }()
-	time.Sleep(50 * time.Millisecond)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if _, err := r.ReadLine(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("ReadLine = %v, want context.Canceled", err)
+		}
+		if _, err := io.WriteString(pw, "stray\n"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait() // The reader is blocked offering the stray line.
+		r.DiscardPending()
 
-	r.DiscardPending()
+		go func() {
+			_, _ = io.WriteString(pw, "real\n")
+			_ = pw.Close()
+		}()
+		requireLine(t, r, pw, "real")
+	})
+}
 
-	answered := make(chan string, 1)
-	go func() {
-		got, _ := r.ReadLine(context.Background())
-		answered <- got
+func requireLine(t *testing.T, r *console.LineReader, input *io.PipeWriter, want string) {
+	t.Helper()
+	// Close input and drain independently of a failed assertion. The reader
+	// must deliver its terminal error before the synctest bubble can exit.
+	defer func() {
+		_ = input.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		for {
+			_, err := r.ReadLine(ctx)
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if err != nil {
+				t.Errorf("draining input: %v", err)
+				return
+			}
+		}
 	}()
-	select {
-	case got := <-answered:
-		t.Fatalf("stray line %q was handed out as an answer", got)
-	case <-time.After(50 * time.Millisecond):
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	got, err := r.ReadLine(ctx)
+	if err != nil || got != want {
+		t.Fatalf("ReadLine = %q, %v; want %q", got, err, want)
 	}
-	_, _ = io.WriteString(pw, "real\n")
-	if got := <-answered; got != "real" {
-		t.Fatalf("ReadLine = %q, want the fresh line", got)
+	if got, err := r.ReadLine(ctx); !errors.Is(err, io.EOF) {
+		t.Fatalf("ReadLine after the answer = %q, %v; want EOF", got, err)
 	}
 }
 
 func TestLineReader_DiscardPendingObservesEOF(t *testing.T) {
+	t.Parallel()
 	// The bubble waits until the reader goroutine is blocked offering EOF,
 	// so the test does not depend on a sleep. Dropping that error deadlocks
 	// the bubble: the goroutine has exited and ReadLine would wait forever.
@@ -105,6 +140,7 @@ func TestLineReader_DiscardPendingObservesEOF(t *testing.T) {
 // already sitting in the stream is the next answer. DiscardPending must
 // not start the reader and take it.
 func TestLineReader_DiscardPendingLeavesBufferedAnswer(t *testing.T) {
+	t.Parallel()
 	r := console.NewLineReader(strings.NewReader("2\n"))
 	r.DiscardPending()
 	got, err := r.ReadLine(context.Background())

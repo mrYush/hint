@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
+	"testing/synctest"
 	"time"
 
 	"github.com/mrYush/hint/internal/config"
@@ -30,6 +32,7 @@ import (
 	"github.com/mrYush/hint/internal/provider"
 	"github.com/mrYush/hint/internal/rpc"
 	"github.com/mrYush/hint/internal/session"
+	"github.com/mrYush/hint/internal/shell"
 	"github.com/mrYush/hint/internal/tool"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
@@ -41,6 +44,7 @@ import (
 // plus TestRunMode below, since there is no way to build the agent in
 // app.go without it.
 func TestToolRegistry_AllBehindPermissions(t *testing.T) {
+	t.Parallel()
 	root, err := tool.NewRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +68,7 @@ func TestToolRegistry_AllBehindPermissions(t *testing.T) {
 }
 
 func TestRunMode(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		ask, autoEdit, yolo bool
 		want                permission.Mode
@@ -81,6 +86,7 @@ func TestRunMode(t *testing.T) {
 }
 
 func TestWarnMode(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	warnMode(&out, permission.ModeYolo, false)
 	if !bytes.Contains(out.Bytes(), []byte("WARNING")) || !bytes.Contains(out.Bytes(), []byte("--yolo")) {
@@ -107,6 +113,7 @@ func TestWarnMode(t *testing.T) {
 }
 
 func TestSessionModeOf(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		cont, resume, off bool
 		id                string
@@ -130,6 +137,7 @@ func TestSessionModeOf(t *testing.T) {
 // nothing at all is the REPL — only with a terminal, and never with a
 // JSON output that has no one answer to print.
 func TestDispatch(t *testing.T) {
+	t.Parallel()
 	// A regular file stands in for a non-terminal stdin (/dev/null would
 	// not do: it is a character device, exactly like a tty).
 	f, err := os.CreateTemp(t.TempDir(), "stdin")
@@ -193,12 +201,13 @@ func testClient(t *testing.T, as assembly) *rpc.Client {
 // (or starting one when there is none), -r reading the choice through the
 // shared line reader, and --session naming one.
 func TestOpenSession(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
 	cl := testClient(t, as)
 	ctx := context.Background()
 	noInput := console.NewLineReader(strings.NewReader(""))
 
-	view, recorded, err := openSession(ctx, cl, sessionOff, "", noInput, io.Discard)
+	view, recorded, err := openSession(ctx, cl, sessionOff, "", noInput, io.Discard, time.Now)
 	if err != nil || recorded || view.ID == "" {
 		t.Fatalf("sessionOff = %+v, %v, %v; want an unrecorded session with an id", view, recorded, err)
 	}
@@ -207,12 +216,12 @@ func TestOpenSession(t *testing.T) {
 	}
 
 	// --session in an empty directory is refused, not silently replaced.
-	if _, _, err := openSession(ctx, cl, sessionByID, "abc", noInput, io.Discard); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
+	if _, _, err := openSession(ctx, cl, sessionByID, "abc", noInput, io.Discard, time.Now); err == nil || !strings.Contains(err.Error(), "no recorded sessions") {
 		t.Fatalf("--session with nothing recorded: %v", err)
 	}
 
 	var stderr bytes.Buffer
-	if _, recorded, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr); err != nil || !recorded {
+	if _, recorded, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr, time.Now); err != nil || !recorded {
 		t.Fatalf("continue with nothing to continue: %v, %v", recorded, err)
 	}
 	if !strings.Contains(stderr.String(), "starting a new one") {
@@ -251,7 +260,7 @@ func TestOpenSession(t *testing.T) {
 	}
 
 	stderr.Reset()
-	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr)
+	cont, _, err := openSession(ctx, cl, sessionContinue, "", noInput, &stderr, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +273,7 @@ func TestOpenSession(t *testing.T) {
 
 	// -r: the second listed entry is the older, untouched session.
 	stderr.Reset()
-	picked, _, err := openSession(ctx, cl, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr)
+	picked, _, err := openSession(ctx, cl, sessionResume, "", console.NewLineReader(strings.NewReader("2\n")), &stderr, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,32 +283,33 @@ func TestOpenSession(t *testing.T) {
 
 	// --session: the full id, or an unambiguous prefix of it.
 	stderr.Reset()
-	named, _, err := openSession(ctx, cl, sessionByID, second.ID()[:6], noInput, &stderr)
+	named, _, err := openSession(ctx, cl, sessionByID, second.ID()[:6], noInput, &stderr, time.Now)
 	if err != nil || named.ID != second.ID() {
 		t.Fatalf("--session %s: %v, %v", second.ID()[:6], named.ID, err)
 	}
 	if !strings.Contains(stderr.String(), "continuing session "+second.ID()) {
 		t.Errorf("no notice:\n%s", stderr.String())
 	}
-	_, _, err = openSession(ctx, cl, sessionByID, "no-such-id", noInput, io.Discard)
+	_, _, err = openSession(ctx, cl, sessionByID, "no-such-id", noInput, io.Discard, time.Now)
 	var rpcErr *rpc.Error
 	if !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotFound || !strings.Contains(err.Error(), "no-such-id") {
 		t.Errorf("--session with an unknown id: %v", err)
 	}
 
 	// -r with nobody answering is a refusal, not a silent new session.
-	if _, _, err := openSession(ctx, cl, sessionResume, "", noInput, io.Discard); !errors.Is(err, session.ErrNoChoice) {
+	if _, _, err := openSession(ctx, cl, sessionResume, "", noInput, io.Discard, time.Now); !errors.Is(err, session.ErrNoChoice) {
 		t.Fatalf("resume without an answer = %v, want ErrNoChoice", err)
 	}
 
 	// -r in a directory with no sessions starts a new one, like -c.
 	fresh, _, _, _ := testAssembly(t, &fakeChat{}, "")
-	if view, recorded, err := openSession(ctx, testClient(t, fresh), sessionResume, "", noInput, io.Discard); err != nil || !recorded || view.ID == "" {
+	if view, recorded, err := openSession(ctx, testClient(t, fresh), sessionResume, "", noInput, io.Discard, time.Now); err != nil || !recorded || view.ID == "" {
 		t.Fatalf("resume with nothing to resume = %+v, %v, %v", view, recorded, err)
 	}
 }
 
 func TestSystemPrompt(t *testing.T) {
+	t.Parallel()
 	pc := &project.Context{
 		Dir:      "/w/app/sub",
 		GitRoot:  "/w/app",
@@ -431,7 +441,7 @@ func testAssembly(t *testing.T, chat agentapi.ChatProvider, stdin string) (assem
 	as := assembly{
 		chat:    chat,
 		cfg:     cfg,
-		opts:    options{mode: permission.ModeAsk, session: sessionOff, output: outputText},
+		opts:    options{env: environment{now: time.Now}, mode: permission.ModeAsk, session: sessionOff, output: outputText},
 		cwd:     t.TempDir(),
 		store:   session.NewStore(filepath.Join(t.TempDir(), "sessions")),
 		notices: &stderr,
@@ -455,6 +465,7 @@ func sessionsOf(t *testing.T, as assembly) []session.Info {
 }
 
 func TestOneShotText(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "the answer" }}
 	as, sio, out, stderr := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
@@ -489,6 +500,7 @@ func TestOneShotText(t *testing.T) {
 }
 
 func TestOneShotJSON(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "42" }}
 	as, sio, out, _ := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
@@ -541,6 +553,7 @@ func TestOneShotJSON(t *testing.T) {
 // watches: at the prompt it prints how to leave, during an answer it
 // cancels that turn and the loop goes on.
 func TestREPL(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(n int) string { return strings.Repeat("a", n) }}
 	as, sio, out, stderr := testAssembly(t, chat, "/help\n/bogus x\n\nfirst\nsecond\n/exit\nnever sent\n")
 	as.opts.session = sessionNew
@@ -590,51 +603,61 @@ func TestREPL(t *testing.T) {
 }
 
 func TestREPLInterrupt(t *testing.T) {
+	t.Parallel()
 	// Ctrl-C during an answer: the provider hangs until cancelled, the
 	// turn reports "interrupted", and the next line is still read.
 	hanging := &fakeChat{hang: true}
-	pr, pw := io.Pipe()
 	as, sio, out, stderr := testAssembly(t, hanging, "")
-	sio.in = pr
-	a, err := assemble(context.Background(), as, sio)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sigs := make(chan os.Signal, 1)
-	done := make(chan error, 1)
-	go func() { done <- a.repl(context.Background(), sigs) }()
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		sio.in = pr
+		a, err := assemble(t.Context(), as, sio)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer a.close()
 
-	go func() {
-		_, _ = io.WriteString(pw, "slow question\n")
-		// Wait until the turn is under way — the provider has been asked.
-		for len(hanging.seen()) == 0 {
-			time.Sleep(5 * time.Millisecond)
+		sigs := make(chan os.Signal, 1)
+		done := make(chan error, 1)
+		go func() { done <- a.repl(t.Context(), sigs) }()
+		if _, err := io.WriteString(pw, "slow question\n"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if got := len(hanging.seen()); got != 1 {
+			t.Errorf("provider saw %d requests before interrupt, want 1", got)
 		}
 		sigs <- os.Interrupt
-		// Ctrl-C at the prompt is a hint, not an exit.
-		time.Sleep(20 * time.Millisecond)
-		sigs <- os.Interrupt
-		time.Sleep(20 * time.Millisecond)
-		_, _ = io.WriteString(pw, "/quit\n")
-	}()
 
-	select {
-	case err := <-done:
-		if err != nil {
+		// Wait until the canceled turn has returned to the next prompt.
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "hint: interrupted") {
+			t.Errorf("stderr did not report the interrupted turn:\n%s", stderr)
+		}
+		sigs <- os.Interrupt
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Ctrl-D or type /exit") {
+			t.Errorf("stderr did not report how to exit:\n%s", stderr)
+		}
+
+		if _, err := io.WriteString(pw, "/quit\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
 			t.Fatalf("repl: %v", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("repl did not return")
-	}
-	_ = pw.Close()
-	if out.Len() != 0 {
-		t.Errorf("stdout = %q, want nothing from a cancelled turn", out.String())
-	}
-	for _, want := range []string{"hint: interrupted", "Ctrl-D or type /exit"} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Errorf("stderr lacks %q:\n%s", want, stderr.String())
+		if out.Len() != 0 {
+			t.Errorf("stdout = %q, want nothing from a cancelled turn", out.String())
 		}
-	}
+
+		if err := pw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.lines.ReadLine(t.Context()); !errors.Is(err, io.EOF) {
+			t.Fatalf("input after /quit = %v, want EOF", err)
+		}
+	})
 }
 
 // TestTrace checks the --debug log end to end: the profile, the system
@@ -642,6 +665,7 @@ func TestREPLInterrupt(t *testing.T) {
 // not — even though the profile line would print it if String() did not
 // mask it and the writer did not redact it.
 func TestTrace(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "traced" }}
 	as, sio, _, stderr := testAssembly(t, chat, "")
 	trace, err := debuglog.Open(filepath.Join(t.TempDir(), "log"), time.Now(), as.cfg.Secrets())
@@ -678,6 +702,7 @@ func TestTrace(t *testing.T) {
 }
 
 func TestPrintModelsAndHumanSize(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	err := printModels(&out, []provider.Model{
 		{Name: "qwen2.5:7b", SizeBytes: 4_700_000_000, Modified: time.Date(2026, 8, 1, 12, 0, 0, 0, time.Local)},
@@ -699,6 +724,7 @@ func TestPrintModelsAndHumanSize(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	cwd := t.TempDir()
 	var out, stderr bytes.Buffer
@@ -742,6 +768,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestVersionFlag(t *testing.T) {
+	t.Parallel()
 	root := newRootCommand()
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -755,6 +782,7 @@ func TestVersionFlag(t *testing.T) {
 }
 
 func TestFormatVersion(t *testing.T) {
+	t.Parallel()
 	// ldflags win; build info fills in only what the build left blank.
 	info := &debug.BuildInfo{
 		Main: debug.Module{Version: "v0.2.0"},
@@ -785,6 +813,7 @@ func TestFormatVersion(t *testing.T) {
 // answer typed on stdin goes back as permission.reply. A denial never
 // starts the tool; an allowance runs it.
 func TestPermissionOverRPC(t *testing.T) {
+	t.Parallel()
 	bash := func(command string) func(int) *agentapi.ToolCall {
 		return func(n int) *agentapi.ToolCall {
 			if n != 1 {
@@ -836,10 +865,75 @@ func TestPermissionOverRPC(t *testing.T) {
 	}
 }
 
+// TestPermissionPromptFailureCancelsTurn is the end-to-end half of the
+// prompt-failure fix: the question crosses RPC to termSink, whose line
+// reader fails, and shell.RunTurn must cancel the turn at once instead of
+// leaving the core to wait out DefaultPermissionWait and then report an
+// ordinary denial.
+func TestPermissionPromptFailureCancelsTurn(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("stdin read failed")
+	chat := &fakeChat{
+		reply: func(int) string { return "the second answer" },
+		call: func(n int) *agentapi.ToolCall {
+			if n != 1 {
+				return nil
+			}
+			return &agentapi.ToolCall{
+				ID:        "call-1",
+				Name:      "bash",
+				Arguments: json.RawMessage(`{"command":"echo ok"}`),
+			}
+		},
+	}
+	as, sio, _, stderr := testAssembly(t, chat, "")
+	a, err := assemble(context.Background(), as, sio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.close()
+
+	sink := termSink{err: stderr, prompter: permission.NewReaderPrompter(iotest.ErrReader(cause), stderr)}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := shell.RunTurn(ctx, a.client, a.sessionID, "run the tests", sink)
+
+	if !errors.Is(err, cause) {
+		t.Fatalf("RunTurn = %v; want the reader failure, not a cancel or an ordinary denial", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("RunTurn only returned after the context ended: %v; it must not wait for DefaultPermissionWait", ctx.Err())
+	}
+	if res.Finish != agentapi.FinishError || !errors.Is(res.Err, cause) {
+		t.Fatalf("result = %+v; want FinishError carrying the reader failure", res)
+	}
+	if strings.Contains(stderr.String(), "hint: bash") {
+		t.Fatalf("a call ran after its permission prompt failed:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "denied") {
+		t.Fatalf("a prompt failure was reported as an ordinary denial:\n%s", stderr.String())
+	}
+	if reqs := chat.seen(); len(reqs) != 1 {
+		t.Fatalf("provider called %d times; a cancelled turn must not continue", len(reqs))
+	}
+
+	// The turn was cancelled, so the session is free to take the next
+	// one instead of still waiting on the permission question.
+	next, err := shell.RunTurn(context.Background(), a.client, a.sessionID, "continue",
+		termSink{err: stderr, prompter: permission.NewReaderPrompter(strings.NewReader(""), io.Discard)})
+	if err != nil {
+		t.Fatalf("turn after the cancelled one: %v", err)
+	}
+	if next.Answer != "the second answer" {
+		t.Errorf("next answer = %q", next.Answer)
+	}
+}
+
 // TestSecondServeKeepsTheFirstToken: a `hint serve` that cannot listen
 // — another one has the address — must leave the running one's token
 // and endpoint alone, or every client is refused until it restarts.
 func TestSecondServeKeepsTheFirstToken(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	lis, token, err := publish(dir, "tcp:127.0.0.1:0", io.Discard)
 	if err != nil {
@@ -865,6 +959,7 @@ func TestSecondServeKeepsTheFirstToken(t *testing.T) {
 // recorded session; the second names the address and continues that
 // session with -c. Then the refusals: a wrong token, no token, no server.
 func TestConnect(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	// connect() resolves the runtime directory from the environment, as
 	// `hint serve` does; pointing both at a temp dir keeps the test off
 	// the user's own socket and token.
@@ -899,6 +994,7 @@ func TestConnect(t *testing.T) {
 	shell := func(target string, smode sessionMode) (*app, *bytes.Buffer, *bytes.Buffer, error) {
 		var out, stderr bytes.Buffer
 		opts := as.opts
+		opts.env = environment{lookupEnv: os.LookupEnv, now: time.Now}
 		opts.connect = target
 		opts.session = smode
 		a, err := connect(ctx, opts, stdio{in: strings.NewReader(""), out: &out, err: &stderr, tty: true})
@@ -981,6 +1077,7 @@ func TestConnect(t *testing.T) {
 // what each shell file of cmd/hint imports — cmd/hint itself cannot be a
 // root, since its engine wiring lives in the same package.
 func TestShellNeverImportsTheAgent(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("needs the go command to read the package graph")
 	}

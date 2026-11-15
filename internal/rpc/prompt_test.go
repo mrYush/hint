@@ -12,6 +12,7 @@ import (
 )
 
 func TestClientPromptOperations(t *testing.T) {
+	t.Parallel()
 	client, engine := dialFake(t, &Server{})
 	engine.prompts = []PromptInfo{{
 		Server: "docs", Name: "review", Description: "Review a file.",
@@ -49,6 +50,7 @@ func TestClientPromptOperations(t *testing.T) {
 // and prompt.complete run beside the connection loop: a permission
 // answer still gets through while the MCP call is waiting.
 func TestPromptRequestsDoNotBlockTheTurn(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{"list", "get", "complete"} {
 		t.Run(method, func(t *testing.T) {
 			c, engine := dialFake(t, &Server{PermissionWait: 5 * time.Second})
@@ -103,6 +105,7 @@ func TestPromptRequestsDoNotBlockTheTurn(t *testing.T) {
 }
 
 func TestClientPromptErrors(t *testing.T) {
+	t.Parallel()
 	client, _ := dialFake(t, &Server{})
 	ctx := context.Background()
 	tests := []struct {

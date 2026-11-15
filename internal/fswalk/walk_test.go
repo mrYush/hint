@@ -57,6 +57,7 @@ func (f fakeInfo) IsDir() bool      { return f.dir }
 func (fakeInfo) Sys() any           { return nil }
 
 func TestInfiniteWidthUsesOneBoundedBatch(t *testing.T) {
+	t.Parallel()
 	filesystem := &wideFS{}
 	visited := 0
 	err := WalkDir(filesystem, ".", Limits{}, func(name string, _ fs.DirEntry, err error) error {
@@ -80,6 +81,7 @@ func TestInfiniteWidthUsesOneBoundedBatch(t *testing.T) {
 }
 
 func TestIgnoredEntriesStillConsumeWorkBudget(t *testing.T) {
+	t.Parallel()
 	filesystem := &wideFS{}
 	err := WalkDir(filesystem, ".", Limits{MaxEntries: 50}, func(string, fs.DirEntry, error) error { return nil })
 	if !errors.Is(err, ErrLimit) || filesystem.read != 64 {
@@ -115,6 +117,7 @@ func (d *failingDir) ReadDir(int) ([]fs.DirEntry, error) {
 }
 
 func TestErrorCallbacksHonorSkipControls(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []string{"stat", "open", "read"} {
 		for _, skip := range []error{fs.SkipDir, fs.SkipAll} {
 			t.Run(phase+"/"+skip.Error(), func(t *testing.T) {
@@ -165,6 +168,7 @@ func (d *lifecycleDir) ReadDir(int) ([]fs.DirEntry, error) {
 }
 
 func TestBeforeBatchSkipsEmptyEOF(t *testing.T) {
+	t.Parallel()
 	for _, count := range []int{0, 1, 32} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			filesystem := &lifecycleFS{}
@@ -191,6 +195,7 @@ func TestBeforeBatchSkipsEmptyEOF(t *testing.T) {
 }
 
 func TestSkipAllPreservesCloseFailure(t *testing.T) {
+	t.Parallel()
 	closeErr := errors.New("close failure")
 	callbackErr := errors.New("visit failure")
 	for _, visitErr := range []error{fs.SkipAll, callbackErr} {

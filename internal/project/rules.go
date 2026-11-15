@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +48,9 @@ type Rule struct {
 	// Paths are the globs the rule applies to, relative to Root, in the
 	// syntax of the glob tool. Empty means the rule applies always.
 	Paths []string
+
+	compiledPaths []string
+	matchers      []*glob.Matcher
 }
 
 // Conditional reports a rule that waits for a matching path.
@@ -61,13 +65,27 @@ func (r Rule) Matches(abs string) bool {
 		return false
 	}
 	rel = filepath.ToSlash(rel)
-	for _, p := range r.Paths {
-		m, err := glob.Compile(p)
-		if err == nil && m.Match(rel) {
+	if !slices.Equal(r.Paths, r.compiledPaths) {
+		r = r.compilePaths()
+	}
+	for _, matcher := range r.matchers {
+		if matcher.Match(rel) {
 			return true
 		}
 	}
 	return false
+}
+
+// compilePaths also supports Rules constructed directly with Paths.
+func (r Rule) compilePaths() Rule {
+	r.compiledPaths = slices.Clone(r.Paths)
+	r.matchers = nil
+	for _, pattern := range r.Paths {
+		if matcher, err := glob.Compile(pattern); err == nil {
+			r.matchers = append(r.matchers, matcher)
+		}
+	}
+	return r
 }
 
 // ruleHeader is the front matter a rule file may carry. Cursor's `globs`
@@ -149,10 +167,8 @@ func DiscoverRules(dirs []string) ([]Rule, []string) {
 					return rules, append(warnings, "rule discovery stopped at 128 documents")
 				}
 				p := filepath.Join(dir, sub, name)
-				r, warn := readRule(p, dir)
-				if warn != "" {
-					warnings = append(warnings, warn)
-				}
+				r, ruleWarnings := readRule(p, dir)
+				warnings = append(warnings, ruleWarnings...)
 				rules = append(rules, r)
 			}
 		}
@@ -188,28 +204,30 @@ func boundedRuleNames(dir string) (names []string, more bool, resultErr error) {
 }
 
 // readRule builds the Rule for the file at p under root.
-func readRule(p, root string) (Rule, string) {
+func readRule(p, root string) (Rule, []string) {
 	data, more, err := readBounded(p, 64<<10)
 	if err != nil {
-		return Rule{Path: p, Root: root}, fmt.Sprintf("%s: %v", p, err)
+		return Rule{Path: p, Root: root}, []string{fmt.Sprintf("%s: %v", p, err)}
 	}
-	rule, warning := ParseRule(p, root, data)
+	rule, warnings := ParseRule(p, root, data)
 	if more {
 		rule.Paths = nil
-		warning = fmt.Sprintf("%s: rule metadata exceeds 64 KiB; loaded unconditionally", p)
+		rule.compiledPaths = nil
+		rule.matchers = nil
+		warnings = append(warnings, fmt.Sprintf("%s: rule metadata exceeds 64 KiB; loaded unconditionally", p))
 	}
-	return rule, warning
+	return rule, warnings
 }
 
 // ParseRule parses already-authorized content using the normal rule semantics.
-func ParseRule(p, root, content string) (Rule, string) {
+func ParseRule(p, root, content string) (Rule, []string) {
 	r := Rule{Path: p, Root: root}
 	header, body, ok := splitFrontMatter(content)
 	var h ruleHeader
-	var warn string
+	var warnings []string
 	if ok {
 		if err := yaml.Unmarshal([]byte(quoteBareGlobs(header)), &h); err != nil {
-			warn = fmt.Sprintf("%s: front matter not read (%v); the rule is loaded always", p, err)
+			warnings = append(warnings, fmt.Sprintf("%s: front matter not read (%v); the rule is loaded always", p, err))
 			h = ruleHeader{}
 		}
 	}
@@ -222,15 +240,18 @@ func ParseRule(p, root, content string) (Rule, string) {
 	}
 	var valid []string
 	for _, pat := range r.Paths {
-		if _, err := glob.Compile(pat); err != nil {
-			warn = fmt.Sprintf("%s: %v; the pattern is ignored", p, err)
+		matcher, err := glob.Compile(pat)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %v; the pattern is ignored", p, err))
 			continue
 		}
 		valid = append(valid, pat)
+		r.matchers = append(r.matchers, matcher)
 	}
 	r.Paths = valid
+	r.compiledPaths = slices.Clone(valid)
 	r.Title = ruleTitle(h, body, p)
-	return r, warn
+	return r, warnings
 }
 
 // bareGlob matches a `paths:` or `globs:` line whose value starts with
@@ -280,6 +301,9 @@ func NewActivation(rules []Rule) *Activation {
 	a := &Activation{}
 	for _, r := range rules {
 		if r.Conditional() {
+			if !slices.Equal(r.Paths, r.compiledPaths) {
+				r = r.compilePaths()
+			}
 			a.rules = append(a.rules, r)
 		}
 	}

@@ -10,6 +10,7 @@ import (
 )
 
 func TestToolDisclosureUsesEffectiveOutputLimit(t *testing.T) {
+	t.Parallel()
 	m, space, _ := queryFixture(t)
 	if err := m.SetMode(ModeOn); err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 )
 
 func TestEntryIDMatchesWorkspaceNativePaths(t *testing.T) {
+	t.Parallel()
 	const slashID = "e_Bh6Rh2dc_ZHiRWDR_f8q7MHmyTbaA8hDs94iYefXt9w"
 	if got := EntryID("r_test", filepath.Join("src", "file.go")); got != slashID {
 		t.Fatalf("stable native identity changed: %s", got)
@@ -28,6 +29,7 @@ func TestEntryIDMatchesWorkspaceNativePaths(t *testing.T) {
 }
 
 func TestCatalogPlatformPaths(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	paths := []struct {
 		path string

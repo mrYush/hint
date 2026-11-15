@@ -9,6 +9,7 @@ import (
 )
 
 func TestCut(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		s    string
@@ -46,6 +47,7 @@ func TestCut(t *testing.T) {
 }
 
 func TestCutNeverSplitsRunes(t *testing.T) {
+	t.Parallel()
 	s := strings.Repeat("Привет→🙂", 50)
 	for n := 0; n <= len(s); n++ {
 		got := text.Cut(s, n)

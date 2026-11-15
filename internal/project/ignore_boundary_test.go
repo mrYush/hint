@@ -9,6 +9,7 @@ import (
 )
 
 func TestIgnoreRejectsEscapingPathsBeforeAccess(t *testing.T) {
+	t.Parallel()
 	parent := t.TempDir()
 	dir := filepath.Join(parent, "root")
 	if err := os.Mkdir(dir, 0700); err != nil {
@@ -41,6 +42,7 @@ func TestIgnoreRejectsEscapingPathsBeforeAccess(t *testing.T) {
 }
 
 func TestPrepareIgnoreRejectsEscapingParentBeforeGit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "file"), nil, 0600); err != nil {
 		t.Fatal(err)

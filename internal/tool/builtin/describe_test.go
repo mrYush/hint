@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -41,6 +42,7 @@ func mustDescribe(t *testing.T, tl agentapi.Tool, args string) tool.Description 
 }
 
 func TestWriteFile_DescribeNewFile(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	tl := builtin.NewWriteFile(root)
 	d := mustDescribe(t, tl, `{"path":"a/new.txt","content":"one\ntwo\n"}`)
@@ -57,6 +59,7 @@ func TestWriteFile_DescribeNewFile(t *testing.T) {
 }
 
 func TestWriteFile_DescribeOverwrite(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"f.txt": "a\nb\nc\n"})
 	d := mustDescribe(t, builtin.NewWriteFile(root), `{"path":"f.txt","content":"a\nB\nc\nd\n"}`)
 	if d.Summary != "overwrite f.txt (+2 -1 lines)" {
@@ -71,6 +74,7 @@ func TestWriteFile_DescribeOverwrite(t *testing.T) {
 }
 
 func TestWriteFile_DescribeBinaryTarget(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"blob": "\x00\x01\x02"})
 	d := mustDescribe(t, builtin.NewWriteFile(root), `{"path":"blob","content":"text"}`)
 	if !strings.Contains(d.Summary, "binary") || d.Detail != "" {
@@ -78,7 +82,35 @@ func TestWriteFile_DescribeBinaryTarget(t *testing.T) {
 	}
 }
 
+func TestWriteFile_DescribeReportsReadError(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("a file mode does not make a file unreadable on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-0 file")
+	}
+	root := newRoot(t, map[string]string{"secret.txt": "hello\n"})
+	path := filepath.Join(root.Dir(), "secret.txt")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err := describe(t, builtin.NewWriteFile(root), `{"path":"secret.txt","content":"x"}`)
+	if err == nil {
+		t.Fatal("an unreadable file was previewed as an overwrite")
+	}
+	if strings.Contains(err.Error(), "too large to diff") {
+		t.Fatalf("err = %v, want the read error", err)
+	}
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("err = %v, want the permission error in the chain", err)
+	}
+}
+
 func TestWriteFile_DescribeRefusesEscape(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	_, err := describe(t, builtin.NewWriteFile(root), `{"path":"../outside.txt","content":"x"}`)
 	if !errors.Is(err, tool.ErrOutsideRoot) {
@@ -93,6 +125,7 @@ func TestWriteFile_DescribeRefusesEscape(t *testing.T) {
 }
 
 func TestEditFile_DescribeDiff(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n"})
 	tl := builtin.NewEditFile(root)
 	d := mustDescribe(t, tl, `{"path":"main.go","old_str":"println(\"hi\")","new_str":"println(\"hello\")"}`)
@@ -116,6 +149,7 @@ func TestEditFile_DescribeDiff(t *testing.T) {
 }
 
 func TestEditFile_DescribeCreateAndAppend(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"notes.txt": "one"})
 	tl := builtin.NewEditFile(root)
 
@@ -134,6 +168,7 @@ func TestEditFile_DescribeCreateAndAppend(t *testing.T) {
 }
 
 func TestEditFile_DescribeReportsRunsErrors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"f.txt": "abc\n"})
 	tl := builtin.NewEditFile(root)
 	cases := map[string]string{
@@ -150,7 +185,41 @@ func TestEditFile_DescribeReportsRunsErrors(t *testing.T) {
 	}
 }
 
+func TestEditFile_DescribeRefusesEscape(t *testing.T) {
+	t.Parallel()
+	root := newRoot(t, nil)
+	_, err := describe(t, builtin.NewEditFile(root), `{"path":"../outside.txt","old_str":"a","new_str":"b"}`)
+	if !errors.Is(err, tool.ErrOutsideRoot) {
+		t.Fatalf("err = %v, want ErrOutsideRoot", err)
+	}
+}
+
+func TestEditFile_DescribeReportsReadError(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("a file mode does not make a file unreadable on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a mode-0 file")
+	}
+	root := newRoot(t, map[string]string{"secret.txt": "hello\n"})
+	path := filepath.Join(root.Dir(), "secret.txt")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	_, err := describe(t, builtin.NewEditFile(root), `{"path":"secret.txt","old_str":"hello","new_str":"bye"}`)
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("err = %v, want the permission error in the chain", err)
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("err = %v, want the read message", err)
+	}
+}
+
 func TestBash_Describe(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	tl := builtin.NewBash(root)
 	d := mustDescribe(t, tl, `{"command":"  go test ./...  ","timeout":120}`)
@@ -170,6 +239,7 @@ func TestBash_Describe(t *testing.T) {
 // mode changes what tool.Root allows, so even with nothing asking, a
 // write outside the working directory fails and creates nothing.
 func TestYoloDoesNotLiftRoot(t *testing.T) {
+	t.Parallel()
 	parent := t.TempDir()
 	dir := filepath.Join(parent, "project")
 	if err := os.Mkdir(dir, 0o755); err != nil {

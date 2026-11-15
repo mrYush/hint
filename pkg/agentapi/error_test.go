@@ -38,6 +38,7 @@ var errorKindRouting = []struct {
 }
 
 func TestErrorKindRouting(t *testing.T) {
+	t.Parallel()
 	for _, c := range errorKindRouting {
 		t.Run(string(c.kind), func(t *testing.T) {
 			if got := c.kind.Retryable(); got != c.retryable {
@@ -61,6 +62,7 @@ func TestErrorKindRouting(t *testing.T) {
 // — and for a fallback-worthy failure that means offline mode quietly stops
 // working with nothing turning red.
 func TestErrorKindRoutingIsExhaustive(t *testing.T) {
+	t.Parallel()
 	declared := declaredConstants(t, "error.go", "ErrorKind")
 	if len(declared) == 0 {
 		t.Fatal("found no ErrorKind constants; the source scan is broken, not the code")
@@ -141,6 +143,7 @@ func declaredConstants(t *testing.T, filename, typeName string) map[string]strin
 }
 
 func TestErrorWrapping(t *testing.T) {
+	t.Parallel()
 	cause := fmt.Errorf("dial tcp 127.0.0.1:11434: %w", io.EOF)
 	err := agentapi.WrapError(agentapi.ErrNetwork, cause, "reaching ollama")
 
@@ -168,6 +171,7 @@ func TestErrorWrapping(t *testing.T) {
 }
 
 func TestKindOfClassifiesContext(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		err  error
 		want agentapi.ErrorKind
@@ -188,6 +192,7 @@ func TestKindOfClassifiesContext(t *testing.T) {
 }
 
 func TestErrorIsMatchesByKind(t *testing.T) {
+	t.Parallel()
 	err := agentapi.NewError(agentapi.ErrRateLimited, "429 from api-bar")
 
 	if !errors.Is(err, agentapi.NewError(agentapi.ErrRateLimited, "any text")) {
@@ -202,6 +207,7 @@ func TestErrorIsMatchesByKind(t *testing.T) {
 }
 
 func TestErrorWithProviderCopies(t *testing.T) {
+	t.Parallel()
 	base := agentapi.NewError(agentapi.ErrTimeout, "deadline exceeded")
 	attributed := base.WithProvider("api-bar")
 
@@ -217,6 +223,7 @@ func TestErrorWithProviderCopies(t *testing.T) {
 }
 
 func TestNilErrorIsSafe(t *testing.T) {
+	t.Parallel()
 	// A *Error is carried in event structs where it is nil most of the time;
 	// the predicates must not panic on it.
 	var e *agentapi.Error
@@ -230,4 +237,29 @@ func TestNilErrorIsSafe(t *testing.T) {
 		t.Error("WithProvider on a nil *Error must stay nil")
 	}
 	_ = e.Error()
+}
+
+func TestErrorKindsMatchesDeclarations(t *testing.T) {
+	t.Parallel()
+	declared := declaredConstants(t, "error.go", "ErrorKind")
+	seen := map[string]bool{}
+	for _, kind := range agentapi.ErrorKinds() {
+		if seen[string(kind)] || !kind.Valid() {
+			t.Errorf("duplicate or invalid kind %q", kind)
+		}
+		seen[string(kind)] = true
+	}
+	for name, value := range declared {
+		if !seen[value] {
+			t.Errorf("%s missing from ErrorKinds", name)
+		}
+	}
+	if len(seen) != len(declared) {
+		t.Fatalf("list has %d kinds, declarations have %d", len(seen), len(declared))
+	}
+	kinds := agentapi.ErrorKinds()
+	kinds[0] = "changed"
+	if agentapi.ErrorKinds()[0] == "changed" {
+		t.Fatal("caller mutated the shared kind list")
+	}
 }

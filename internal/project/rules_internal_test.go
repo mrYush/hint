@@ -6,6 +6,7 @@ import (
 )
 
 func TestSplitFrontMatter(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in, header, body string
 		ok               bool
@@ -26,6 +27,7 @@ func TestSplitFrontMatter(t *testing.T) {
 }
 
 func TestOrderRules(t *testing.T) {
+	t.Parallel()
 	files := []string{"/r/HINT.md", "/r/a/b/AGENTS.md"}
 	rules := []Rule{
 		{Path: "/r/.hint/rules/x.md", Root: "/r"},
@@ -47,6 +49,7 @@ func TestOrderRules(t *testing.T) {
 }
 
 func TestQuoteBareGlobs(t *testing.T) {
+	t.Parallel()
 	in := "description: x\nglobs: *.ts, *.tsx\npaths:\n  - \"**/*.go\"\nalwaysApply: false\n"
 	want := "description: x\nglobs: \"*.ts, *.tsx\"\npaths:\n  - \"**/*.go\"\nalwaysApply: false\n"
 	if got := quoteBareGlobs(in); got != want {

@@ -199,7 +199,7 @@ func (a *app) profileCommand(ctx context.Context, args []string) {
 func (a *app) useProfile(ctx context.Context, ref rpc.ProfileRef) {
 	got, err := a.client.SetProfile(ctx, a.sessionID, ref)
 	if err != nil {
-		fmt.Fprintln(a.io.err, "hint:", strings.TrimPrefix(err.Error(), "config: "))
+		fmt.Fprintln(a.io.err, "hint:", err.Error())
 		return
 	}
 	a.profile = got

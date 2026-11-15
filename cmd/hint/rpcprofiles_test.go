@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mrYush/hint/internal/config"
@@ -36,6 +37,16 @@ func twoProfiles() *config.Config {
 // client, so a test can seed the engine's provider cache.
 func testEngine(t *testing.T, as assembly) (*rpcEngine, *rpc.Client) {
 	t.Helper()
+	eng, cl, _ := testEngineServer(t, as)
+	return eng, cl
+}
+
+// testEngineServer is testEngine plus a stop that closes the server and
+// the sessions it holds, as the end of a run does. A test that starts a
+// later run over the same store must stop the earlier one first: the
+// session lock it holds outlives the client.
+func testEngineServer(t *testing.T, as assembly) (*rpcEngine, *rpc.Client, func()) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	eng, err := newEngine(ctx, as)
 	if err != nil {
@@ -50,8 +61,16 @@ func testEngine(t *testing.T, as assembly) (*rpcEngine, *rpc.Client) {
 		cancel()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cl.Close(); srv.Close(); cancel() })
-	return eng, cl
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			_ = cl.Close()
+			srv.Close()
+			cancel()
+		})
+	}
+	t.Cleanup(stop)
+	return eng, cl, stop
 }
 
 // drive runs one text-only turn to its end.
@@ -69,11 +88,12 @@ func drive(t *testing.T, cl *rpc.Client, sessionID, text string) {
 }
 
 func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, _, _, _ := testAssembly(t, first, "")
 	as.cfg = twoProfiles()
-	eng, cl := testEngine(t, as)
+	eng, cl, stop := testEngineServer(t, as)
 	// The provider of "other" would be a real client; the cache seam
 	// stands a fake in for it, as the assembly does for the default.
 	eng.providers[rpc.ProfileRef{Profile: "other"}] = second
@@ -113,10 +133,14 @@ func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
 		t.Errorf("profile without a key = %v; want code %d naming the key", err, rpc.CodeInvalidParams)
 	}
 
+	// The first run exits; its server closes the session and releases
+	// the lock the later run needs.
+	stop()
+
 	// A later run restores the recorded profile and answers with it.
 	again := as
 	again.chat = &fakeChat{reply: func(int) string { return "fake again" }}
-	eng2, cl2 := testEngine(t, again)
+	eng2, cl2, stop2 := testEngineServer(t, again)
 	third := &fakeChat{reply: func(int) string { return "other again" }}
 	eng2.providers[rpc.ProfileRef{Profile: "other"}] = third
 	restored, err := cl2.AttachSession(ctx, view.ID)
@@ -130,6 +154,9 @@ func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
 	if len(third.seen()) != 1 {
 		t.Errorf("the restored profile's provider saw %d requests, want 1", len(third.seen()))
 	}
+
+	// That run exits too, so the next one can open the session.
+	stop2()
 
 	// A profile the configuration lost falls back to the default, with a
 	// warning the client shows.
@@ -147,6 +174,7 @@ func TestProfileSwitchChangesTheProviderAndIsRecorded(t *testing.T) {
 }
 
 func TestProfilesReflectTheReloadedConfiguration(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
 	as.cfg = twoProfiles()
 	reloaded := twoProfiles()
@@ -182,6 +210,7 @@ func TestProfilesReflectTheReloadedConfiguration(t *testing.T) {
 }
 
 func TestForkCutsAtATurn(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(n int) string { return []string{"a1", "a2", "a3"}[n-1] }}
 	as, _, _, _ := testAssembly(t, chat, "")
 	_, cl := testEngine(t, as)
@@ -268,6 +297,7 @@ func TestForkCutsAtATurn(t *testing.T) {
 // the profiles with the one in use marked, with a name it switches the
 // session, and a profile that cannot be used is refused with its reason.
 func TestREPLProfileCommand(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, sio, out, stderr := testAssembly(t, first, "/profile\n/profile nokey\n/profile other\nhello\n/exit\n")
@@ -302,6 +332,7 @@ func TestREPLProfileCommand(t *testing.T) {
 }
 
 func TestREPLNewSessionLeavesTheOldOne(t *testing.T) {
+	t.Parallel()
 	first := &fakeChat{reply: func(int) string { return "from fake" }}
 	second := &fakeChat{reply: func(int) string { return "from other" }}
 	as, sio, out, stderr := testAssembly(t, first, "/new extra\nhello\n/profile other\n/new\nthere\n/exit\n")
@@ -360,6 +391,7 @@ func TestREPLNewSessionLeavesTheOldOne(t *testing.T) {
 }
 
 func TestREPLNewSessionStaysOffDisk(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "ok" }}
 	as, sio, out, stderr := testAssembly(t, chat, "/new\nhello\n/exit\n")
 	as.opts.session = sessionOff
@@ -402,6 +434,7 @@ func TestREPLNewSessionStaysOffDisk(t *testing.T) {
 }
 
 func TestUseTUI(t *testing.T) {
+	t.Parallel()
 	notATerminal, err := os.CreateTemp(t.TempDir(), "out")
 	if err != nil {
 		t.Fatal(err)

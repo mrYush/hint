@@ -38,6 +38,7 @@ func fixtureReader(files map[string]string) func(string) (string, error) {
 }
 
 func TestCgroupHeadroomIncludesParentsHighAndPressure(t *testing.T) {
+	t.Parallel()
 	if memory, err := linuxAvailableMemory("MemTotal: 10000 kB\nMemAvailable: 5000 kB\n"); err != nil || memory != 5000*1024 {
 		t.Fatalf("host headroom=%d,%v", memory, err)
 	}
@@ -62,6 +63,7 @@ func TestCgroupHeadroomIncludesParentsHighAndPressure(t *testing.T) {
 }
 
 func TestCgroupUnsupportedOrMalformedNeverUsesHostCapacity(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, path, value string }{
 		{"v1", "/proc/self/cgroup", "5:memory:/batch\n"},
 		{"hybrid", "/proc/self/cgroup", "0::/batch/worker\n5:cpu:/batch\n"},
@@ -88,6 +90,7 @@ func TestCgroupUnsupportedOrMalformedNeverUsesHostCapacity(t *testing.T) {
 }
 
 func TestCgroupReadBudgetAndMembershipChange(t *testing.T) {
+	t.Parallel()
 	files := cgroupFixture()
 	files["/proc/self/cgroup"] = "0::/" + strings.Repeat("a/", 40) + "end\n"
 	reads := 0

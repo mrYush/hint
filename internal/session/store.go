@@ -19,6 +19,12 @@ import (
 // continue. Callers test for it with errors.Is and start a new one.
 var ErrNoSessions = errors.New("session: no sessions for this directory")
 
+// ErrLocked reports a session another hint process has open for writing.
+// [Store.Open] does not wait for the lock: a second run that continues the
+// same session fails with this error instead of interleaving two
+// conversations into one file.
+var ErrLocked = errors.New("session: another hint process has this session open")
+
 // DefaultDir returns where sessions live for the given home directory:
 // $XDG_DATA_HOME/hint/sessions when the variable is set, otherwise
 // ~/.local/share/hint/sessions. lookupEnv is injected, as in
@@ -151,7 +157,16 @@ func (s *Store) create(cwd string, parent *Parent) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("session: create %s: %w", path, err)
 	}
-	sess := &Session{path: path, id: id, cwd: filepath.Clean(cwd), created: created, parent: parent, f: f, now: s.now}
+	// A new session is locked as soon as it exists: another run may list
+	// it and continue it before this one has recorded its first turn.
+	lock, err := lockSession(path)
+	if err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		_ = os.Remove(lockPath(path))
+		return nil, err
+	}
+	sess := &Session{path: path, id: id, cwd: filepath.Clean(cwd), created: created, parent: parent, f: f, lock: lock, now: s.now}
 	header := Record{
 		Kind:        KindSession,
 		At:          created,
@@ -174,30 +189,52 @@ func (s *Session) abandon(err error) error {
 		_ = s.f.Close()
 		s.f = nil
 	}
+	if s.lock != nil {
+		_ = s.lock.Close()
+		s.lock = nil
+	}
 	_ = os.Remove(s.path)
+	_ = os.Remove(lockPath(s.path))
 	return err
 }
 
 // Open loads the session file at path and opens it for appending. The
-// conversation it holds is available through [Session.Messages].
+// conversation it holds is available through [Session.Messages]. The
+// Session holds the session's lock for as long as it is open, so a second
+// run continuing the same session gets [ErrLocked] instead of appending
+// to a file this one is still writing.
 func (s *Store) Open(path string) (*Session, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("session: open %s: %w", path, err)
+	}
+	// Lock before loading: without it a second process could read the
+	// file between this run's load and its first append, and both would
+	// truncate a torn tail or write at once.
+	lock, err := lockSession(path)
+	if err != nil {
+		return nil, err
+	}
 	sess, err := load(path)
 	if err != nil {
+		_ = lock.Close()
 		return nil, err
 	}
 	if sess.torn {
 		// Discard the partial record a crash left, so the next append
 		// starts a clean line instead of garbling with it.
 		if err := os.Truncate(path, sess.validLen); err != nil {
+			_ = lock.Close()
 			return nil, fmt.Errorf("session: discard torn tail of %s: %w", path, err)
 		}
 		sess.torn = false
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
+		_ = lock.Close()
 		return nil, fmt.Errorf("session: open %s for appending: %w", path, err)
 	}
 	sess.f = f
+	sess.lock = lock
 	sess.now = s.now
 	return sess, nil
 }
@@ -219,18 +256,41 @@ func (s *Store) Latest(cwd string) (*Session, error) {
 // a prefix that names several. The message says which.
 var ErrUnknownSession = errors.New("session: no such session")
 
-// Find opens the session of cwd whose id is id, or the one id is an
-// unambiguous prefix of — the same rule the interactive picker applies to
-// a typed id. It is [ErrNoSessions] when the directory has none and
-// [ErrUnknownSession] otherwise when nothing (or more than one thing)
-// matches.
+// Find opens the session [Store.Resolve] names for appending.
 func (s *Store) Find(cwd, id string) (*Session, error) {
-	infos, err := s.List(cwd)
+	info, err := s.Resolve(cwd, id)
 	if err != nil {
 		return nil, err
 	}
+	return s.Open(info.Path)
+}
+
+// Peek loads the session [Store.Resolve] names, but for reading only: it
+// takes no lock and the returned Session cannot be appended to. A session
+// another hint process is recording can still be read, which is what a
+// fork of it needs.
+func (s *Store) Peek(cwd, id string) (*Session, error) {
+	info, err := s.Resolve(cwd, id)
+	if err != nil {
+		return nil, err
+	}
+	return load(info.Path)
+}
+
+// Resolve returns the session of cwd whose id is id, or the one id is an
+// unambiguous prefix of — the same rule the interactive picker applies to
+// a typed id. It reads the directory and the session files, but opens
+// nothing for appending and takes no lock, so it resolves a session
+// another hint process is recording. It is [ErrNoSessions] when the
+// directory has none and [ErrUnknownSession] otherwise when nothing (or
+// more than one thing) matches.
+func (s *Store) Resolve(cwd, id string) (Info, error) {
+	infos, err := s.List(cwd)
+	if err != nil {
+		return Info{}, err
+	}
 	if len(infos) == 0 {
-		return nil, ErrNoSessions
+		return Info{}, ErrNoSessions
 	}
 	var matches []Info
 	for _, info := range infos {
@@ -244,11 +304,11 @@ func (s *Store) Find(cwd, id string) (*Session, error) {
 	}
 	switch len(matches) {
 	case 1:
-		return s.Open(matches[0].Path)
+		return matches[0], nil
 	case 0:
-		return nil, fmt.Errorf("%w: no session of this directory has id %q", ErrUnknownSession, id)
+		return Info{}, fmt.Errorf("%w: no session of this directory has id %q", ErrUnknownSession, id)
 	default:
-		return nil, fmt.Errorf("%w: %d session ids start with %q; give more of it", ErrUnknownSession, len(matches), id)
+		return Info{}, fmt.Errorf("%w: %d session ids start with %q; give more of it", ErrUnknownSession, len(matches), id)
 	}
 }
 

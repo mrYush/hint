@@ -15,6 +15,7 @@ import (
 )
 
 func TestPreamble_LoadsRuleOnTouch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for rel, content := range map[string]string{
 		"HINT.md":           "Root rules.\n",
@@ -99,6 +100,7 @@ func (s *countingSummarizer) Summarize(context.Context, string, string, int) (st
 }
 
 func TestPreambleRefreshOnlyAfterSourcesChange(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "HINT.md"), []byte(strings.Repeat("Long rules.\n", 100)), 0o644); err != nil {
 		t.Fatal(err)

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -21,6 +20,7 @@ import (
 )
 
 func TestHelloThenTurnWithPermission(t *testing.T) {
+	t.Parallel()
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: time.Second}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,6 +94,7 @@ func TestHelloThenTurnWithPermission(t *testing.T) {
 }
 
 func TestMethodBeforeHelloIsRejected(t *testing.T) {
+	t.Parallel()
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}}
 	client, peer := net.Pipe()
 	defer func() { _ = client.Close() }()
@@ -110,6 +111,7 @@ func TestMethodBeforeHelloIsRejected(t *testing.T) {
 }
 
 func TestSocketTokenRequired(t *testing.T) {
+	t.Parallel()
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Token: "secret-token"}
 	client, peer := net.Pipe()
 	defer func() { _ = client.Close() }()
@@ -129,6 +131,7 @@ func TestSocketTokenRequired(t *testing.T) {
 }
 
 func TestPermissionTimeoutDenies(t *testing.T) {
+	t.Parallel()
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: 20 * time.Millisecond}
 	client, peer := net.Pipe()
@@ -163,6 +166,7 @@ func TestPermissionTimeoutDenies(t *testing.T) {
 }
 
 func TestSecondTurnIsBusy(t *testing.T) {
+	t.Parallel()
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: time.Second}
 	client, peer := net.Pipe()
@@ -211,6 +215,7 @@ func TestSecondTurnIsBusy(t *testing.T) {
 // it arrives is accepted, not refused as busy. A REPL does exactly this
 // between one answer and the next question.
 func TestNextTurnStartsRightAfterDone(t *testing.T) {
+	t.Parallel()
 	engine := &fakeEngine{sessions: map[string]*fakeSession{}}
 	srv := &Server{Engine: engine, PermissionWait: time.Second}
 	client, peer := net.Pipe()
@@ -280,6 +285,7 @@ func TestNextTurnStartsRightAfterDone(t *testing.T) {
 // binds to loopback alone — by address or as localhost, which needs no
 // resolver to be known safe.
 func TestListenIsLoopbackOnly(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		addr string
 		ok   bool
@@ -301,6 +307,7 @@ func TestListenIsLoopbackOnly(t *testing.T) {
 }
 
 func TestWriteTokenIsOwnerOnly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	token, err := WriteToken(dir)
 	if err != nil {
@@ -319,6 +326,7 @@ func TestWriteTokenIsOwnerOnly(t *testing.T) {
 }
 
 func TestHelloGolden(t *testing.T) {
+	t.Parallel()
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}}, Version: "test"}
 	client, peer := net.Pipe()
 	defer func() { _ = client.Close() }()
@@ -354,6 +362,7 @@ func TestHelloGolden(t *testing.T) {
 // map, and the engine answers with the session the server already holds.
 // That is the same session, not a duplicate to close.
 func TestAttachByPrefixKeepsTheHeldSession(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
 	ctx := context.Background()
 	view, err := c.OpenSession(ctx, OpenOptions{})
@@ -374,6 +383,7 @@ func TestAttachByPrefixKeepsTheHeldSession(t *testing.T) {
 // the server stops writing, but it still reads the turn's channel to the
 // end, so a session that sends without watching ctx is not left blocked.
 func TestPumpDrainsATurnWhoseClientIsGone(t *testing.T) {
+	t.Parallel()
 	done := make(chan struct{})
 	sess := &fakeSession{id: "sess-1", run: func(context.Context) <-chan agentapi.Event {
 		ch := make(chan agentapi.Event)
@@ -421,6 +431,7 @@ func TestPumpDrainsATurnWhoseClientIsGone(t *testing.T) {
 // it runs beside the loop the way complete does, and a request sent
 // after it is answered first.
 func TestModelsDoesNotBlockTheLoop(t *testing.T) {
+	t.Parallel()
 	gate := make(chan struct{})
 	srv := &Server{Engine: &fakeEngine{sessions: map[string]*fakeSession{}, modelsGate: gate}}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -644,7 +655,7 @@ func (e *fakeEngine) Attach(_ context.Context, id string) (Session, error) {
 	if s := e.find(id); s != nil {
 		return s, nil
 	}
-	return nil, errors.New("no such session")
+	return nil, fmt.Errorf("%w: session %q", ErrNotFound, id)
 }
 
 type fakeSession struct {

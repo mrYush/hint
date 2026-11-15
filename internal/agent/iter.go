@@ -27,7 +27,7 @@ type streamResult struct {
 //
 // Every ChatError other than context overflow becomes a Go error; the
 // caller turns that into a terminal EventError. A context-overflow error
-// becomes streamResult.overflow instead, because the loop's reaction to it
+// becomes streamResult.overflow only before visible output, because the loop's reaction to it
 // (compact, then retry the same request) is not a failure path.
 func (a *Agent) streamOnce(ctx context.Context, req agentapi.ChatRequest, out chan<- agentapi.Event) (streamResult, error) {
 	events, err := a.provider.Stream(ctx, req)
@@ -54,7 +54,8 @@ func (a *Agent) streamOnce(ctx context.Context, req agentapi.ChatRequest, out ch
 		case agentapi.ChatDone:
 			return buildStreamResult(text.String(), thinking.String(), calls, usage, ev.FinishReason), nil
 		case agentapi.ChatError:
-			if agentapi.KindOf(ev.Err) == agentapi.ErrContextOverflow {
+			// Retrying after visible output would splice two answers together.
+			if agentapi.KindOf(ev.Err) == agentapi.ErrContextOverflow && text.Len() == 0 && thinking.Len() == 0 {
 				return streamResult{overflow: true, usage: usage}, nil
 			}
 			return streamResult{}, ev.Err

@@ -15,6 +15,7 @@ import (
 )
 
 func TestLeaseStatFIFO(t *testing.T) {
+	t.Parallel()
 	if dir := os.Getenv("HINT_TEST_STAT_FIFO_DIR"); dir != "" {
 		root, err := tool.NewRoot(dir)
 		if err != nil {

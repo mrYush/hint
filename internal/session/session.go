@@ -22,8 +22,9 @@ const wireVersion = agentapi.WireVersion
 // [Session.Messages] is always the history a run should hand to the agent
 // (after its own preamble). Records are appended one per line with a
 // single write each; a complete record is never rewritten, and the only
-// bytes ever removed are a torn last line left by a crash. Close when
-// done.
+// bytes ever removed are a torn last line left by a crash. An open
+// Session holds the session's lock, so two runs cannot append to one
+// file. Close when done.
 type Session struct {
 	path    string
 	id      string
@@ -41,16 +42,19 @@ type Session struct {
 	// warnings collects what load skipped or repaired, for the CLI to show.
 	warnings []string
 	// validLen is the byte length of the file up to and including the last
-	// complete record; torn is set when bytes follow it — a crash
-	// mid-write left a partial line. Open truncates the file back to
+	// newline-terminated record; torn is set when bytes follow it — a crash
+	// mid-write left an unterminated tail. Open truncates the file back to
 	// validLen before appending, the way a journal discards a torn tail:
-	// the bytes can never parse, and leaving them would make the next
-	// record garble with them.
+	// the tail is an interrupted append, and leaving it would make the next
+	// record garble with it.
 	validLen int64
 	torn     bool
 
-	f   *os.File
-	now func() time.Time
+	f *os.File
+	// lock is the open lock file whose exclusive lock this Session holds;
+	// closing it lets the next run continue the session.
+	lock *os.File
+	now  func() time.Time
 }
 
 // ID returns the session id.
@@ -173,22 +177,31 @@ func (s *Session) write(r Record) error {
 	return nil
 }
 
-// Close flushes the file to disk and closes it. The Session can still be
-// read afterwards; appending fails.
+// Close flushes the file to disk, closes it and releases the session's
+// lock. The Session can still be read afterwards; appending fails.
 func (s *Session) Close() error {
-	if s.f == nil {
+	if s.f == nil && s.lock == nil {
 		return nil
 	}
-	f := s.f
-	s.f = nil
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("session: sync %s: %w", s.path, err)
+	var errs []error
+	if f := s.f; f != nil {
+		s.f = nil
+		if err := f.Sync(); err != nil {
+			_ = f.Close()
+			errs = append(errs, fmt.Errorf("session: sync %s: %w", s.path, err))
+		} else if err := f.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("session: close %s: %w", s.path, err))
+		}
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("session: close %s: %w", s.path, err)
+	// The lock goes last: no other run may append between this one's last
+	// write and its sync.
+	if l := s.lock; l != nil {
+		s.lock = nil
+		if err := l.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("session: unlock %s: %w", s.path, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // load reads a session file into a Session without opening it for
@@ -203,7 +216,9 @@ func load(path string) (*Session, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	sess := &Session{path: path}
+	// A loaded snapshot is never appended to (f is nil), but it keeps a
+	// clock so an append fails as closed instead of dereferencing nil.
+	sess := &Session{path: path, now: time.Now}
 	r := bufio.NewReader(f)
 	for n := 1; ; n++ {
 		line, err := r.ReadBytes('\n')
@@ -213,17 +228,18 @@ func load(path string) (*Session, error) {
 		if len(line) == 0 && errors.Is(err, io.EOF) {
 			break
 		}
-		terminated := len(line) > 0 && line[len(line)-1] == '\n'
+		if line[len(line)-1] != '\n' {
+			// The writer puts the record and its newline in one write, so a
+			// line without one is an append a crash interrupted — never a
+			// committed record, whether or not its bytes happen to parse.
+			// Every record before it is intact on its own.
+			sess.warnings = append(sess.warnings, fmt.Sprintf("line %d is unterminated and was ignored", n))
+			sess.torn = true
+			break
+		}
 
 		var rec Record
 		if uerr := json.Unmarshal(line, &rec); uerr != nil {
-			if !terminated {
-				// A crash mid-write leaves an unfinished last line; every
-				// record before it is intact on its own.
-				sess.warnings = append(sess.warnings, fmt.Sprintf("line %d is unterminated and was ignored", n))
-				sess.torn = true
-				break
-			}
 			return nil, fmt.Errorf("session: %s line %d: %w", path, n, uerr)
 		}
 		if verr := rec.Validate(); verr != nil {

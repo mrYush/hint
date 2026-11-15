@@ -8,6 +8,7 @@ import (
 )
 
 func TestLeaseTypedOpen(t *testing.T) {
+	t.Parallel()
 	_, session, root := newWorkspace(t)
 	write(t, filepath.Join(root.Dir(), "file"), "contents")
 	for _, test := range []struct {

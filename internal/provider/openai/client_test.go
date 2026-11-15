@@ -1,8 +1,10 @@
 package openai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,6 +102,7 @@ func last(t *testing.T, events []agentapi.ChatEvent) agentapi.ChatEvent {
 }
 
 func TestStreamTextWithUsage(t *testing.T) {
+	t.Parallel()
 	srv, cap := serveFixture(t, "text.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -161,6 +164,7 @@ func TestStreamTextWithUsage(t *testing.T) {
 // TestMaxTokensField pins where the reply's token limit goes: max_tokens
 // by default, max_completion_tokens alone when the profile says so.
 func TestMaxTokensField(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"", config.FieldMaxTokens, config.FieldMaxCompletionTokens} {
 		srv, cap := serveFixture(t, "text.sse")
 		p := testProfile(srv.URL)
@@ -190,6 +194,7 @@ func TestMaxTokensField(t *testing.T) {
 }
 
 func TestStreamSplitToolCalls(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "tools.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -229,6 +234,7 @@ func TestStreamSplitToolCalls(t *testing.T) {
 }
 
 func TestStreamReasoningDelta(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "reasoning.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -254,6 +260,7 @@ func TestStreamReasoningDelta(t *testing.T) {
 }
 
 func TestStreamFinishLength(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "length.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -268,6 +275,7 @@ func TestStreamFinishLength(t *testing.T) {
 }
 
 func TestStreamInlineErrorEvent(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "error_event.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -291,6 +299,7 @@ func TestStreamInlineErrorEvent(t *testing.T) {
 }
 
 func TestStreamTruncatedToolArguments(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "truncated_tool.sse")
 	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
 
@@ -311,6 +320,7 @@ func TestStreamTruncatedToolArguments(t *testing.T) {
 }
 
 func TestStreamHTTPStatuses(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		status    int
@@ -392,6 +402,7 @@ func TestStreamHTTPStatuses(t *testing.T) {
 }
 
 func TestStreamConnectionRefused(t *testing.T) {
+	t.Parallel()
 	// A closed server: the URL is valid but nothing listens.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	url := srv.URL
@@ -409,6 +420,7 @@ func TestStreamConnectionRefused(t *testing.T) {
 }
 
 func TestStreamCancelBeforeStart(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	srv, _ := serveFixture(t, "text.sse")
@@ -424,6 +436,7 @@ func TestStreamCancelBeforeStart(t *testing.T) {
 }
 
 func TestStreamCancelMidStream(t *testing.T) {
+	t.Parallel()
 	firstDelta := make(chan struct{})
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -473,6 +486,7 @@ func TestStreamCancelMidStream(t *testing.T) {
 }
 
 func TestStreamStallTimeout(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -497,6 +511,7 @@ func TestStreamStallTimeout(t *testing.T) {
 }
 
 func TestStreamEmptyBodyIsUnavailable(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		// 200 with an immediately closed empty body.
@@ -515,6 +530,7 @@ func TestStreamEmptyBodyIsUnavailable(t *testing.T) {
 }
 
 func TestCompletionsURLNotDoubled(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		base string
 		want string
@@ -532,11 +548,10 @@ func TestCompletionsURLNotDoubled(t *testing.T) {
 }
 
 func TestLoggerMasksAPIKey(t *testing.T) {
+	t.Parallel()
 	srv, _ := serveFixture(t, "text.sse")
-	var lines []string
-	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()), WithLogger(func(s string) {
-		lines = append(lines, s)
-	}))
+	var lines bytes.Buffer
+	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()), WithSlogLogger(slog.New(slog.NewTextHandler(&lines, &slog.HandlerOptions{Level: slog.LevelDebug}))))
 
 	ch, err := c.Stream(context.Background(), simpleRequest())
 	if err != nil {
@@ -544,10 +559,10 @@ func TestLoggerMasksAPIKey(t *testing.T) {
 	}
 	collect(t, ch)
 
-	if len(lines) == 0 {
+	if lines.Len() == 0 {
 		t.Fatal("logger received nothing")
 	}
-	joined := strings.Join(lines, "\n")
+	joined := lines.String()
 	if strings.Contains(joined, "sk-test-1234567890abcdef") {
 		t.Fatal("raw API key leaked into debug log")
 	}
@@ -557,6 +572,7 @@ func TestLoggerMasksAPIKey(t *testing.T) {
 }
 
 func TestStreamInvalidRequestRejectedLocally(t *testing.T) {
+	t.Parallel()
 	c := New(testProfile("http://unused.invalid"))
 	_, err := c.Stream(context.Background(), agentapi.ChatRequest{})
 	if err == nil {
@@ -568,6 +584,7 @@ func TestStreamInvalidRequestRejectedLocally(t *testing.T) {
 }
 
 func TestStreamLargeToolArgumentLine(t *testing.T) {
+	t.Parallel()
 	// One data: line larger than bufio.Scanner's 64KiB default cap.
 	big := strings.Repeat("x", 100*1024)
 	payload := `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_big","function":{"name":"write_file","arguments":"{\"content\":\"` + big + `\"}"}}]}}]}`
@@ -598,6 +615,7 @@ func TestStreamLargeToolArgumentLine(t *testing.T) {
 }
 
 func TestHeaderTimeoutFromProfile(t *testing.T) {
+	t.Parallel()
 	transportTimeout := func(c *Client) time.Duration {
 		return c.http.Transport.(*http.Transport).ResponseHeaderTimeout
 	}
@@ -623,5 +641,45 @@ func TestHeaderTimeoutFromProfile(t *testing.T) {
 	_, err := New(p).Stream(context.Background(), simpleRequest())
 	if err == nil || !strings.Contains(err.Error(), "timeout awaiting response headers") {
 		t.Errorf("Stream error = %v, want a response-header timeout", err)
+	}
+}
+
+func TestStreamClassifiedError(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		code string
+		kind agentapi.ErrorKind
+	}{
+		{`"context_length_exceeded"`, agentapi.ErrContextOverflow},
+		{`401`, agentapi.ErrAuth},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("data: {\"error\":{\"message\":\"refused\",\"code\":" + tc.code + "}}\n\n"))
+			}))
+			defer srv.Close()
+			c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
+			ch, err := c.Stream(context.Background(), simpleRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			term := last(t, collect(t, ch))
+			if term.Kind != agentapi.ChatError || term.Err.Kind != tc.kind || term.Err.Provider != "test" {
+				t.Fatalf("terminal=%+v", term)
+			}
+		})
+	}
+}
+
+type formattingProbe struct{ called *bool }
+
+func (p formattingProbe) String() string { *p.called = true; return "formatted" }
+func TestDiscardLoggerSkipsFormatting(t *testing.T) {
+	t.Parallel()
+	called := false
+	New(testProfile("http://unused.invalid")).debugf("%s", formattingProbe{&called})
+	if called {
+		t.Fatal("disabled debug logging formatted the message")
 	}
 }

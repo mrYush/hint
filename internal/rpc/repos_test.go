@@ -25,6 +25,7 @@ func (e *reposEngine) Repos(ctx context.Context, req RepoRequest) (RepoResult, e
 }
 
 func TestReposOptionalEngineAndCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	engine := &reposEngine{fakeEngine: &fakeEngine{sessions: map[string]*fakeSession{}}, started: make(chan struct{}), stopped: make(chan struct{})}
@@ -64,6 +65,7 @@ func TestReposOptionalEngineAndCancellation(t *testing.T) {
 }
 
 func TestReposUnknownAndUnsupported(t *testing.T) {
+	t.Parallel()
 	cl, _ := dialFake(t, &Server{})
 	ctx := context.Background()
 	var rpcErr *Error

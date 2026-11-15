@@ -37,10 +37,11 @@ func newLazyGitIgnorer(ctx context.Context, git, dir string, environ func() []st
 	stderr := &boundedIgnoreOutput{limit: 1024}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	err := cmd.Run()
+	cmd.Env = append(cmd.Environ(), "LC_ALL=C")
+	err := runGitIgnore(probe, cmd)
 	if err != nil {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) && exit.ExitCode() == 128 && strings.Contains(stderr.String(), "not a git repository") {
+		if probe.Err() == nil && errors.As(err, &exit) && exit.ExitCode() == 128 && strings.Contains(stderr.String(), "not a git repository") {
 			return Basic, nil
 		}
 		g.err = fmt.Errorf("git worktree policy unavailable: %w", err)
@@ -103,6 +104,15 @@ func (g *lazyGitIgnorer) command(ctx context.Context, args ...string) *exec.Cmd 
 	return cmd
 }
 
+// runGitIgnore preserves the command error and any cancellation that caused it.
+func runGitIgnore(ctx context.Context, cmd *exec.Cmd) error {
+	err := cmd.Run()
+	if cause := ctx.Err(); cause != nil {
+		return errors.Join(cause, err)
+	}
+	return err
+}
+
 func (g *lazyGitIgnorer) check(names []string) error {
 	if g.err != nil {
 		return g.err
@@ -129,14 +139,10 @@ func (g *lazyGitIgnorer) check(names []string) error {
 	cmd.Stdin = strings.NewReader(input.String())
 	output := &boundedIgnoreOutput{limit: input.Len()}
 	cmd.Stdout = output
-	err := cmd.Run()
+	err := runGitIgnore(ctx, cmd)
 	var exit *exec.ExitError
-	if err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1) {
+	if err != nil && (ctx.Err() != nil || !errors.As(err, &exit) || exit.ExitCode() != 1) {
 		g.err = fmt.Errorf("git ignore policy unavailable: %w", err)
-		return g.err
-	}
-	if ctx.Err() != nil {
-		g.err = ctx.Err()
 		return g.err
 	}
 	if len(g.cache)+len(names) > 128 {
@@ -188,7 +194,7 @@ func (g *lazyGitIgnorer) Ignored(rel string, isDir bool) bool {
 		output := &firstIgnoreOutput{cancel: cancel}
 		cmd := g.command(ctx, "--literal-pathspecs", "ls-files", "-z", "--cached", "--", rel+"/")
 		cmd.Stdout = output
-		err := cmd.Run()
+		err := runGitIgnore(ctx, cmd)
 		cancel()
 		if output.found && g.ctx.Err() == nil {
 			ignored = false

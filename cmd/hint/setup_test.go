@@ -17,13 +17,19 @@ import (
 func testSetup(t *testing.T) (*setupInfo, string) {
 	t.Helper()
 	global := filepath.Join(t.TempDir(), "hint", "config.yaml")
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return &setupInfo{
+		env:     env,
 		profile: config.Profile{Name: "api-bar", BaseURL: "https://gw.test/openai", Model: "m1"},
 		locs:    config.Locations{Global: global},
 	}, global
 }
 
 func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	t.Setenv("MY_HINT_KEY", "") // set, so no "export it" reminder is expected
 	s, global := testSetup(t)
 	var out bytes.Buffer
@@ -50,6 +56,7 @@ func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
 }
 
 func TestSaveRemindsAboutAnUnsetVariableAndAnOverridingFile(t *testing.T) {
+	t.Parallel()
 	s, _ := testSetup(t)
 	project := filepath.Join(t.TempDir(), ".hint", "config.yaml")
 	s.locs.Read = []string{project}
@@ -66,6 +73,7 @@ func TestSaveRemindsAboutAnUnsetVariableAndAnOverridingFile(t *testing.T) {
 }
 
 func TestAuthHelp(t *testing.T) {
+	t.Parallel()
 	s, global := testSetup(t)
 	auth := agentapi.NewError(agentapi.ErrAuth, "Unauthorized")
 
@@ -102,6 +110,7 @@ func (s *scripted) Secret(_ context.Context, prompt string) (string, bool, error
 }
 
 func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
+	t.Parallel()
 	s, global := testSetup(t)
 	s.profile.Model = ""
 	// profile, base URL, then the model: empty is asked again, since the
@@ -126,13 +135,14 @@ func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
 }
 
 func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	notATerminal := stdio{in: strings.NewReader(""), out: &out, err: &out}
-	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider) {
+	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider, environment{}) {
 		t.Error("asked questions on input that is not a terminal")
 	}
 	tty := stdio{in: os.Stdin, out: &out, err: &out, tty: true}
-	if firstRunSetup(context.Background(), tty, errors.New("config: parsing x: bad yaml")) {
+	if firstRunSetup(context.Background(), tty, errors.New("config: parsing x: bad yaml"), environment{}) {
 		t.Error("offered setup for an error setup cannot fix")
 	}
 }
@@ -141,6 +151,7 @@ func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
 // has no key, setup proposes that profile with its own base URL and
 // model, so Enter keeps them instead of writing the built-in defaults.
 func TestFirstRunKeepsTheProfileThatLacksAKey(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -170,7 +181,12 @@ providers:
 	if !errors.As(loadErr, &noKey) || noKey.Profile != "router" {
 		t.Fatalf("Load = %v; want the fallback's missing key", loadErr)
 	}
-	info := firstRunInfo(cwd, loadErr)
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.cwd = cwd
+	info := firstRunInfo(env, loadErr)
 	if p := info.profile; p.Name != "router" || p.BaseURL != "https://openrouter.ai/api/v1" || p.Model != "qwen/qwen3-coder" {
 		t.Errorf("setup proposes %q at %s with model %q; want router as configured", p.Name, p.BaseURL, p.Model)
 	}
@@ -188,6 +204,7 @@ func (s *secrets) Secret(context.Context, string) (string, bool, error) {
 }
 
 func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	in := &secrets{keys: []string{"", "", "sk-third"}}
 	key, err := askKey(context.Background(), in, &out, true)
@@ -205,11 +222,18 @@ func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
 }
 
 func TestConfigSetUnsetShow(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("APIBAR_KEY", "sk-from-env-1234567890")
+	t.Setenv("OTHER", "sk-other-0987654321")
 	t.Setenv("HOME", home)
-	s := newSetupInfo(nil, cwd, config.Flags{})
+	env, err := processEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.cwd = cwd
+	s := newSetupInfoWithEnvironment(nil, config.Flags{}, env)
 	s.cwd = cwd
 
 	if _, err := s.set("overview.depth", "-3", false); err == nil {
@@ -237,7 +261,6 @@ func TestConfigSetUnsetShow(t *testing.T) {
 
 	// The project value wins; show says so, with the key masked.
 	s.locs = config.Locate(home, cwd, os.LookupEnv)
-	t.Setenv("OTHER", "sk-other-0987654321")
 	out, err := s.show()
 	if err != nil {
 		t.Fatal(err)

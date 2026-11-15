@@ -22,6 +22,7 @@ func requireCoverageBuckets(t *testing.T, store *Store, root string, want map[st
 }
 
 func TestCoverageBucketsFollowCurrentFileKindsAndReasons(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	a, _ := testSource("a.go", "A")
 	a.State, a.Reason = StateOmitted, "unsupported"
@@ -49,6 +50,7 @@ func TestCoverageBucketsFollowCurrentFileKindsAndReasons(t *testing.T) {
 }
 
 func TestLegacyCoverageClassifiesContributionsExactlyOnce(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	a, _ := testSource("a.go", "A")
 	a.State, a.Reason = StateOmitted, "unsupported"

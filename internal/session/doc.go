@@ -32,10 +32,15 @@
 // [KindSession]) carrying [FormatVersion] and [agentapi.WireVersion];
 // later lines are messages and compactions. A reader skips a record kind
 // it does not know and refuses a file whose format version it does not
-// support. The last line may be cut short by a crash; a reader ignores it
-// with a warning, since every record before it is complete on its own,
-// and opening the file for appending truncates it away first, the way a
-// journal discards a torn tail, so the next record starts a clean line.
+// support. A record is one line terminated by a newline: the writer puts
+// both in a single write, so a last line without its newline is a crash
+// mid-write, not a committed record. A reader ignores it with a warning,
+// since every record before it is complete on its own, and opening the
+// file for appending truncates it away first, the way a journal discards
+// a torn tail, so the next record starts a clean line. While a session is
+// open for appending, an empty `<file>.lock` beside it carries the lock
+// that keeps a second run out; it is not part of the format, and a
+// listing of sessions ignores it.
 //
 // The layout — header line, typed entries, a retained tail on compaction —
 // is reduced to what a linear conversation needs: no entry ids or branching.

@@ -180,7 +180,7 @@ func (m model) setupKey(k tea.KeyPressMsg) (model, tea.Cmd) {
 		}
 		name, values, err := f.values()
 		if err != nil {
-			f.err = strings.TrimPrefix(err.Error(), "config: ")
+			f.err = err.Error()
 			return m, nil
 		}
 		f.saving, f.err = true, ""
@@ -205,7 +205,7 @@ func (m model) setupSaved(msg setupDoneMsg) (model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.setupForm.saving = false
-		m.setupForm.err = strings.TrimPrefix(msg.err.Error(), "config: ")
+		m.setupForm.err = msg.err.Error()
 		return m, nil
 	}
 	m.setupForm = nil

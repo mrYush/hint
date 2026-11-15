@@ -19,6 +19,7 @@ func (structuredEcho) Run(_ context.Context, id string, args json.RawMessage) (a
 }
 
 func TestStructuredRedactionPreservesJSONAndBudget(t *testing.T) {
+	t.Parallel()
 	secret := "key-\"\\-界-secret"
 	data, err := json.Marshal(map[string]any{
 		"number": json.Number("18446744073709551615"),
@@ -52,6 +53,7 @@ func (budgetTool) Run(ctx context.Context, id string, _ json.RawMessage) (agenta
 }
 
 func TestNestedOutputBudgetsUseSmallestPositiveLimit(t *testing.T) {
+	t.Parallel()
 	for _, limits := range [][2]int{{1024, 8192}, {8192, 1024}, {0, 1024}, {1024, 0}, {0, 0}} {
 		wrapped := tool.WithLimits(tool.WithLimits(budgetTool{}, tool.Limits{MaxOutput: limits[0]}), tool.Limits{MaxOutput: limits[1]})
 		result, err := wrapped.Run(context.Background(), "id", nil)

@@ -11,6 +11,7 @@ import (
 )
 
 func TestLeaseStatMetadata(t *testing.T) {
+	t.Parallel()
 	_, session, root := newWorkspace(t)
 	write(t, filepath.Join(root.Dir(), "file"), "contents")
 	for _, path := range []string{"file", "."} {
@@ -45,6 +46,7 @@ func TestLeaseStatMetadata(t *testing.T) {
 }
 
 func TestLeaseStatRechecks(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"replacement", "removed", "detached", "denied", "nested-marker", "nested-alias", "outside-alias", "root-replaced"} {
 		t.Run(scenario, func(t *testing.T) {
 			if scenario == "root-replaced" && runtime.GOOS == "windows" {

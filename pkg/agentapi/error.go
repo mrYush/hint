@@ -62,6 +62,12 @@ const (
 	ErrTurnLimit ErrorKind = "turn_limit"
 )
 
+// ErrorKinds returns a fresh slice of all defined error kinds.
+// Contract tests check this list against the declared constants.
+func ErrorKinds() []ErrorKind {
+	return []ErrorKind{ErrUnknown, ErrNetwork, ErrTimeout, ErrRateLimited, ErrUnavailable, ErrAuth, ErrInvalidRequest, ErrModelNotFound, ErrContextOverflow, ErrContentFiltered, ErrCanceled, ErrTurnLimit}
+}
+
 // Retryable reports whether repeating the same request against the same
 // provider could plausibly succeed.
 //

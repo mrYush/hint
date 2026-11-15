@@ -2,6 +2,7 @@ package diff_test
 
 import (
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,12 +10,14 @@ import (
 )
 
 func TestUnified_IdenticalIsEmpty(t *testing.T) {
+	t.Parallel()
 	if got := diff.Unified("a.txt", "same\n", "same\n"); got != "" {
 		t.Fatalf("got %q, want empty", got)
 	}
 }
 
 func TestUnified_NewFile(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("new.go", "", "package main\n\nfunc main() {}\n")
 	want := "--- /dev/null\n" +
 		"+++ b/new.go\n" +
@@ -28,6 +31,7 @@ func TestUnified_NewFile(t *testing.T) {
 }
 
 func TestUnified_EditWithContext(t *testing.T) {
+	t.Parallel()
 	old := "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"
 	new := "1\n2\n3\n4\nfive\n6\n7\n8\n9\n10\n"
 	got := diff.Unified("n.txt", old, new)
@@ -41,6 +45,7 @@ func TestUnified_EditWithContext(t *testing.T) {
 }
 
 func TestUnified_TwoHunks(t *testing.T) {
+	t.Parallel()
 	var oldLines []string
 	for i := 1; i <= 20; i++ {
 		oldLines = append(oldLines, strings.Repeat("x", i%3+1))
@@ -61,6 +66,7 @@ func TestUnified_TwoHunks(t *testing.T) {
 }
 
 func TestUnified_NoTrailingNewline(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("f", "a\nb", "a\nb\n")
 	want := "--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b\n"
 	if got != want {
@@ -69,6 +75,7 @@ func TestUnified_NoTrailingNewline(t *testing.T) {
 }
 
 func TestUnified_DeleteOnly(t *testing.T) {
+	t.Parallel()
 	got := diff.Unified("f", "a\nb\nc\n", "a\nc\n")
 	want := "--- a/f\n+++ b/f\n@@ -1,3 +1,2 @@\n a\n-b\n c\n"
 	if got != want {
@@ -77,6 +84,7 @@ func TestUnified_DeleteOnly(t *testing.T) {
 }
 
 func TestLines_PrefersDeleteBeforeInsert(t *testing.T) {
+	t.Parallel()
 	edits := diff.Lines([]string{"a", "b", "c"}, []string{"a", "x", "c"})
 	want := []diff.Edit{{diff.Equal, "a"}, {diff.Delete, "b"}, {diff.Insert, "x"}, {diff.Equal, "c"}}
 	if len(edits) != len(want) {
@@ -122,6 +130,7 @@ func apply(t *testing.T, old []string, edits []diff.Edit) []string {
 }
 
 func TestLines_RandomRoundTrip(t *testing.T) {
+	t.Parallel()
 	rng := rand.New(rand.NewSource(1))
 	alphabet := []string{"a", "b", "c", "d"}
 	for iter := 0; iter < 500; iter++ {
@@ -139,10 +148,89 @@ func TestLines_RandomRoundTrip(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(new, ",") {
 			t.Fatalf("round trip: old=%v new=%v edits=%v got=%v", old, new, edits, got)
 		}
+		if added, removed := diff.Stat(edits); added+removed != editDistance(old, new) {
+			t.Fatalf("non-minimal script: old=%v new=%v edits=%v", old, new, edits)
+		}
+	}
+}
+
+// editDistance is an independent dynamic-programming oracle for small inputs.
+func editDistance(a, b []string) int {
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i, old := range a {
+		prev := row[0]
+		row[0] = i + 1
+		for j, new := range b {
+			next := row[j+1]
+			if old == new {
+				row[j+1] = prev
+			} else {
+				row[j+1] = min(row[j], row[j+1]) + 1
+			}
+			prev = next
+		}
+	}
+	return row[len(b)]
+}
+
+func TestLines_EditLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		changed    int
+		wantAnchor bool
+	}{
+		{"below", 998, true},
+		{"at", 999, true},
+		{"above", 1000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := append(slices.Repeat([]string{"old"}, tc.changed), "anchor", "old-tail")
+			new := append(slices.Repeat([]string{"new"}, tc.changed), "anchor", "new-tail")
+			edits := diff.Lines(old, new)
+			if got := apply(t, old, edits); !slices.Equal(got, new) {
+				t.Fatal("script does not reproduce new")
+			}
+			anchor := slices.Contains(edits, diff.Edit{Op: diff.Equal, Text: "anchor"})
+			if anchor != tc.wantAnchor {
+				t.Fatalf("equal anchor = %v, want %v", anchor, tc.wantAnchor)
+			}
+			want := tc.changed + 1
+			if !tc.wantAnchor {
+				want++
+			}
+			if added, removed := diff.Stat(edits); added != want || removed != want {
+				t.Fatalf("stat = +%d -%d, want +%d -%d", added, removed, want, want)
+			}
+		})
+	}
+}
+
+func BenchmarkLines(b *testing.B) {
+	for _, tc := range []struct {
+		name  string
+		lines int
+	}{
+		{"edit-limit", 1000},
+		{"fallback", 3000},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			old := slices.Repeat([]string{"old"}, tc.lines)
+			new := slices.Repeat([]string{"new"}, tc.lines)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				diff.Lines(old, new)
+			}
+		})
 	}
 }
 
 func TestLines_LargeRewriteFallsBack(t *testing.T) {
+	t.Parallel()
 	old := make([]string, 3000)
 	new := make([]string, 3000)
 	for i := range old {

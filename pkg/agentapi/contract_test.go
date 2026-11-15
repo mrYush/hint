@@ -54,6 +54,7 @@ func (e echoTool) Run(ctx context.Context, callID string, args json.RawMessage) 
 var _ agentapi.Tool = echoTool{}
 
 func TestToolIsImplementable(t *testing.T) {
+	t.Parallel()
 	tool := echoTool{}
 
 	schema := agentapi.SchemaOf(tool)
@@ -142,6 +143,7 @@ func (p scriptedProvider) Stream(ctx context.Context, req agentapi.ChatRequest) 
 var _ agentapi.ChatProvider = scriptedProvider{}
 
 func TestChatProviderIsImplementable(t *testing.T) {
+	t.Parallel()
 	call := agentapi.ToolCall{ID: "c1", Name: "echo", Arguments: json.RawMessage(`{"text":"hi"}`)}
 	provider := scriptedProvider{name: "scripted", script: []agentapi.ChatEvent{
 		{Kind: agentapi.ChatThinkingDelta, Text: "the user wants an echo"},
@@ -221,6 +223,7 @@ func TestChatProviderIsImplementable(t *testing.T) {
 }
 
 func TestChatProviderRejectsInvalidRequest(t *testing.T) {
+	t.Parallel()
 	// The contract says a non-nil error is only for failing to start the
 	// stream — an unsendable request is exactly that case.
 	provider := scriptedProvider{name: "scripted"}
@@ -241,6 +244,7 @@ func TestChatProviderRejectsInvalidRequest(t *testing.T) {
 // back, and check the result is still a sendable request. This is the
 // end-to-end reason the wire types exist.
 func TestTurnRoundTripsThroughSession(t *testing.T) {
+	t.Parallel()
 	call := agentapi.ToolCall{ID: "c1", Name: "echo", Arguments: json.RawMessage(`{"text":"hi"}`)}
 	result, err := echoTool{}.Run(context.Background(), call.ID, call.Arguments)
 	if err != nil {

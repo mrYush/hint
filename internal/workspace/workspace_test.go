@@ -47,6 +47,7 @@ func write(t *testing.T, path, text string) {
 }
 
 func TestMembershipAndTurnGuard(t *testing.T) {
+	t.Parallel()
 	r, s, root := newWorkspace(t)
 	before, rev := s.Snapshot()
 	if len(before) != 1 || !before[0].Primary || rev != 1 {
@@ -111,6 +112,7 @@ func TestMembershipAndTurnGuard(t *testing.T) {
 }
 
 func TestNestedOwnershipAndSymlinkAliases(t *testing.T) {
+	t.Parallel()
 	r, s, root := newWorkspace(t)
 	for _, kind := range []string{"repository", "worktree"} {
 		dir := filepath.Join(root.Dir(), kind)
@@ -173,6 +175,7 @@ func TestNestedOwnershipAndSymlinkAliases(t *testing.T) {
 }
 
 func TestDeniedEscapeAndFreshOpen(t *testing.T) {
+	t.Parallel()
 	_, s, root := newWorkspace(t)
 	write(t, filepath.Join(root.Dir(), "file"), "ok")
 	l, err := s.Resolve("", "file")
@@ -207,6 +210,7 @@ func TestDeniedEscapeAndFreshOpen(t *testing.T) {
 }
 
 func TestEntryHandlesPreserveBytesAndReauthorize(t *testing.T) {
+	t.Parallel()
 	_, s, root := newWorkspace(t)
 	path := " spaced name "
 	write(t, filepath.Join(root.Dir(), path), "exact")
@@ -243,6 +247,7 @@ func TestEntryHandlesPreserveBytesAndReauthorize(t *testing.T) {
 }
 
 func TestStableRootsAndManagedLifecycle(t *testing.T) {
+	t.Parallel()
 	r, s, primary := newWorkspace(t)
 	dir := t.TempDir()
 	first, err := s.AttachLocal(dir, "first")
@@ -291,6 +296,7 @@ func TestStableRootsAndManagedLifecycle(t *testing.T) {
 }
 
 func TestCapacityAndPublication(t *testing.T) {
+	t.Parallel()
 	_, _, primary := newWorkspace(t)
 	r, err := New(primary, WithMaxRoots(2))
 	if err != nil {
@@ -332,6 +338,7 @@ func TestCapacityAndPublication(t *testing.T) {
 }
 
 func TestRootPathReplacementAndRawNames(t *testing.T) {
+	t.Parallel()
 	_, s, root := newWorkspace(t)
 	write(t, filepath.Join(root.Dir(), "file"), "old")
 	l, err := s.Resolve("", "file")
@@ -354,6 +361,7 @@ func TestRootPathReplacementAndRawNames(t *testing.T) {
 }
 
 func TestResolveEntryRejectsMidLookupRevocation(t *testing.T) {
+	t.Parallel()
 	_, s, _ := newWorkspace(t)
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "file"), "data")
@@ -374,6 +382,7 @@ func TestResolveEntryRejectsMidLookupRevocation(t *testing.T) {
 }
 
 func TestSymlinkSwapRechecksOwnership(t *testing.T) {
+	t.Parallel()
 	_, s, root := newWorkspace(t)
 	write(t, filepath.Join(root.Dir(), "safe", "file"), "safe")
 	write(t, filepath.Join(root.Dir(), "child", "file"), "child")
@@ -398,6 +407,7 @@ func TestSymlinkSwapRechecksOwnership(t *testing.T) {
 }
 
 func TestUpdatePersistsBeforePublishing(t *testing.T) {
+	t.Parallel()
 	_, s, _ := newWorkspace(t)
 	failed := errors.New("disk full")
 	roots, rev := s.Snapshot()
@@ -433,6 +443,7 @@ func TestUpdatePersistsBeforePublishing(t *testing.T) {
 }
 
 func TestHistoricalReservationsRemainBoundariesAfterRestart(t *testing.T) {
+	t.Parallel()
 	_, s, primary := newWorkspace(t)
 	childPath := filepath.Join(primary.Dir(), "child")
 	write(t, filepath.Join(childPath, "file"), "private")
@@ -474,6 +485,7 @@ func TestHistoricalReservationsRemainBoundariesAfterRestart(t *testing.T) {
 }
 
 func TestToolRootChecksCreationWalkAndRevocation(t *testing.T) {
+	t.Parallel()
 	_, s, primary := newWorkspace(t)
 	write(t, filepath.Join(primary.Dir(), "visible"), "visible")
 	write(t, filepath.Join(primary.Dir(), "nested", ".git"), "gitdir: elsewhere")
@@ -523,6 +535,7 @@ func TestToolRootChecksCreationWalkAndRevocation(t *testing.T) {
 }
 
 func TestToolRootAliasPreservesRawFilename(t *testing.T) {
+	t.Parallel()
 	_, s, primary := newWorkspace(t)
 	name := "strange-\xff "
 	target := filepath.Join(primary.Dir(), name)

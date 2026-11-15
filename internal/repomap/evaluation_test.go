@@ -20,6 +20,7 @@ import (
 
 // TestCorpusHelper is entered only by this test's explicitly configured subprocess.
 func TestCorpusHelper(t *testing.T) {
+	// This entry point runs in a dedicated child process.
 	if os.Getenv("HINT_CORPUS_HELPER") != "1" {
 		return
 	}
@@ -41,6 +42,7 @@ func (r *evaluationRunner) Extract(ctx context.Context, source extract.Source, l
 func (r *evaluationRunner) Close() error { return r.process.Close() }
 
 func TestCorpusEvaluation(t *testing.T) {
+	// Corpus measurements require uncontended local resources.
 	path := os.Getenv("HINT_INDEX_CORPUS")
 	if path == "" {
 		t.Skip("set HINT_INDEX_CORPUS to the pinned corpus directory for local measurements")

@@ -12,6 +12,7 @@ import (
 )
 
 func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "hint", "config.yaml")
 	err := WriteProfile(path, "api-bar", map[string]string{"base_url": "https://example.test/v1", "api_key": "${APIBAR_KEY}", "model": "m"})
 	if err != nil {
@@ -39,6 +40,7 @@ func TestWriteProfileCreatesAFileOnlyTheOwnerReads(t *testing.T) {
 }
 
 func TestWriteProfileEditsInPlaceAndKeepsComments(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	before := `# my providers
 providers:
@@ -73,6 +75,7 @@ default_provider: api-bar
 }
 
 func TestWriteProfileAddsAProfileWithoutChangingTheDefault(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("providers:\n  - name: a\n    kind: openai\ndefault_provider: a\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -88,6 +91,7 @@ func TestWriteProfileAddsAProfileWithoutChangingTheDefault(t *testing.T) {
 }
 
 func TestWriteProfileRefusesWhatItCannotEdit(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("providers: nope\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -101,6 +105,7 @@ func TestWriteProfileRefusesWhatItCannotEdit(t *testing.T) {
 }
 
 func TestLocate(t *testing.T) {
+	t.Parallel()
 	home, wd := t.TempDir(), t.TempDir()
 	loc := Locate(home, wd, lookup(nil))
 	if want := filepath.Join(home, ".config", "hint", "config.yaml"); loc.Global != want || len(loc.Read) != 0 {
@@ -122,6 +127,7 @@ func TestLocate(t *testing.T) {
 // Paths, the current and the legacy one of both layers, existing or not;
 // and whichever file Locate finds is one of them.
 func TestPathsCoverWhatTheLoaderReads(t *testing.T) {
+	t.Parallel()
 	home, wd := t.TempDir(), t.TempDir()
 	want := []string{
 		filepath.Join(home, ".config", "hint", "config.yaml"),
@@ -155,6 +161,7 @@ func TestPathsCoverWhatTheLoaderReads(t *testing.T) {
 // load, and it must mention every key the loader reads, so that a new key
 // cannot be added without being documented.
 func TestExampleConfigIsCurrent(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +216,7 @@ func TestExampleConfigIsCurrent(t *testing.T) {
 // round, so that setup and /config can neither miss a key nor offer one
 // that is ignored.
 func TestSchemaCoversTheLoader(t *testing.T) {
+	t.Parallel()
 	read := map[string]bool{}
 	collect := func(typ reflect.Type, prefix string) {
 		for i := 0; i < typ.NumField(); i++ {
@@ -241,6 +249,7 @@ func TestSchemaCoversTheLoader(t *testing.T) {
 }
 
 func TestNormalize(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		path, in, want string
 		bad            bool
@@ -273,6 +282,7 @@ func TestNormalize(t *testing.T) {
 }
 
 func TestEditSetsAndUnsetsInOneWrite(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("# keep me\noverview:\n  depth: 2 # levels\n"), 0o600); err != nil {
 		t.Fatal(err)

@@ -197,6 +197,11 @@ note pointing at `-p`.
 ### Run modes
 
 `hint` can edit files in the working directory and run shell commands.
+The `bash` tool uses bash (or sh as a fallback) on Linux and macOS, and `cmd.exe /D /S /C` on Windows.
+On Windows, write commands in `cmd.exe` syntax; POSIX shell syntax is not translated.
+Timeouts and cancellation terminate the command's process tree.
+Windows also terminates remaining background processes when the command finishes, so use a separate terminal for a persistent server.
+
 What it may do without asking is a per-run choice:
 
 ```bash
@@ -359,12 +364,18 @@ is checked against the key's type before anything is written, and the
 file keeps its comments:
 
 ```bash
-hint config                                     # what the next start uses, keys masked
+hint config                                     # resolved values, keys masked
 hint config keys                                # every key, default, HINT_* variable, flag
 hint config set overview.depth 3                # the global file
 hint config set --project providers.vllm.model Qwen/Qwen2.5-Coder-7B-Instruct   # this repository only
 hint config unset --project overview.depth      # back to the global value
 ```
+
+`hint config` displays the resolved values even when profiles are incomplete or invalid for execution.
+Exit status 0 confirms that display succeeded, including for an empty configuration or an unresolved `keyring:<account>` reference.
+It does not certify that the configuration is ready to run.
+File reading, parsing and limit-resolution errors still fail the command.
+Resolved API keys stay masked, and unresolved keyring references appear as `keyring:<account> (no key came back)`.
 
 In the TUI the same is `/config show | keys | set | unset`, with Tab
 completing the subcommand, the key and, where there is a closed set, the
@@ -460,7 +471,9 @@ than it can read. When the files do not fit, nothing is dropped blindly:
   true` or `--summarize-instructions`), a file that does not fit even as
   an outline is summarized by the model, marked `summary="true"` in the
   prompt, and the summary is cached under `~/.cache/hint/instructions/`
-  (`$XDG_CACHE_HOME` is respected) until the file changes.
+  (`$XDG_CACHE_HOME` is respected) when the primary profile responds.
+  The cache matches the primary profile name, kind, endpoint and model, the file path and content, the instruction budget and both prompts.
+  A fallback summary is used for the current request only.
 
 A warning on stderr names every file shown as less than itself.
 
@@ -725,19 +738,48 @@ your convenience.
 
 ### Known issues
 
-`v0.3.2` ships with these confirmed bugs. They are backlog (decided
-2026-10-11) and did not block this patch.
-Details and the full audit:
-[`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
+The confirmed bugs this list tracked are fixed; the notes below say when.
+Details and the full audit: [`docs/plan/review-2026-09-28-go-practices.md`](docs/plan/review-2026-09-28-go-practices.md).
 
-1. **A session file can become unreadable** if `hint` is interrupted at
-   the exact end of a write; the next `hint -c` then fails to open it.
-   Start a new session; the old file can be repaired by adding a newline
-   after the last complete line.
-2. `grep` on a single file with more than 200 matches reports an error
-   instead of a truncated list; search a directory or narrow the pattern.
-3. `write_file` on a file `hint` cannot read shows the overwrite prompt
-   as "too large to diff" instead of the read error.
+**Fixed in `fix/config-show-keyring`, pending merge.**
+With `api_key: keyring:<account>`, configuration display could fail before producing output.
+It now displays unresolved references as `keyring:<account> (no key came back)` and masks resolved keys.
+The failure was present since `v0.3.0`; see [#94](https://github.com/mrYush/hint/issues/94).
+
+**Fixed in `fix/issue-39-provider-hardening`, pending merge.** Errors such as `context_length_exceeded` or numeric `401` inside an HTTP 200 stream now retain their error kind instead of always triggering transient retries.
+Context overflow before output can trigger compaction; after partial output it ends the turn without repeating the answer.
+The stream-stall watchdog also synchronizes timeout state.
+These issues were present since `v0.2.0-alpha`; see [#39](https://github.com/mrYush/hint/issues/39).
+
+**Fixed in `fix/issue-37-config-diagnostics`, pending merge.** An unset or empty reference such as `api_key: ${API_BAR_KE}` now produces a warning naming the variable and field, including when loading fails or `hint config` displays a valid configuration.
+Errors no longer repeat `loading configuration: config:`.
+Silent expansion and repeated error context were present since `v0.2.0-alpha`.
+See [#37](https://github.com/mrYush/hint/issues/37).
+
+**Fixed in `fix/issue-38-runtime-hardening`, pending merge.** CLI usage errors now exit with status 2, and one-shot, RPC, and serve invocations exit quietly with status 130 for SIGINT or 143 for SIGTERM.
+`--help` and `--version` work without a home directory.
+Debug traces older than seven days are pruned when they have also gone seven days without modification.
+Duplicate flag errors, undifferentiated exit codes, and unbounded debug trace retention were present since `v0.2.0-alpha`.
+See [#38](https://github.com/mrYush/hint/issues/38).
+
+**Fixed on `develop`, not in a release yet.** Windows shell quoting and cancellation were broken in `v0.4.0`: a command with quotes, such as `go test -run "TestX"`, could be misquoted, and canceling a command could leave its child processes running.
+`bash` now passes the command line to `cmd.exe /D /S /C` itself and supervises the process tree with a Job Object, and CI runs the Windows shell and process-tree tests.
+Present since `v0.2.0-alpha`.
+
+**Fixed on `develop`, not in a release yet.** A session file could become
+unreadable when `hint` was interrupted at the exact end of a write: a
+complete record without its newline was accepted, and the next append glued
+a record onto the same line, so the following `hint -c` failed to open the
+file. A record now counts only when its newline is there, and opening the
+file drops an unterminated tail. The open session is also locked, so a
+second run on it fails with a message instead of appending to it. Present
+since `v0.2.0-alpha`.
+
+**Fixed on `develop`, not in a release yet.** `write_file` on a file `hint` cannot read showed the overwrite prompt as "too large to diff" instead of the read error.
+Present since `v0.2.0-alpha`.
+
+**Fixed in `v0.4.0`.** `grep` on a single file with more than 200 matches returned the walk's internal stop sentinel (`hay.txt: skip everything and stop the walk`) as a tool error instead of the first 200 matches.
+Present since `v0.2.0-alpha`.
 
 **Fixed in `v0.3.2`.** Two agent-loop bugs, both present since
 `v0.2.0-alpha`. A compaction summary was erased by the next rebuild of the
@@ -786,8 +828,11 @@ first, with the error as a suffix when the two differ.
 `--debug` (or `HINT_DEBUG=true`) writes a trace of the run — the requests
 sent, the responses, the tools called — to a file under
 `~/.local/state/hint/log/` (`$XDG_STATE_HOME` is respected), one file per
-run; the path is printed at the start. API keys are masked in it. Attach
-the file when reporting a problem.
+run; the path is printed at the start.
+When a new trace opens, timestamped Hint logs older than seven days are removed if they have also gone seven days without modification.
+Cleanup failures are recorded in the new trace and do not prevent logging.
+API keys are masked, but traces contain full prompts, responses, tool calls, and project-file content.
+Review the file for sensitive content before attaching it to a problem report.
 
 ```bash
 hint --debug -p "Your question"

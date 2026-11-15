@@ -100,6 +100,7 @@ func (t hangingTransport) Connect(context.Context) (sdk.Connection, error) {
 }
 
 func TestManagerListTimeout(t *testing.T) {
+	t.Parallel()
 	conn := newHangingConn()
 	m, err := NewManager([]ServerConfig{{Name: "hang", Transport: TransportStdio, Command: "unused"}}, Options{
 		ListTimeout: 20 * time.Millisecond,

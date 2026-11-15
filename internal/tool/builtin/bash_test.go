@@ -3,6 +3,8 @@ package builtin_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -22,6 +24,7 @@ func needsPOSIXShell(t *testing.T) {
 }
 
 func TestBash_RunsInRoot(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	root := newRoot(t, map[string]string{"marker.txt": ""})
 	tl := builtin.NewBash(root)
@@ -42,6 +45,7 @@ func TestBash_RunsInRoot(t *testing.T) {
 }
 
 func TestBash_ExitCodeAndStderr(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil))
 
@@ -57,20 +61,31 @@ func TestBash_ExitCodeAndStderr(t *testing.T) {
 }
 
 func TestBash_TimeoutKillsProcessGroup(t *testing.T) {
+	// This test checks real process timing.
 	needsPOSIXShell(t)
-	tl := builtin.NewBash(newRoot(t, nil))
+	root := newRoot(t, nil)
+	tl := builtin.NewBash(root)
 
 	start := time.Now()
-	got := failed(t, run(t, tl, `{"command":"echo started; sleep 30; echo never","timeout":"1"}`), "[timed out after 1s; process killed]")
+	got := failed(t, run(t, tl, `{"command":"echo started; (sleep 2; touch marker) & wait; echo never","timeout":"1"}`), "[timed out after 1s; process killed]")
 	if time.Since(start) > 5*time.Second {
 		t.Fatalf("took %s; the sleep was not killed", time.Since(start))
 	}
 	if !strings.HasPrefix(got, "started\n") || strings.Contains(got, "never") {
 		t.Fatalf("partial output: %q", got)
 	}
+	// The subshell is a child of the shell, not of the test: if the process
+	// group survived the timeout, it creates the marker two seconds in. The
+	// wait is a grace window for that negative assertion, not a
+	// synchronization point.
+	time.Sleep(2500 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(root.Dir(), "marker")); err == nil {
+		t.Fatal("a descendant process survived the group kill")
+	}
 }
 
 func TestBash_CanceledByCaller(t *testing.T) {
+	// This test checks real process timing.
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,7 +100,25 @@ func TestBash_CanceledByCaller(t *testing.T) {
 	failed(t, res, "[canceled]")
 }
 
+func TestBash_ParentDeadlineIsNotItsOwnTimeout(t *testing.T) {
+	// This test checks real process timing.
+	needsPOSIXShell(t)
+	tl := builtin.NewBash(newRoot(t, nil))
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	res, err := tl.Run(ctx, "c1", json.RawMessage(`{"command":"sleep 30","timeout":"60"}`))
+	if err != nil {
+		t.Fatalf("machinery error: %v", err)
+	}
+	got := failed(t, res, "[canceled]")
+	if strings.Contains(got, "timed out after") {
+		t.Fatalf("parent deadline reported as the tool's own timeout: %q", got)
+	}
+}
+
 func TestBashDescribeCutsCommandOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	tl := builtin.NewBash(newRoot(t, nil))
 	cmd := strings.Repeat("Привет ", 30)
 	args := json.RawMessage(`{"command":"` + cmd + `"}`)
@@ -103,6 +136,7 @@ func TestBashDescribeCutsCommandOnRuneBoundary(t *testing.T) {
 }
 
 func TestBash_LargeOutputIsBounded(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil), builtin.WithLimits(tool.Limits{MaxOutput: 3000}))
 	got := ok(t, run(t, tl, `{"command":"seq 1 100000"}`))
@@ -118,6 +152,7 @@ func TestBash_LargeOutputIsBounded(t *testing.T) {
 }
 
 func TestBash_Errors(t *testing.T) {
+	t.Parallel()
 	tl := builtin.NewBash(newRoot(t, nil))
 	failed(t, run(t, tl, `{}`), "command is required")
 	failed(t, run(t, tl, `{"command":"   "}`), "command is required")

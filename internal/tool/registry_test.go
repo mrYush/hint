@@ -26,6 +26,7 @@ func named(name string) namedTool {
 }
 
 func TestRegistry_SortedAccessors(t *testing.T) {
+	t.Parallel()
 	r, err := tool.NewRegistry(named("grep"), named("bash"), named("read_file"))
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +57,7 @@ func TestRegistry_SortedAccessors(t *testing.T) {
 }
 
 func TestRegistry_RejectsBadRegistrations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		tool agentapi.Tool
@@ -86,6 +88,7 @@ func TestRegistry_RejectsBadRegistrations(t *testing.T) {
 }
 
 func TestRegistry_ConcurrentRegisterAndLookup(t *testing.T) {
+	t.Parallel()
 	r, err := tool.NewRegistry()
 	if err != nil {
 		t.Fatal(err)

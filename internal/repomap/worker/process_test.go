@@ -15,6 +15,7 @@ import (
 )
 
 func TestHelperProcess(t *testing.T) {
+	// This entry point runs in a dedicated child process.
 	if os.Getenv("HINT_EXTRACT_TEST_HELPER") != "1" {
 		return
 	}
@@ -64,6 +65,7 @@ func helper(t *testing.T, mode string) *Process {
 }
 
 func TestPersistentWorkerAndReset(t *testing.T) {
+	t.Parallel()
 	p := helper(t, "normal")
 	source := extract.Source{Path: "x.go", Content: []byte("package p; func Open() {}")}
 	var pid int
@@ -92,6 +94,7 @@ func TestPersistentWorkerAndReset(t *testing.T) {
 }
 
 func TestWorkerFailuresAreReaped(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"sleep", "corrupt", "oversized", "inconsistent", "exit"} {
 		t.Run(mode, func(t *testing.T) {
 			p := helper(t, mode)
@@ -113,6 +116,7 @@ func TestWorkerFailuresAreReaped(t *testing.T) {
 }
 
 func TestCallerCancellationAndQueuedCancellation(t *testing.T) {
+	t.Parallel()
 	p := helper(t, "sleep")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -132,19 +136,26 @@ func TestCallerCancellationAndQueuedCancellation(t *testing.T) {
 }
 
 func TestStderrIsBounded(t *testing.T) {
+	t.Parallel()
 	p := helper(t, "stderr")
 	if _, err := p.Extract(context.Background(), extract.Source{Path: "x.go", Content: []byte("package p")}, extract.DefaultLimits()); err != nil {
 		t.Fatal(err)
 	}
-	p.stderr.mu.Lock()
-	n := len(p.stderr.data)
-	p.stderr.mu.Unlock()
+	// Close waits for os/exec's stderr copier before inspecting its buffer.
+	stderr := p.stderr
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stderr.mu.Lock()
+	n := len(stderr.data)
+	stderr.mu.Unlock()
 	if n != maxStderrBytes {
 		t.Fatalf("stderr retained %d bytes", n)
 	}
 }
 
 func TestServeRejectsIncompleteAndOversizedFrames(t *testing.T) {
+	t.Parallel()
 	for _, text := range []string{`{"source":`, strings.Repeat("x", maxRequestBytes+1)} {
 		var out bytes.Buffer
 		if err := Serve(context.Background(), strings.NewReader(text), &out); err == nil {
@@ -154,6 +165,7 @@ func TestServeRejectsIncompleteAndOversizedFrames(t *testing.T) {
 }
 
 func TestServeDoesNotReadSourcePath(t *testing.T) {
+	t.Parallel()
 	input, err := json.Marshal(request{Source: extract.Source{Path: "/path/that/must/not/be/read.go", Content: []byte("package p; func BytesOnly() {}")}, Limits: extract.DefaultLimits()})
 	if err != nil {
 		t.Fatal(err)

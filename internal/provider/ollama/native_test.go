@@ -10,6 +10,7 @@ import (
 )
 
 func TestNativeBaseURLStripsV1(t *testing.T) {
+	t.Parallel()
 	tests := []struct{ in, want string }{
 		{"http://localhost:11434/v1", "http://localhost:11434"},
 		{"http://localhost:11434/v1/", "http://localhost:11434"},
@@ -24,6 +25,7 @@ func TestNativeBaseURLStripsV1(t *testing.T) {
 }
 
 func TestReady(t *testing.T) {
+	t.Parallel()
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -41,6 +43,7 @@ func TestReady(t *testing.T) {
 }
 
 func TestReadyDownDaemon(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	url := srv.URL
 	srv.Close()
@@ -56,6 +59,7 @@ func TestReadyDownDaemon(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {
 			http.NotFound(w, r)

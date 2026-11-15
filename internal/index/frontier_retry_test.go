@@ -9,6 +9,7 @@ import (
 )
 
 func TestFrontierDelaySurvivesRestartAndNewInvalidation(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	now := time.Now()
 	if err := s.Enqueue(t.Context(), "r_test", []byte("retry")); err != nil {
@@ -78,6 +79,7 @@ func TestFrontierDelaySurvivesRestartAndNewInvalidation(t *testing.T) {
 }
 
 func TestFrontierV2MigrationPreservesWork(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	file, symbols := testSource("keep.go", "Keep")
 	putTestSource(t, s, file, symbols)
@@ -114,6 +116,7 @@ func TestFrontierV2MigrationPreservesWork(t *testing.T) {
 }
 
 func TestFrontierRetryUsesBoundedSeek(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	rows, err := s.db.QueryContext(t.Context(), "EXPLAIN QUERY PLAN SELECT sequence,root,path,revision FROM frontier INDEXED BY frontier_ready WHERE root=? AND not_before<=? ORDER BY not_before,sequence LIMIT ?", "r_test", time.Now().UnixMilli(), 1)
 	if err != nil {

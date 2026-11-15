@@ -10,6 +10,7 @@ import (
 )
 
 func TestWorkspaceHistoryAcrossResumeCompactionAndFork(t *testing.T) {
+	t.Parallel()
 	store := NewStore(t.TempDir())
 	sess, err := store.Create(t.TempDir())
 	if err != nil {
@@ -71,6 +72,7 @@ func TestWorkspaceHistoryAcrossResumeCompactionAndFork(t *testing.T) {
 }
 
 func TestWorkspaceRootRawPathAndReservations(t *testing.T) {
+	t.Parallel()
 	root := WorkspaceRoot{ID: "root", Alias: "primary", Path: "/raw/" + string([]byte{0xff}), Primary: true}
 	data, err := json.Marshal(root)
 	if err != nil {
@@ -100,6 +102,7 @@ func TestWorkspaceRootRawPathAndReservations(t *testing.T) {
 }
 
 func TestWorkspaceRecordValidationAndWriteFailure(t *testing.T) {
+	t.Parallel()
 	sess, err := NewStore(t.TempDir()).Create(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

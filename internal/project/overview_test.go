@@ -27,6 +27,7 @@ func fixture() fstest.MapFS {
 }
 
 func TestTree_DepthAndIgnore(t *testing.T) {
+	t.Parallel()
 	got, err := project.Tree{}.Render(context.Background(), fixture(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +54,7 @@ func TestTree_DepthAndIgnore(t *testing.T) {
 }
 
 func TestTree_MaxEntries(t *testing.T) {
+	t.Parallel()
 	got, err := project.Tree{MaxEntries: 3}.Render(context.Background(), fixture(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +66,7 @@ func TestTree_MaxEntries(t *testing.T) {
 }
 
 func TestTree_CustomIgnorerAndEmpty(t *testing.T) {
+	t.Parallel()
 	only := ignoreFunc(func(rel string, isDir bool) bool { return rel != "go.mod" })
 	got, err := project.Tree{}.Render(context.Background(), fixture(), only)
 	if err != nil {
@@ -80,6 +83,7 @@ func TestTree_CustomIgnorerAndEmpty(t *testing.T) {
 }
 
 func TestTree_Canceled(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := (project.Tree{}).Render(ctx, fixture(), nil); err == nil {
@@ -88,6 +92,7 @@ func TestTree_Canceled(t *testing.T) {
 }
 
 func TestNone(t *testing.T) {
+	t.Parallel()
 	got, err := project.None{}.Render(context.Background(), fixture(), nil)
 	if err != nil || got != "" {
 		t.Fatalf("None = %q, %v", got, err)

@@ -7,6 +7,7 @@ import (
 )
 
 func TestMask(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		in   string
@@ -33,6 +34,7 @@ func TestMask(t *testing.T) {
 }
 
 func TestRedact(t *testing.T) {
+	t.Parallel()
 	secrets := []string{"key-one-1234", "key-two-5678", "", "short"}
 	in := "url?a=key-one-1234&b=key-two-5678 and key-one-1234 again, a short word"
 	got := Redact(in, secrets)
@@ -47,6 +49,7 @@ func TestRedact(t *testing.T) {
 }
 
 func TestProfileStringMasksKey(t *testing.T) {
+	t.Parallel()
 	p := Profile{
 		Name:    "api-bar",
 		Kind:    KindOpenAI,

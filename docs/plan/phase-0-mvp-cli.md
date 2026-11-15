@@ -25,6 +25,23 @@ git auto-commits, LSP, widgets, and mobile apps — all later phases.
 - `--debug` writes full requests/responses (keys masked) to
   `~/.local/state/hint/log`.
 
+## Test reliability follow-up — issue #42
+
+**Branch:** `dev/issue-42-test-reliability`
+
+[Issue #42](https://github.com/mrYush/hint/issues/42) addresses S30–S32 from the Go-practices audit.
+
+- [x] Replace sleep-based synchronization in the audited REPL, line-reader and permission-prompt scenarios.
+- [x] Fail immediately on an unexpected line and close and drain test input with a bounded cleanup.
+- [x] Enable parallel execution across isolated tests, including config, project, tools, RPC, workspace, index, MCP and TUI.
+- [x] Document serial exceptions for process-wide mutations, clipboard replacement, subprocess entry points, live services, measurements and fixtures with short real deadlines.
+- [x] Cover future and expired HTTP dates in `Retry-After`; retain the existing B1/B2/B3/M1/M2 regressions.
+
+The scheduler overlap heuristic and fractional-second retry rounding remain separate follow-ups.
+MCP timeout fixtures discover tools with the normal connection budget and apply the short timeout only to the deliberately blocked call.
+They verify that discovery returned the expected tools before invoking them.
+Resource-sensitive initialization fixtures retain serial execution.
+
 ## Work packages
 
 ### WP0.1 — Public contract: `pkg/agentapi` — **done**
@@ -115,6 +132,17 @@ Extends `internal/config`. Priority: CLI flags → env (`HINT_*`) → project
 - ✅ Migration: map today's flat `api_url`/`api_key`/`model` config onto a single implicit profile (warn once)
 - ✅ Table-driven tests for source priority and env expansion
 
+Follow-up from the Go-practices audit: [#37](https://github.com/mrYush/hint/issues/37), branch `fix/issue-37-config-diagnostics` (pending merge).
+
+- ✅ S7: warn with the field and variable name for missing or empty `$VAR` / `${VAR}` references; preserve these diagnostics on load failure and display warnings on stderr in `hint config`.
+- ✅ S8: expose `ErrNoProvider`, `ErrUnknownProfile`, and `ValidationError.Key`; retain `NoKeyError` / `NoModelError` through wrapping and test with `errors.Is` / `errors.As`.
+- ✅ S9: omit the package-level `config:` prefix; callers supply operation context.
+- ✅ S22: parse numeric and boolean CLI flags with Cobra and use `Changed` to pass optional typed overrides.
+
+Diagnostics retain names, never expanded values, and do not mistake shell parameters such as `$1` and `$$` for environment variables.
+`ValidationError.Key` identifies the responsible field, including `default_provider`, `fallback_provider`, `providers.<name>.<field>`, and `mcp_servers.<name>`.
+Direct profile lookup returns `ErrUnknownProfile`; the caller that knows the selecting field attaches its key.
+
 Example config:
 
 ```yaml
@@ -177,17 +205,27 @@ depend on them:
   `APIBAR_TOKEN` (api-bar wins) or `OPENAI_API_KEY` (legacy openai.com). An
   explicit profile must name its key via `${VAR}` — the loader never guesses
   a key for it, and never sends an OpenAI key to another host.
-- **Flag defaults are empty strings.** The old `--model` default `gpt-4`
-  silently beat every config file; built-in defaults now live in the loader,
-  applied only after all overlays. Legacy paths (`~/.config/hint.yaml`,
-  `./hint.yaml`) are still read with a deprecation warning when the
-  canonical ones are absent.
+- **Omitted flags do not override files.** String flags default to empty; numeric and boolean flags reach the loader as `*int` / `*bool` only when Cobra reports `Changed`.
+  Explicit `0` and `false` remain distinct from omission.
+  Built-in defaults live in the loader and apply after overlays.
+  Legacy paths (`~/.config/hint.yaml`, `./hint.yaml`) are still read with a deprecation warning when the canonical ones are absent.
 - **`$VAR`/`${VAR}` expansion applies to file values only** (profile fields
   plus `default_provider`/`fallback_provider`), after merge. Flag and env
   overlay values are not expanded — the shell already did that. No
   `$(cmd)`, no `${VAR:-default}`.
 
 ### WP0.3 — Provider layer — **done**
+
+Follow-up [#39](https://github.com/mrYush/hint/issues/39), branch `fix/issue-39-provider-hardening` (pending merge).
+
+- ✅ S13: synchronize stream timeout state with `atomic.Bool`.
+- ✅ S10: classify inline stream errors using HTTP-like numeric codes, symbolic codes and context-overflow messages; preserve the provider name.
+- ✅ S26: pass `*slog.Logger` through provider construction, with disabled debug logging by default and redacted text output when tracing.
+- ✅ S29: drive the router matrix from `agentapi.ErrorKinds()`, checked against source declarations by a contract test.
+
+Unknown errors inside HTTP 200 retain the historical transient classification: no failing HTTP status exists from which to infer an invalid request.
+Only recognized symbolic codes are classified; speculative substring aliases are excluded.
+Context overflow triggers compaction and retry only before text or thinking has been delivered; a later overflow ends the turn with an error to avoid splicing two answers.
 
 Replaces `internal/llm` with `internal/provider/openai` + `internal/provider/router`.
 
@@ -346,9 +384,70 @@ Each tool: JSON Schema input, text output, timeout, large-output truncation
 - ✅ `todo(items[])` — current-task plan, shown to the user
 - ✅ Tool registry + schema generation for the provider layer
 - ✅ Per-tool unit tests incl. truncation and timeout behavior
-- [ ] Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file)
-- [ ] Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff)
+- ✅ Backlog (audit 2026-09-28, M1; does not block `v0.2.0`, decided 2026-10-11): `grep` on a single file must not leak `filepath.SkipAll` — [review](review-2026-09-28-go-practices.md#m1--filepathskipall-leaks-out-of-grep-on-a-single-file) ([#97](https://github.com/mrYush/hint/pull/97) fixed the code; [#34](https://github.com/mrYush/hint/issues/34) added the single-file regression test)
+- ✅ Backlog (audit 2026-09-28, M2; does not block `v0.2.0`, decided 2026-10-11): `readWhole` returns sentinel errors; `write_file.Describe` shows a read error instead of "too large to diff" — [review](review-2026-09-28-go-practices.md#m2--readwhole-errors-are-all-reported-as-too-large-to-diff) ([#34](https://github.com/mrYush/hint/issues/34), `fix/tool-audit-followups`)
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in `read_file`, `grep`, `bash` and tool descriptions — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
+
+#### Windows shell follow-up — issue #35
+
+**Branch:** `fix/windows-bash`
+
+The 2026-11-11 check of `develop` (`b7dbe35`) confirmed that [#35](https://github.com/mrYush/hint/issues/35), audit finding S15, remains reproducible by inspection: `cmd.exe` receives Go's argument quoting, cancellation kills only the shell, and CI never executes Windows shell tests.
+The owner chose full Windows support (option A in the issue) on 2026-11-11.
+This follow-up belongs to WP0.5; it does not reopen the delivered package or change its original branch.
+
+Scope: preserve the existing `bash(command, timeout?)` API and permission/environment/output limits, use `cmd.exe` syntax on Windows, and supervise its process tree.
+POSIX syntax translation, PowerShell selection, a shell sandbox and unrelated audit findings are out of scope.
+
+Implementation plan and acceptance criteria:
+
+- ✅ Extract the existing Windows clone Job Object runner into a shared internal process-tree package and keep clone using that implementation.
+  Preserve Unix process-group cancellation and keep the shared package independent of the agent and built-in tools.
+  The scope review on 2026-11-11 found that the initial shared Unix runner also gave clone the shell's single-process fallback.
+  The correction restores clone's strict error propagation in `processtree.Run` and routes bash through platform-specific `runShellCommand`: Unix retains its original fallback, while Windows uses the shared Job Object runner.
+  Regression tests inject group-kill permission errors and verify that clone's cancellation preserves them without killing the main process; a live child outside its own group verifies bash's fallback.
+- ✅ Build the Windows shell's complete `SysProcAttr.CmdLine` explicitly as `cmd.exe /D /S /C "<command>"`, preserving command text and inner quotes without `CommandLineToArgvW` escaping.
+  Disable AutoRun and document the platform's shell syntax in the tool description and README.
+- ✅ Start suspended, assign the process to a kill-on-close Job Object, then resume its initial thread.
+  Serialize setup against cancellation so an early cancel cannot miss an unassigned process.
+  Abort and reap a started process on setup failure, retain contextual errors, and close every acquired Windows handle.
+- ✅ Cancel the whole job on the tool's timeout or caller cancellation and close it after normal exit so background children cannot escape the tool lifetime.
+  Preserve stdout/stderr separation, nonzero exit codes, working directory, filtered environment, bounded output and the distinction between the tool's own timeout and a parent deadline.
+- ✅ Add executable Windows regressions for quoted arguments, a quoted executable path with spaces, redirection/pipelines, working directory, environment, exit codes, truncation and timeout/cancellation.
+  Observe descendant process handles to prove termination, including descendants that do not inherit output pipes and a child created immediately after startup.
+  Exercise already-canceled contexts and process-start failures.
+- ✅ Add a dedicated Windows CI job that runs the shell and shared process-tree tests with the race detector; retain the existing Linux suite and build matrix.
+  The first Windows run on the published merge with `develop` reached the runtime assertions but failed during temporary-directory cleanup because the shared `newRoot` test helper left its `os.Root` handle open.
+  Register `root.Close` with `t.Cleanup` after `t.TempDir` so the directory handle closes before removal; a successful Windows rerun remains required.
+- ✅ Run local formatting, unit tests, vet, pinned lint and cross-compilation checks; the verification record below distinguishes passing checks from outstanding gates.
+- ✅ Obtain a green full `go test -race ./...` run after the Unix scope correction; no index code or test changed, and the earlier intermittent SQLite failures remain recorded below.
+- [ ] Publish through the repository's normal flow, pass the Windows runtime CI job and integrate into `develop` before closing #35.
+  `origin/fix/windows-bash` is published at `938194f` (implementation `4b786ff`, Unix correction `b1c753e`, then merge with `develop`), and [PR #121](https://github.com/mrYush/hint/pull/121) is open against `develop`.
+  The [Windows runtime job](https://github.com/mrYush/hint/actions/runs/42975444728/job/130373352063) ran and failed on test-root cleanup; the local helper correction and documentation updates await publication and a green rerun before integration.
+
+Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10):
+
+| Check | Result |
+|---|---|
+| `gofmt -l .`, `git diff --check` | Passed |
+| `go test ./...`, `go vet ./...` | Passed |
+| `golangci-lint run ./...` v2.13.2, native and `GOOS=windows GOARCH=amd64 CGO_ENABLED=0` | Passed, zero issues |
+| Native CGO-free CLI build and `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` | Passed |
+| `GOOS=windows GOARCH={amd64,arm64} CGO_ENABLED=0 go build ./...` and `go vet ./...` | Passed |
+| Windows shell and process-tree test binaries, amd64 and arm64 | Compiled; execution requires Windows |
+| `go test -race ./cmd/hint ./internal/tool/builtin ./internal/processtree` | Passed on macOS |
+| Full `go test -race ./...` | Passed after the Unix scope correction; earlier runs failed twice in unchanged `internal/index.TestPeerOpenRetriesAfterAttemptDeadline`, also reproduced on clean `develop` at `b7dbe35` |
+| Windows runtime CI at `938194f` | Failed on temporary-directory cleanup with open test-root handles; local `newRoot` cleanup correction awaits publication and a green rerun |
+
+The published merge with `develop` at `938194f` passed the Linux race suite, lint, Harbor checks and all six build/vet targets in [CI run 42975444728](https://github.com/mrYush/hint/actions/runs/42975444728).
+The Windows process-tree package passed; the built-in shell tests reported only temporary-directory cleanup failures, including tests that never start a shell.
+The owner also verified the merged tree locally with a full race run, native and Windows lint/vet, and CGO-free Linux/arm64 and Windows/amd64+arm64 builds on 2026-11-11.
+The local test-root cleanup correction passed formatting, the full ordinary and race suites, native vet, native and Windows lint v2.13.2, and compilation plus focused vet of the Windows tests for amd64 and arm64.
+
+The earlier SQLite race-test failure reported `context deadline exceeded` without the expected `ErrBusy` classification at `contention_test.go:199`.
+A standalone `go test -race -count=1 -run '^TestPeerOpenRetriesAfterAttemptDeadline$' ./internal/index` on clean `develop` reproduced it.
+No index code or test is changed by this follow-up.
+The Unix cancellation regressions were also checked against temporary copies that reintroduced clone's fallback or removed bash's fallback; each test rejected the corresponding regression.
 
 Decisions taken while implementing, recorded here because later packages
 depend on them:
@@ -521,6 +620,43 @@ depend on them:
       same seam, so fix both together
 - ✅ Tests: every class × every mode, allow-list persistence within a session, path-escape attempts
 
+#### Permission errors and diff memory follow-up — issue #36
+
+**Branch:** `fix/permission-errors-diff-memory`
+
+The 2026-11-11 inspection of `develop` (`3a18de1`) and every current source branch found the same unresolved S3 and S33 implementations from [#36](https://github.com/mrYush/hint/issues/36).
+This follow-up belongs to WP0.6 and keeps the delivered package's original scope and status.
+The owner also requested propagation of reader failures on 2026-11-11; EOF remains an ordinary denial.
+
+Implementation plan and acceptance criteria:
+
+- ✅ Return wrapped prompter errors from `Gate.Authorize`, preserving `errors.Is`/`errors.As`, denial on failure, no remembered grant and the priority of an ended context.
+- ✅ Return wrapped non-EOF input errors from `ReaderPrompter`; retain denial for EOF, empty answers and missing prompters.
+- ✅ Store only the active `[-d, d]` frontier range at each Myers step and adjust backtracking to the per-step offset.
+  Preserve the shortest script, delete-before-insert tie-break, unified output, edit-distance cap of 2000 and full-replacement fallback.
+  Linear-space Myers and changes to the cap or tool APIs are out of scope.
+- ✅ Add regression tests for prompt errors and cancellation, reader failures versus EOF, real-gate agent failure, minimum edit distance and both sides of the diff cap.
+- ✅ Stop a client-side prompt failure from crossing the RPC boundary as silence: `shell.RunTurn` cancels the turn and returns the wrapped cause at once, instead of letting the core deny after `DefaultPermissionWait`.
+  The end-to-end regression runs the CLI's `ReaderPrompter` through the real in-process RPC server and asserts that the turn is cancelled, no tool runs and the session takes the next turn.
+- ✅ Measure allocation bytes before and after using the same high-distance and fallback benchmarks; run formatting, ordinary and race tests, vet, pinned lint and CGO-free Linux/arm64 build checks.
+- [ ] Integrate through the normal review flow before closing #36.
+  Commit, push, PR creation and issue closure require separate owner instructions.
+
+Local verification on 2026-11-11 (macOS/arm64, Go 1.26.10): `gofmt -l .`, `git diff --check`, `go test ./...`, `go test -race ./...`, `go vet ./...`, `golangci-lint run ./...` v2.13.2 and `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` passed.
+The full test suites required execution outside the sandbox for their local HTTP servers and subprocesses; Go and lint used caches under `/private/tmp`.
+The new gate, reader, real-gate agent and shell prompt-failure regressions failed on the original implementation and passed after the fix.
+
+Allocation measurements use `go test ./internal/diff -run '^$' -bench '^BenchmarkLines$' -benchmem -count=3` with identical benchmark inputs before and after the frontier change.
+The table reports the median allocation bytes per operation, including the edit script and Go allocation rounding; these are allocated bytes, not peak resident memory.
+
+| Benchmark | Before (B/op) | After (B/op) | Reduction |
+|---|---|---|---|
+| 1000 removed and 1000 inserted lines, distance 2000 | 65,966,030 | 34,203,477 | 48.1% |
+| 3000 removed and 3000 inserted lines, capped fallback | 66,054,114 | 34,291,541 | 48.1% |
+
+Trace storage remains quadratic in the explored edit distance and bounded by the existing cap.
+The independent small-input edit-distance oracle, existing unified-output and tie-break tests, and new anchor-preservation cases below, at and above the cap verify that compact storage keeps the original diff behavior.
+
 Decisions taken while implementing, recorded here because later packages
 depend on them:
 
@@ -579,13 +715,11 @@ depend on them:
   (`tool.Truncate`, head and tail); the `PermissionRequest` on the event
   stream stays whole — how to show a long `Detail` is the client's call,
   per the contract.
-- **Fail closed.** No prompter, a prompter error with the context still
-  alive, stdin at EOF (`hint … < /dev/null`, a closed pipe), or an empty
-  answer all deny; only `y`/`yes`/`a`/`always` allow. `cmd/hint` says up
-  front when stdin is not a terminal and what will be denied, and
-  `--yolo` prints a loud warning before the first request. The model
-  reads a denial as an error result telling it not to retry the same
-  action unchanged; the turn continues.
+- **Fail closed.** No prompter, stdin at EOF (`hint … < /dev/null`, a closed pipe), or an empty answer all deny; only `y`/`yes`/`a`/`always` allow.
+  Prompter failures and non-EOF input errors propagate and abort the turn without running the call or remembering a grant (issue #36).
+  Over RPC the client's prompter is not the core's `Gate`, so `shell.RunTurn` sends `turn.cancel` and returns the cause itself rather than leaving the core to deny after `DefaultPermissionWait`; the core records the call as canceled.
+  `cmd/hint` says up front when stdin is not a terminal and what will be denied, and `--yolo` prints a loud warning before the first request.
+  The model reads an ordinary denial as an error result telling it not to retry the same action unchanged; the turn continues.
 - **Preview cost.** `Gate.Review` checks the mode before building a
   preview and the allow-list after, because a command grant needs the
   command text. Only execute-class calls can be granted and their preview
@@ -593,6 +727,9 @@ depend on them:
   then silences.
 - **No mode lifts `tool.Root`.** `--yolo` stops asking; it does not let
   `write_file ../secret` through. Pinned by `TestYoloDoesNotLiftRoot`.
+- **A client-side prompt failure cancels the turn.** The core's gate can propagate its own prompter error, but the CLI's `ReaderPrompter` runs in the shell; `shell.RunTurn` therefore cannot return that error to the core and instead sends `turn.cancel`, waits for the terminal event and reports the wrapped cause itself.
+  Treating the failure as a cancel keeps every unfinished call in the session with a "canceled" result, and `--output json` still reports `finish_reason: error` because the shell's turn failed.
+  Staying silent would leave the core waiting for `DefaultPermissionWait` and then turn a broken stdin into an ordinary denial.
 - **Cancel is classified by the context, not by the error's type.**
   `runTools` now treats any error — from a tool, or from the prompt —
   with `ctx.Err() != nil` as a cancel: the interrupted call and every
@@ -624,7 +761,9 @@ depend on them:
       travels inside its assistant message), `compaction` (checkpoint)
 - ✅ Commands: `hint` (new session), `hint -c` (continue latest in this directory), `hint -r` (pick from a list), `hint --no-session`
 - ✅ Golden tests for the session format (backward-compat gate)
-- [ ] Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable)
+- ✅ Backlog (audit 2026-09-28, B3; does not block `v0.2.0`, decided 2026-10-11): a complete last record without `\n` is torn; reopen after append must succeed — [review](review-2026-09-28-go-practices.md#b3--a-complete-last-record-without-n-turns-the-session-file-unreadable) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
+- ✅ Backlog (audit 2026-09-28, S17): an open session holds an exclusive lock; a second run gets `ErrLocked` instead of interleaving records — [review](review-2026-09-28-go-practices.md#persistence-and-files) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
+- ✅ Backlog (audit 2026-09-28, S19): the golden file is loaded from a copy; `ExampleRecorder` uses a temporary directory — [review](review-2026-09-28-go-practices.md#persistence-and-files) ([#33](https://github.com/mrYush/hint/issues/33), `fix/session-tail-and-lock`)
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation of the prompt in the session picker — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
 
 Decisions taken while implementing, recorded here because later packages
@@ -676,13 +815,24 @@ depend on them:
   `DiscardPending` and a sticky terminal error included — and
   `permission.NewLinePrompter` and `session.Choose` share one instance
   built in `cmd/hint`. WP0.9's REPL takes its input through it as well.
-- **A torn tail is truncated on open, like a journal.** A crash mid-write
-  leaves a partial last line; readers ignore it with a warning, and
-  `Store.Open` truncates the file back to the last complete record
-  before appending, since the bytes can never parse and the next record
-  would otherwise garble with them. That is the only time bytes are
-  removed from a session file. `List` is read-only and skips a file it
-  cannot read, so one damaged session does not hide the others.
+- **A torn tail is truncated on open, like a journal.** A record is one
+  line that ends in a newline: the writer appends the newline in the same
+  write as the record, so an unterminated tail is an interrupted append,
+  not a committed record, whether or not its bytes parse. Readers ignore
+  it with a warning, and `Store.Open` truncates the file back to the last
+  terminated record before appending, so the next record starts a clean
+  line. That is the only time bytes are removed from a session file.
+  `List` is read-only and skips a file it cannot read, so one damaged
+  session does not hide the others.
+- **An open session holds an exclusive lock.** `Store.Open` locks a
+  sidecar file beside the session before loading it and keeps the lock
+  until `Close`, so two `hint -c` runs cannot interleave two histories;
+  the second gets `ErrLocked`, which the RPC layer reports as busy. The
+  lock is a sidecar rather than the session file because a Windows
+  byte-range lock on the session would also hide it from readers;
+  `Store.Peek` reads without locking, which is what listing and forking
+  another run's session need. `syscall.Flock` takes it on Unix and
+  `LockFileEx` on Windows, so a crashed process releases it.
 - **Forward compatibility follows the wire types' rule.** An unknown
   record kind, or a message carrying an unknown part kind
   (`agentapi.ErrUnknownKind`), is skipped with a warning the CLI prints
@@ -813,6 +963,16 @@ depend on them:
   [WP0.12](#wp012--instructions-beyond-the-budget--done); just-in-time loading
   of a subdirectory's instructions lives there too.
 
+#### Project context reliability follow-up — issue #40
+
+**Branch:** `fix/issue-40-project-reliability`
+
+Tracks [#40](https://github.com/mrYush/hint/issues/40).
+
+- ✅ Probe Git worktrees with a stable locale and preserve command and context errors under the existing time limits (S11).
+- ✅ Key instruction summaries by both prompts, primary profile and budget, sync and publish cache entries atomically, and skip caching fallback responses (S18).
+- ✅ Reuse compiled rule globs and report every rule warning (S21).
+
 ### WP0.9 — Run modes and CLI surface — **done**
 
 Breaking change accepted (see PLAN.md): bare `hint` = interactive REPL.
@@ -892,20 +1052,15 @@ depend on them:
   permission requests, compactions, errors and usage. Every line passes
   through `config.Redact` with `Config.Secrets()` inside an `io.Writer`
   decorator (`internal/debuglog`), so a secret quoted in a body is
-  scrubbed even where a client forgot to mask. Plain timestamped text,
-  not `slog`: the file is read by a person chasing a bad answer, and a
-  request body reads better unescaped; structured logs come with the
-  core-as-a-service, where a line has more than one consumer. Failing to
-  open the file is a warning, not a refusal. The file and its directory
-  are owner-only: the trace holds the user's prompts and code.
-- **Numeric flags are strings.** Flag defaults must stay empty (WP0.2's
-  rule) and 0 is a legal `--overview-depth`; a cobra int flag cannot tell
-  unset from 0. The loader parses them: a bad flag is an error naming the
-  flag, a bad variable a warning that leaves the value alone (the
-  `HINT_DEBUG` rule), and a negative value is refused wherever it came
-  from, a file included. The YAML side uses `*int` for the same reason,
-  so `overview: {depth: 0}` in a project file survives the merge with a
-  global file that says 3.
+  scrubbed even where a client forgot to mask. Agent events remain timestamped text.
+  Provider diagnostics use a `slog` text handler on the same redacting writer, with string attributes scrubbed before encoding as well.
+  Failing to open the file is a warning, not a refusal.
+  The file and its directory are owner-only: the trace holds the user's prompts and code.
+- **Numeric and boolean flags are typed** ([#37](https://github.com/mrYush/hint/issues/37)).
+  Cobra parses values; `Changed` determines whether a `*int` / `*bool` override reaches the loader, preserving explicit `--overview-depth=0` and `--summarize-instructions=false`.
+  Invalid flag syntax exits 2; a parsed value outside the configuration range exits 1, as does an invalid file value.
+  The loader reports configuration keys rather than CLI flag spellings; invalid environment values remain warnings that leave the lower-priority value alone.
+  YAML uses pointers too, so a project's `overview: {depth: 0}` survives merging with a global depth of 3.
 - **Config owns the limit defaults; `project` keeps its constants.**
   `config` is loaded before anything else and must not import `project`,
   so the three numbers exist twice and `internal/project`'s test asserts
@@ -933,7 +1088,15 @@ depend on them:
   beyond cooked mode, no multi-line questions, no `/new`, `/mode` or
   `/compact` commands (Phase 1's TUI); piped stdin is not read as a
   question; `hint sessions` and `--session` see the working directory's
-  sessions only; the trace directory is never pruned.
+  sessions only.
+- [Issue #38](https://github.com/mrYush/hint/issues/38) adds seven-day retention for timestamped debug traces when a new trace opens.
+  Recently modified traces are retained even when their start timestamp is older than seven days.
+  Cleanup is best-effort and failures are recorded in the new trace.
+  Traces include full prompts, responses, tool calls, and project-file content, with configured API keys redacted.
+- [Issue #38](https://github.com/mrYush/hint/issues/38) passes validated process inputs through CLI startup, engine configuration and reload, setup, sessions, and debug logging.
+  Help, version, and argument validation work without a home directory.
+  Usage errors exit with status 2 and SIGINT exits with status 130 and SIGTERM with status 143 for one-shot, RPC, and serve invocations.
+  Expected signal cancellation does not print an error.
 
 ### WP0.10 — CI, release, distribution — **done**
 
