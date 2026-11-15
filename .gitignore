@@ -75,4 +75,8 @@ tmp
 *.bak
 .*.kate-swp
 
+# Local review scratch directories
+.review-ast/
+.review-gocache/
+
 __pycache__/
