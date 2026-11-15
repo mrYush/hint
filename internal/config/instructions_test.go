@@ -9,6 +9,7 @@ import (
 // package scales the default to the model's window, never an explicit
 // value) and the opt-in summarize switch.
 func TestInstructions_ExplicitBudgetAndSummarize(t *testing.T) {
+	t.Parallel()
 	withKey := func(extra map[string]string) func(string) (string, bool) {
 		env := map[string]string{"OPENAI_API_KEY": "k"}
 		for k, v := range extra {

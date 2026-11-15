@@ -29,6 +29,7 @@ func (p summaryProvider) Stream(context.Context, agentapi.ChatRequest) (<-chan a
 }
 
 func TestCachedSummarySkipsFallback(t *testing.T) {
+	t.Parallel()
 	var primaryCalls, fallbackCalls int
 	primary := summaryProvider{name: "primary", call: func() (string, error) {
 		primaryCalls++

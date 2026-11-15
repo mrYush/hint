@@ -24,6 +24,7 @@ type item struct {
 // changes every request, so the whole document is compared, not just a few
 // keys.
 func TestMustSchema(t *testing.T) {
+	t.Parallel()
 	got := tool.MustSchema(sampleArgs{})
 
 	want := `{

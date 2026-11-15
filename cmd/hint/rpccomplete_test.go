@@ -13,6 +13,7 @@ import (
 )
 
 func TestCompleteAsksTheSessionProviderWithoutTools(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(n int) string {
 		if n == 1 {
 			return "the answer"
@@ -80,6 +81,7 @@ func TestCompleteAsksTheSessionProviderWithoutTools(t *testing.T) {
 }
 
 func TestCompleteUsesTheConfiguredProfile(t *testing.T) {
+	t.Parallel()
 	main := &fakeChat{reply: func(int) string { return "from main" }}
 	small := &fakeChat{reply: func(int) string { return "from small" }}
 	as, _, _, _ := testAssembly(t, main, "")
@@ -105,6 +107,7 @@ func TestCompleteUsesTheConfiguredProfile(t *testing.T) {
 }
 
 func TestModelsListsWhatTheProfileServes(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
 	as.cfg = twoProfiles()
 	eng, cl := testEngine(t, as)
@@ -125,6 +128,7 @@ func TestModelsListsWhatTheProfileServes(t *testing.T) {
 }
 
 func TestTrimSuggestion(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ typed, raw, want string }{
 		{"add a test for", " the parser", " the parser"},
 		{"add a test for", "the parser\nand more", " the parser"},

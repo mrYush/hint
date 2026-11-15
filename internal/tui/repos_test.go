@@ -18,6 +18,7 @@ func (e *fakeEngine) Repos(_ context.Context, req rpc.RepoRequest) (rpc.RepoResu
 }
 
 func TestReposCommandAndBusyGuard(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	h.run(h.submit("/repos"))
 	if !strings.Contains(h.view(), "Workspace revision 1") {

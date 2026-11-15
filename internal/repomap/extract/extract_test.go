@@ -28,6 +28,7 @@ func extractWithWarmEngine(t *testing.T, source Source, limits Limits) (Result, 
 }
 
 func TestDeclarations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path, source string
 		names        []string
@@ -67,6 +68,7 @@ func TestDeclarations(t *testing.T) {
 }
 
 func TestSignatureAndEnclosing(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source, name, signature, enclosing string }{
 		{"x.go", "package p\nfunc (s *Store) Get(x int) string { return \"hidden\" }", "Get", "func (s *Store) Get(x int) string", "*Store"},
 		{"x.py", "class Store:\n    def get(self, x: int) -> str:\n        return 'hidden'\n", "get", "def get(self, x: int) -> str:", "Store"},
@@ -92,6 +94,7 @@ func TestSignatureAndEnclosing(t *testing.T) {
 }
 
 func TestNestedCallableBodiesAreRedacted(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source string }{
 		{"x.go", "package p; type Vec [len(func() string { return \"BODY_SENTINEL\" }())]int"},
 		{"x.js", "function open(callback = () => { return 'BODY_SENTINEL'; }) { return 'BODY_SENTINEL'; }"},
@@ -111,6 +114,7 @@ func TestNestedCallableBodiesAreRedacted(t *testing.T) {
 }
 
 func TestMalformedNeverPublishesPartialDeclarations(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ path, source string }{
 		{"x.go", "package p; func Good() {}\nfunc Bad("},
 		{"x.py", "def good():\n    pass\ndef bad(:\n"},
@@ -129,6 +133,7 @@ func TestMalformedNeverPublishesPartialDeclarations(t *testing.T) {
 }
 
 func TestLimits(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"x.go", "x.js"} {
 		source := "function f() {} function g() {}"
 		if path == "x.go" {
@@ -160,6 +165,7 @@ func TestLimits(t *testing.T) {
 }
 
 func TestLanguageAndCancellation(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"x.go", "x.py", "x.js", "x.ts", "x.tsx", "x.rs"} {
 		if Language(path) == "" || PolicyVersion(Language(path)) == "" {
 			t.Errorf("missing policy for %s", path)
@@ -205,6 +211,7 @@ func BenchmarkExtract(b *testing.B) {
 }
 
 func TestEngineReuseAfterCallerContextExpires(t *testing.T) {
+	// Cold WASM initialization must fit the real extraction deadline.
 	engine := &Engine{}
 	t.Cleanup(func() {
 		if err := engine.Close(); err != nil {

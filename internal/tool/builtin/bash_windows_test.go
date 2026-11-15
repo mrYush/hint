@@ -23,6 +23,7 @@ import (
 // TestWindowsBashHelper runs inside the shell's process tree, using the test
 // executable so the regressions do not depend on an installed scripting runtime.
 func TestWindowsBashHelper(t *testing.T) {
+	// This entry point runs in a dedicated child process.
 	for i, arg := range os.Args {
 		if arg == "--" {
 			if err := windowsBashHelper(os.Args[i+1:]); err != nil {
@@ -98,6 +99,7 @@ func windowsBashCommand(executable string) string {
 }
 
 func TestWindowsBashQuotesAndOperators(t *testing.T) {
+	t.Parallel()
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -140,6 +142,7 @@ func TestWindowsBashQuotesAndOperators(t *testing.T) {
 }
 
 func TestWindowsBashContracts(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +199,7 @@ func TestWindowsBashContracts(t *testing.T) {
 }
 
 func TestWindowsBashProcessTree(t *testing.T) {
+	// This test checks real process timing.
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

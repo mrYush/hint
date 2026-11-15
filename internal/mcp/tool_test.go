@@ -14,6 +14,7 @@ import (
 )
 
 func TestConvertResultContent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		in    *sdk.CallToolResult
@@ -92,6 +93,7 @@ func TestConvertResultContent(t *testing.T) {
 }
 
 func TestNewToolAdapterRejectsBadNames(t *testing.T) {
+	t.Parallel()
 	srv := &server{cfg: ServerConfig{Name: "srv", Permission: agentapi.ClassRead}}
 	for _, name := range []string{"bad name", strings.Repeat("a", 129), "srv\u0000"} {
 		if _, err := newToolAdapter(srv, &sdk.Tool{Name: name, InputSchema: objectSchema()}); err == nil {
@@ -105,6 +107,7 @@ func TestNewToolAdapterRejectsBadNames(t *testing.T) {
 }
 
 func TestCapDescription(t *testing.T) {
+	t.Parallel()
 	desc := strings.Repeat("x", 100)
 	for _, max := range []int{0, 1, 3, 4, 20, 100, 101} {
 		got := capDescription(desc, max)
@@ -124,6 +127,7 @@ func TestCapDescription(t *testing.T) {
 }
 
 func TestToolAdapterRunProtocolAndTimeout(t *testing.T) {
+	// Discovery shares the short real tool deadline in the timeout fixture.
 	t.Run("protocol error", func(t *testing.T) {
 		m, _ := testManager(t, []fakeTool{{
 			name: "boom", description: "Fails.", schema: objectSchema(),
@@ -184,6 +188,7 @@ func TestToolAdapterRunProtocolAndTimeout(t *testing.T) {
 }
 
 func TestConvertResultKeepsStructuredWithText(t *testing.T) {
+	t.Parallel()
 	got := convertResult("id", "srv.tool", &sdk.CallToolResult{
 		Content:           []sdk.Content{&sdk.TextContent{Text: "summary"}},
 		StructuredContent: map[string]any{"a": 1},

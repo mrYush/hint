@@ -10,6 +10,7 @@ import (
 )
 
 func TestFindGitRoot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
 		"repo/.git/HEAD":        "",

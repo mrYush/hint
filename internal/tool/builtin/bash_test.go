@@ -24,6 +24,7 @@ func needsPOSIXShell(t *testing.T) {
 }
 
 func TestBash_RunsInRoot(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	root := newRoot(t, map[string]string{"marker.txt": ""})
 	tl := builtin.NewBash(root)
@@ -44,6 +45,7 @@ func TestBash_RunsInRoot(t *testing.T) {
 }
 
 func TestBash_ExitCodeAndStderr(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil))
 
@@ -59,6 +61,7 @@ func TestBash_ExitCodeAndStderr(t *testing.T) {
 }
 
 func TestBash_TimeoutKillsProcessGroup(t *testing.T) {
+	// This test checks real process timing.
 	needsPOSIXShell(t)
 	root := newRoot(t, nil)
 	tl := builtin.NewBash(root)
@@ -82,6 +85,7 @@ func TestBash_TimeoutKillsProcessGroup(t *testing.T) {
 }
 
 func TestBash_CanceledByCaller(t *testing.T) {
+	// This test checks real process timing.
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -97,6 +101,7 @@ func TestBash_CanceledByCaller(t *testing.T) {
 }
 
 func TestBash_ParentDeadlineIsNotItsOwnTimeout(t *testing.T) {
+	// This test checks real process timing.
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -113,6 +118,7 @@ func TestBash_ParentDeadlineIsNotItsOwnTimeout(t *testing.T) {
 }
 
 func TestBashDescribeCutsCommandOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	tl := builtin.NewBash(newRoot(t, nil))
 	cmd := strings.Repeat("Привет ", 30)
 	args := json.RawMessage(`{"command":"` + cmd + `"}`)
@@ -130,6 +136,7 @@ func TestBashDescribeCutsCommandOnRuneBoundary(t *testing.T) {
 }
 
 func TestBash_LargeOutputIsBounded(t *testing.T) {
+	t.Parallel()
 	needsPOSIXShell(t)
 	tl := builtin.NewBash(newRoot(t, nil), builtin.WithLimits(tool.Limits{MaxOutput: 3000}))
 	got := ok(t, run(t, tl, `{"command":"seq 1 100000"}`))
@@ -145,6 +152,7 @@ func TestBash_LargeOutputIsBounded(t *testing.T) {
 }
 
 func TestBash_Errors(t *testing.T) {
+	t.Parallel()
 	tl := builtin.NewBash(newRoot(t, nil))
 	failed(t, run(t, tl, `{}`), "command is required")
 	failed(t, run(t, tl, `{"command":"   "}`), "command is required")

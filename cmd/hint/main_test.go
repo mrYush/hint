@@ -44,6 +44,7 @@ import (
 // plus TestRunMode below, since there is no way to build the agent in
 // app.go without it.
 func TestToolRegistry_AllBehindPermissions(t *testing.T) {
+	t.Parallel()
 	root, err := tool.NewRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +137,7 @@ func TestSessionModeOf(t *testing.T) {
 // nothing at all is the REPL — only with a terminal, and never with a
 // JSON output that has no one answer to print.
 func TestDispatch(t *testing.T) {
+	t.Parallel()
 	// A regular file stands in for a non-terminal stdin (/dev/null would
 	// not do: it is a character device, exactly like a tty).
 	f, err := os.CreateTemp(t.TempDir(), "stdin")
@@ -199,6 +201,7 @@ func testClient(t *testing.T, as assembly) *rpc.Client {
 // (or starting one when there is none), -r reading the choice through the
 // shared line reader, and --session naming one.
 func TestOpenSession(t *testing.T) {
+	t.Parallel()
 	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
 	cl := testClient(t, as)
 	ctx := context.Background()
@@ -462,6 +465,7 @@ func sessionsOf(t *testing.T, as assembly) []session.Info {
 }
 
 func TestOneShotText(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "the answer" }}
 	as, sio, out, stderr := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
@@ -496,6 +500,7 @@ func TestOneShotText(t *testing.T) {
 }
 
 func TestOneShotJSON(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "42" }}
 	as, sio, out, _ := testAssembly(t, chat, "")
 	as.opts.session = sessionNew
@@ -548,6 +553,7 @@ func TestOneShotJSON(t *testing.T) {
 // watches: at the prompt it prints how to leave, during an answer it
 // cancels that turn and the loop goes on.
 func TestREPL(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(n int) string { return strings.Repeat("a", n) }}
 	as, sio, out, stderr := testAssembly(t, chat, "/help\n/bogus x\n\nfirst\nsecond\n/exit\nnever sent\n")
 	as.opts.session = sessionNew
@@ -659,6 +665,7 @@ func TestREPLInterrupt(t *testing.T) {
 // not — even though the profile line would print it if String() did not
 // mask it and the writer did not redact it.
 func TestTrace(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "traced" }}
 	as, sio, _, stderr := testAssembly(t, chat, "")
 	trace, err := debuglog.Open(filepath.Join(t.TempDir(), "log"), time.Now(), as.cfg.Secrets())
@@ -717,6 +724,7 @@ func TestPrintModelsAndHumanSize(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
+	t.Parallel()
 	store := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	cwd := t.TempDir()
 	var out, stderr bytes.Buffer
@@ -805,6 +813,7 @@ func TestFormatVersion(t *testing.T) {
 // answer typed on stdin goes back as permission.reply. A denial never
 // starts the tool; an allowance runs it.
 func TestPermissionOverRPC(t *testing.T) {
+	t.Parallel()
 	bash := func(command string) func(int) *agentapi.ToolCall {
 		return func(n int) *agentapi.ToolCall {
 			if n != 1 {
@@ -862,6 +871,7 @@ func TestPermissionOverRPC(t *testing.T) {
 // leaving the core to wait out DefaultPermissionWait and then report an
 // ordinary denial.
 func TestPermissionPromptFailureCancelsTurn(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("stdin read failed")
 	chat := &fakeChat{
 		reply: func(int) string { return "the second answer" },
@@ -923,6 +933,7 @@ func TestPermissionPromptFailureCancelsTurn(t *testing.T) {
 // — another one has the address — must leave the running one's token
 // and endpoint alone, or every client is refused until it restarts.
 func TestSecondServeKeepsTheFirstToken(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	lis, token, err := publish(dir, "tcp:127.0.0.1:0", io.Discard)
 	if err != nil {
@@ -948,6 +959,7 @@ func TestSecondServeKeepsTheFirstToken(t *testing.T) {
 // recorded session; the second names the address and continues that
 // session with -c. Then the refusals: a wrong token, no token, no server.
 func TestConnect(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	// connect() resolves the runtime directory from the environment, as
 	// `hint serve` does; pointing both at a temp dir keeps the test off
 	// the user's own socket and token.
@@ -1065,6 +1077,7 @@ func TestConnect(t *testing.T) {
 // what each shell file of cmd/hint imports — cmd/hint itself cannot be a
 // root, since its engine wiring lives in the same package.
 func TestShellNeverImportsTheAgent(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("needs the go command to read the package graph")
 	}

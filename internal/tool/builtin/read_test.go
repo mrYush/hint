@@ -11,6 +11,7 @@ import (
 )
 
 func TestReadFile_NumbersLines(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
 	tl := builtin.NewReadFile(root)
 
@@ -25,6 +26,7 @@ func TestReadFile_NumbersLines(t *testing.T) {
 }
 
 func TestReadFile_OffsetLimitAndFooter(t *testing.T) {
+	t.Parallel()
 	var sb strings.Builder
 	for i := 1; i <= 10; i++ {
 		sb.WriteString("line\n")
@@ -53,6 +55,7 @@ func TestReadFile_OffsetLimitAndFooter(t *testing.T) {
 }
 
 func TestReadFile_Errors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{
 		"a.txt":   "x\n",
 		"bin.dat": "abc\x00def",
@@ -81,6 +84,7 @@ func TestReadFile_Errors(t *testing.T) {
 }
 
 func TestReadFile_EmptyAndLongLines(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("y", 3000)
 	root := newRoot(t, map[string]string{"empty": "", "long.txt": long + "\nshort\n", "crlf.txt": "a\r\nb\r\n"})
 	tl := builtin.NewReadFile(root)
@@ -101,6 +105,7 @@ func TestReadFile_EmptyAndLongLines(t *testing.T) {
 }
 
 func TestReadFile_TruncatesLineOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("Привет", 400)
 	root := newRoot(t, map[string]string{"long.txt": long + "\n"})
 	got := ok(t, run(t, builtin.NewReadFile(root), `{"path":"long.txt"}`))
@@ -117,6 +122,7 @@ func TestReadFile_TruncatesLineOnRuneBoundary(t *testing.T) {
 }
 
 func TestReadFile_OutputTruncatedByLimits(t *testing.T) {
+	t.Parallel()
 	var sb strings.Builder
 	for i := 0; i < 500; i++ {
 		sb.WriteString("a fairly long line of text to fill the buffer\n")

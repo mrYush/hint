@@ -24,6 +24,7 @@ func treeNext(text string) string {
 }
 
 func TestTreeSmallBudgetProgressAndUndiscoveredScope(t *testing.T) {
+	t.Parallel()
 	m, space, root := managerFixture(t, nil)
 	scope := strings.Repeat("scope-", 25)
 	if err := os.Mkdir(filepath.Join(root, scope), 0700); err != nil {
@@ -87,6 +88,7 @@ func TestTreeSmallBudgetProgressAndUndiscoveredScope(t *testing.T) {
 }
 
 func TestRootListingSmallBudgetAndRevokedCursor(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	for i := range 9 {
 		if _, err := space.AttachLocal(t.TempDir(), fmt.Sprintf("library%d", i)); err != nil {
@@ -137,6 +139,7 @@ func TestRootListingSmallBudgetAndRevokedCursor(t *testing.T) {
 }
 
 func TestRepoListRejectsAmbiguousArgs(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	list := &listTool{manager: m, space: space}
 	for _, args := range []string{`null`, `{"unknown":1}`, `{} {}`, `{"cursor":""}`, `{"cursor":"x","repo":""}`, `{"entry_id":"x","path":""}`} {
@@ -148,6 +151,7 @@ func TestRepoListRejectsAmbiguousArgs(t *testing.T) {
 }
 
 func TestTreeSuppressesDeletedEntries(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	roots, _ := space.Snapshot()
 	id := index.EntryID(roots[0].ID, "missing.go")
@@ -161,6 +165,7 @@ func TestTreeSuppressesDeletedEntries(t *testing.T) {
 }
 
 func TestTreeHistoricalBoundaryIsNotLiveExistenceClaim(t *testing.T) {
+	t.Parallel()
 	m, space, root := managerFixture(t, nil)
 	child := filepath.Join(root, "child")
 	if err := os.Mkdir(child, 0700); err != nil {
@@ -192,6 +197,7 @@ func TestTreeHistoricalBoundaryIsNotLiveExistenceClaim(t *testing.T) {
 }
 
 func TestRootListingFinalBudgetBoundary(t *testing.T) {
+	t.Parallel()
 	m, space, _ := managerFixture(t, nil)
 	for i := range 20 {
 		path := filepath.Join(t.TempDir(), strings.Repeat("\n\t", 60))

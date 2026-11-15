@@ -10,6 +10,7 @@ import (
 )
 
 func TestGlobWindowMatchesFullSortOracle(t *testing.T) {
+	t.Parallel()
 	var all []globHit
 	for i := range 10000 {
 		all = append(all, globHit{path: fmt.Sprintf("dir/%05d.go", i), mod: time.Unix(int64(i%97), 0)})
@@ -48,6 +49,7 @@ func TestGlobWindowMatchesFullSortOracle(t *testing.T) {
 }
 
 func TestGlobWindowPreservesShortResultsAndTruncationBoundary(t *testing.T) {
+	t.Parallel()
 	for _, count := range []int{0, 1, 199, 200, 201, 202} {
 		var got globHits
 		for i := range count {

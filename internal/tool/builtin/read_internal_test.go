@@ -12,6 +12,7 @@ import (
 // runs when the requested window starts past the end of the file: the
 // caller's cancellation must still end it.
 func TestNumberLinesStopsWhenCanceledPastLimit(t *testing.T) {
+	t.Parallel()
 	var file strings.Builder
 	for i := 0; i < 2000; i++ {
 		fmt.Fprintf(&file, "line %d\n", i)

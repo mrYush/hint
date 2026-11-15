@@ -8,6 +8,7 @@ import (
 )
 
 func TestPolicyObservationsAreDurableAndRootScoped(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	for _, test := range []struct {
 		fingerprint string

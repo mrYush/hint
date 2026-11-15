@@ -58,6 +58,7 @@ const testKey = "sk-test-1234567890abcdef"
 // key, whether it sits under a variable the profile refers to, a
 // well-known one, or a copy under another name.
 func TestBashRunsWithoutTheKeys(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	t.Setenv("MY_PROFILE_KEY", testKey)
 	t.Setenv("APIBAR_KEY", "sk-wellknown-1234567890")
 	t.Setenv("COPY_OF_KEY", testKey)
@@ -105,6 +106,7 @@ func TestBashRunsWithoutTheKeys(t *testing.T) {
 // some other way is "***" by the time the model, the event and the
 // session see it.
 func TestToolOutputWithTheKeyIsRedacted(t *testing.T) {
+	t.Parallel()
 	// The key sits in a file the model asks bash to print: the command
 	// itself is clean, so everything that carries the key downstream is
 	// the tool's output.
@@ -146,6 +148,7 @@ func TestToolOutputWithTheKeyIsRedacted(t *testing.T) {
 // the project's own .hint/config.yaml too, while .hint/rules is read. The
 // legacy names the loader still reads are refused as well.
 func TestFileToolsRefuseTheConfigAndSessions(t *testing.T) {
+	t.Parallel()
 	base, _, _, _ := testAssembly(t, &fakeChat{reply: func(int) string { return "x" }}, "")
 	home := base.cwd
 	configDir := filepath.Join(home, ".config", "hint")
@@ -192,6 +195,7 @@ func TestFileToolsRefuseTheConfigAndSessions(t *testing.T) {
 }
 
 func TestSetupStoresTheKeyInTheKeyring(t *testing.T) {
+	t.Parallel()
 	s, global := testSetup(t)
 	ring := config.MapKeyring{}
 	s.store, s.keyring = config.StoreAuto, ring
@@ -247,6 +251,7 @@ func (failingRing) Set(string, string) error {
 func (failingRing) Delete(string) error { return errors.New("config: secret store: no D-Bus session") }
 
 func TestShowKeyAsksAndMasks(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{Providers: []config.Profile{
 		{Name: "p", Kind: config.KindOpenAI, APIKey: testKey, Model: "m", KeyFrom: config.KeyFromKeyring, KeyRef: "keyring:p"},
 		{Name: "nokey", Kind: config.KindOpenAI, Model: "m", KeyFrom: config.KeyFromKeyring, KeyRef: "keyring:nokey", KeyError: config.ErrKeyringNotFound},
@@ -281,6 +286,7 @@ func TestShowKeyAsksAndMasks(t *testing.T) {
 }
 
 func TestWarnFileKeys(t *testing.T) {
+	t.Parallel()
 	cfg := &config.Config{Providers: []config.Profile{{Name: "p", APIKey: testKey, KeyFrom: config.KeyFromFile}}}
 	var out bytes.Buffer
 	cfg.SecretStore.Store = config.StoreFile

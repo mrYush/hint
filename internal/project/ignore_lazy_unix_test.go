@@ -13,6 +13,7 @@ import (
 )
 
 func TestGitIgnoreProbeLocale(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	dir, git := gitProbeFixture(t)
 	const script = `#!/bin/sh
 if [ "$LC_ALL" != C ] || [ "$HINT_GIT_TEST" != preserved ]; then
@@ -44,6 +45,7 @@ exit 128
 }
 
 func TestGitIgnoreProbeDeadline(t *testing.T) {
+	t.Parallel()
 	dir, git := gitProbeFixture(t)
 	const script = "#!/bin/sh\nexec sleep 30\n"
 	if err := os.WriteFile(git, []byte(script), 0o700); err != nil {
@@ -58,6 +60,7 @@ func TestGitIgnoreProbeDeadline(t *testing.T) {
 }
 
 func TestGitIgnoreProbeExitError(t *testing.T) {
+	t.Parallel()
 	dir, git := gitProbeFixture(t)
 	if err := os.WriteFile(git, []byte("#!/bin/sh\nexit 128\n"), 0o700); err != nil {
 		t.Fatal(err)

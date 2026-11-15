@@ -20,6 +20,7 @@ func (p inferenceTestProvider) Stream(ctx context.Context, req agentapi.ChatRequ
 }
 
 func TestInferenceProviderLifetime(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		event agentapi.ChatEvent
@@ -67,6 +68,7 @@ func TestInferenceProviderLifetime(t *testing.T) {
 }
 
 func TestInferenceProviderStartupFailure(t *testing.T) {
+	t.Parallel()
 	for _, fails := range []bool{false, true} {
 		var active atomic.Int32
 		failure := errors.New("start failed")
@@ -90,6 +92,7 @@ func TestInferenceProviderStartupFailure(t *testing.T) {
 }
 
 func TestInferenceProviderCancellationWhileConsumerBlocked(t *testing.T) {
+	t.Parallel()
 	var active, releases atomic.Int32
 	providerCanceled := make(chan struct{})
 	events := make(chan agentapi.ChatEvent, 1)

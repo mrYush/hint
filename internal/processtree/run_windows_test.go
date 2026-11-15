@@ -14,6 +14,7 @@ import (
 )
 
 func TestRunCanceledBeforeStart(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cmd := exec.CommandContext(ctx, "cmd.exe", "/D", "/C", "exit 0")
@@ -26,6 +27,7 @@ func TestRunCanceledBeforeStart(t *testing.T) {
 }
 
 func TestRunStartFailure(t *testing.T) {
+	t.Parallel()
 	cmd := exec.CommandContext(context.Background(), `Z:\hint-nonexistent\missing.exe`)
 	if err := Run(cmd); err == nil || !strings.Contains(err.Error(), "start process") {
 		t.Fatalf("Run = %v, want contextual startup failure", err)
@@ -36,6 +38,7 @@ func TestRunStartFailure(t *testing.T) {
 }
 
 func TestRunAssignmentFailureReapsProcess(t *testing.T) {
+	t.Parallel()
 	cmd := exec.CommandContext(context.Background(), "cmd.exe", "/D", "/C", "exit 0")
 	// An invalid job forces the failure after Start, while cmd.exe is still
 	// suspended. The runner must kill and reap it rather than leave it there.
@@ -53,6 +56,7 @@ func TestRunAssignmentFailureReapsProcess(t *testing.T) {
 }
 
 func TestRunCancellationDuringStartup(t *testing.T) {
+	t.Parallel()
 	for i := range 20 {
 		ctx, cancel := context.WithCancel(context.Background())
 		cmd := exec.CommandContext(ctx, "cmd.exe", "/D", "/C", "ping -n 30 127.0.0.1 > NUL")

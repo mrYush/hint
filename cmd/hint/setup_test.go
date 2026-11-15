@@ -29,6 +29,7 @@ func testSetup(t *testing.T) (*setupInfo, string) {
 }
 
 func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	t.Setenv("MY_HINT_KEY", "") // set, so no "export it" reminder is expected
 	s, global := testSetup(t)
 	var out bytes.Buffer
@@ -55,6 +56,7 @@ func TestAskSetupWritesTheAnswersAndNeverTheKey(t *testing.T) {
 }
 
 func TestSaveRemindsAboutAnUnsetVariableAndAnOverridingFile(t *testing.T) {
+	t.Parallel()
 	s, _ := testSetup(t)
 	project := filepath.Join(t.TempDir(), ".hint", "config.yaml")
 	s.locs.Read = []string{project}
@@ -71,6 +73,7 @@ func TestSaveRemindsAboutAnUnsetVariableAndAnOverridingFile(t *testing.T) {
 }
 
 func TestAuthHelp(t *testing.T) {
+	t.Parallel()
 	s, global := testSetup(t)
 	auth := agentapi.NewError(agentapi.ErrAuth, "Unauthorized")
 
@@ -107,6 +110,7 @@ func (s *scripted) Secret(_ context.Context, prompt string) (string, bool, error
 }
 
 func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
+	t.Parallel()
 	s, global := testSetup(t)
 	s.profile.Model = ""
 	// profile, base URL, then the model: empty is asked again, since the
@@ -131,6 +135,7 @@ func TestAskSetupTakesTheKeyWhereItCanBeHidden(t *testing.T) {
 }
 
 func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	notATerminal := stdio{in: strings.NewReader(""), out: &out, err: &out}
 	if firstRunSetup(context.Background(), notATerminal, config.ErrNoProvider, environment{}) {
@@ -146,6 +151,7 @@ func TestFirstRunSetupOnlyForMissingConfiguration(t *testing.T) {
 // has no key, setup proposes that profile with its own base URL and
 // model, so Enter keeps them instead of writing the built-in defaults.
 func TestFirstRunKeepsTheProfileThatLacksAKey(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -198,6 +204,7 @@ func (s *secrets) Secret(context.Context, string) (string, bool, error) {
 }
 
 func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	in := &secrets{keys: []string{"", "", "sk-third"}}
 	key, err := askKey(context.Background(), in, &out, true)
@@ -215,6 +222,7 @@ func TestAskKeyRepeatsUntilAProfileWithoutAKeyGetsOne(t *testing.T) {
 }
 
 func TestConfigSetUnsetShow(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	home, cwd := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("APIBAR_KEY", "sk-from-env-1234567890")

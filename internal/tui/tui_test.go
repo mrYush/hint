@@ -476,6 +476,7 @@ var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 // status line is back at the help, the input is empty and the core has
 // the question on record.
 func TestStreamsAndRendersTheAnswer(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
 
@@ -520,6 +521,7 @@ func TestStreamsAndRendersTheAnswer(t *testing.T) {
 // AllowAlways, the core sees that decision, and the turn goes on to its
 // tool call and answer.
 func TestPermissionDialog(t *testing.T) {
+	t.Parallel()
 	req := agentapi.PermissionRequest{
 		CallID:  "c1",
 		Tool:    "edit_file",
@@ -582,6 +584,7 @@ func TestPermissionDialog(t *testing.T) {
 // it clears a typed line, and on an empty input it warns once and quits
 // on the next press.
 func TestCtrlCCancelsTheTurn(t *testing.T) {
+	t.Parallel()
 	// The turn hangs until it is cancelled, as a slow model would.
 	eng := &fakeEngine{script: func(ctx context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
 		<-ctx.Done()
@@ -626,6 +629,7 @@ func TestCtrlCCancelsTheTurn(t *testing.T) {
 // removes that block, and the selection must move off it rather than
 // point past the end of the transcript.
 func TestSelectionSurvivesAnEmptyAnswer(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
 		<-release
@@ -653,6 +657,7 @@ func TestSelectionSurvivesAnEmptyAnswer(t *testing.T) {
 // TestCtrlCInAnyLayout pins that a chord pressed in a Cyrillic layout is
 // the chord on the same US key, with and without the kitty protocol.
 func TestCtrlCInAnyLayout(t *testing.T) {
+	t.Parallel()
 	for _, k := range []tea.KeyPressMsg{
 		{Code: 'с', Mod: tea.ModCtrl},
 		{Code: 'с', Mod: tea.ModCtrl, BaseCode: 'c'},
@@ -683,6 +688,7 @@ func TestCtrlCInAnyLayout(t *testing.T) {
 // recorded questions, answers and tool calls are in the transcript, and
 // the header names the session and the core's version.
 func TestHistoryIsShown(t *testing.T) {
+	t.Parallel()
 	history := []agentapi.Message{
 		agentapi.UserMessage("earlier question"),
 		{
@@ -706,6 +712,7 @@ func TestHistoryIsShown(t *testing.T) {
 // the row under the cursor and shows its history, and esc from the list
 // returns to the session the shell is on.
 func TestSessionPickerAttaches(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
 	// A second session with history, recorded earlier. The list shows
@@ -749,6 +756,7 @@ func TestSessionPickerAttaches(t *testing.T) {
 // list says so, and esc then opens a fresh recorded session rather than
 // leaving the user nowhere.
 func TestStartsInThePickerWithoutASession(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{PickSession: true})
 	if h.m.picker == nil || h.m.sessionID != "" {
 		t.Fatal("PickSession did not open the list")
@@ -769,6 +777,7 @@ func TestStartsInThePickerWithoutASession(t *testing.T) {
 // input with its newlines, is not sent until enter, and goes to the core
 // as one question; while the list is open a paste is dropped.
 func TestPasteGoesToTheInput(t *testing.T) {
+	t.Parallel()
 	const pasted = "line one\nline two"
 	h := newHarness(t, &fakeEngine{}, Options{})
 
@@ -797,6 +806,7 @@ func TestPasteGoesToTheInput(t *testing.T) {
 // is rewrapped to the new width, the viewport takes the height the
 // layout leaves it, and the whole screen still fits the terminal.
 func TestResizeRedraws(t *testing.T) {
+	t.Parallel()
 	const width, height = 40, 20
 	long := agentapi.UserMessage(strings.Repeat("word ", 40))
 	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{long}})
@@ -838,6 +848,7 @@ func runBatch(cmd tea.Cmd) {
 }
 
 func TestTabCompletesCommands(t *testing.T) {
+	t.Parallel()
 	// A transcript to copy from, so that /copy is a command that exists.
 	h := newHarness(t, &fakeEngine{}, Options{History: []agentapi.Message{agentapi.UserMessage("q")}})
 
@@ -893,6 +904,7 @@ func TestTabCompletesCommands(t *testing.T) {
 }
 
 func TestTabOffersOnlyWhatIsAvailable(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{})
 	// Nothing in the transcript yet: /copy has nothing to copy.
 	for _, c := range h.m.complete("/") {
@@ -909,6 +921,7 @@ func TestTabOffersOnlyWhatIsAvailable(t *testing.T) {
 }
 
 func TestCopyAnswerQuestionCodeAll(t *testing.T) {
+	// The clip helper temporarily replaces the package-wide clipboard writer.
 	got := clip(t)
 	history := []agentapi.Message{
 		agentapi.UserMessage("show me"),
@@ -947,6 +960,7 @@ func TestCopyAnswerQuestionCodeAll(t *testing.T) {
 }
 
 func TestMouseModeCopiesTheBlockUnderTheClick(t *testing.T) {
+	// The clip helper temporarily replaces the package-wide clipboard writer.
 	got := clip(t)
 	history := []agentapi.Message{agentapi.UserMessage("first question"), agentapi.AssistantMessage("first answer")}
 	h := newHarness(t, &fakeEngine{}, Options{History: history})
@@ -979,6 +993,7 @@ func TestMouseModeCopiesTheBlockUnderTheClick(t *testing.T) {
 }
 
 func TestFailedTurnExplainsAuth(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
 		out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.NewError(agentapi.ErrAuth, "Unauthorized")}
 		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
@@ -995,6 +1010,7 @@ func TestFailedTurnExplainsAuth(t *testing.T) {
 // FinishError and sends no error event first breaks the contract; the
 // TUI reports the failure instead of dereferencing a nil error.
 func TestFailedTurnWithoutAnErrorEvent(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{script: func(_ context.Context, _ string, _ permission.Prompter, out chan<- agentapi.Event) {
 		out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
 	}}
@@ -1007,6 +1023,7 @@ func TestFailedTurnWithoutAnErrorEvent(t *testing.T) {
 }
 
 func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
+	t.Parallel()
 	var savedName string
 	var saved map[string]string
 	setup := &Setup{
@@ -1074,6 +1091,7 @@ func TestSetupFormSavesWhatWasTypedAndMasksTheKey(t *testing.T) {
 }
 
 func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
+	t.Parallel()
 	setup := &Setup{Describe: "d", Profile: "p", Save: func(string, map[string]string) (string, error) {
 		return "", errors.New("permission denied")
 	}}
@@ -1104,6 +1122,7 @@ func TestSetupFormShowsAFailureAndEscCancels(t *testing.T) {
 }
 
 func TestConfigCommand(t *testing.T) {
+	t.Parallel()
 	type call struct {
 		key, value string
 		project    bool
@@ -1179,6 +1198,7 @@ func TestConfigCommand(t *testing.T) {
 }
 
 func TestNewlineKeys(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{}
 	h := newHarness(t, eng, Options{})
 	h.typeText("one")
@@ -1211,6 +1231,7 @@ func longHistory(n int) []agentapi.Message {
 }
 
 func TestScrollKeys(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(20)})
 	if !h.m.vp.AtBottom() || strings.Contains(h.view(), "more lines") {
 		t.Fatalf("a continued session does not open at its end:\n%s", h.view())
@@ -1267,6 +1288,7 @@ func TestScrollKeys(t *testing.T) {
 }
 
 func TestMessageBrowser(t *testing.T) {
+	// The clip helper temporarily replaces the package-wide clipboard writer.
 	got := clip(t)
 	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(12)})
 
@@ -1320,6 +1342,7 @@ func TestMessageBrowser(t *testing.T) {
 }
 
 func TestEntriesKnowTheirTurn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, &fakeEngine{}, Options{History: longHistory(2)})
 	h.submit("third")
 	h.pump(until[turnDoneMsg])
@@ -1333,6 +1356,7 @@ func TestEntriesKnowTheirTurn(t *testing.T) {
 }
 
 func TestOneLetterKeysInAnyLayout(t *testing.T) {
+	t.Parallel()
 	// The dialog: "ф" is the a key in a Cyrillic layout.
 	var decision permission.Decision
 	eng := &fakeEngine{script: func(ctx context.Context, _ string, ask permission.Prompter, out chan<- agentapi.Event) {

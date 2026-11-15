@@ -47,6 +47,7 @@ func newPromptManager(t *testing.T) *Manager {
 }
 
 func TestManagerPromptsExpandAndComplete(t *testing.T) {
+	t.Parallel()
 	m := newPromptManager(t)
 	ctx := context.Background()
 	prompts, err := m.Prompts(ctx)
@@ -94,6 +95,7 @@ func TestManagerPromptsExpandAndComplete(t *testing.T) {
 }
 
 func TestExpandPromptRejectsOversizedText(t *testing.T) {
+	t.Parallel()
 	server := sdk.NewServer(&sdk.Implementation{Name: "fake", Version: "v0"}, nil)
 	server.AddPrompt(&sdk.Prompt{Name: "huge"}, func(context.Context, *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
 		return &sdk.GetPromptResult{Messages: []*sdk.PromptMessage{{
@@ -111,6 +113,7 @@ func TestExpandPromptRejectsOversizedText(t *testing.T) {
 }
 
 func TestManagerServerWithoutPromptsIsEmpty(t *testing.T) {
+	t.Parallel()
 	m, _ := testManager(t, nil, ServerConfig{}, Options{})
 	prompts, err := m.Prompts(context.Background())
 	if err != nil || len(prompts) != 0 {
@@ -119,6 +122,7 @@ func TestManagerServerWithoutPromptsIsEmpty(t *testing.T) {
 }
 
 func TestCompletePromptWithoutCompletionCapability(t *testing.T) {
+	t.Parallel()
 	server := sdk.NewServer(&sdk.Implementation{Name: "fake", Version: "v0"}, nil)
 	server.AddPrompt(&sdk.Prompt{Name: "review"}, func(context.Context, *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
 		return &sdk.GetPromptResult{}, nil
@@ -135,6 +139,7 @@ func TestCompletePromptWithoutCompletionCapability(t *testing.T) {
 }
 
 func TestPromptsSkipNamesThatCannotBeCommands(t *testing.T) {
+	t.Parallel()
 	server := sdk.NewServer(&sdk.Implementation{Name: "fake", Version: "v0"}, nil)
 	handler := func(context.Context, *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
 		return &sdk.GetPromptResult{}, nil

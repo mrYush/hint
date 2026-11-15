@@ -57,6 +57,7 @@ func liveProfiles(t *testing.T) []config.Profile {
 }
 
 func TestLiveStreamingText(t *testing.T) {
+	// This live test shares the configured provider and its rate limits.
 	for _, p := range liveProfiles(t) {
 		t.Run(p.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -92,6 +93,7 @@ func TestLiveStreamingText(t *testing.T) {
 }
 
 func TestLiveToolCallRoundTrip(t *testing.T) {
+	// This live test shares the configured provider and its rate limits.
 	weatherTool := agentapi.ToolSchema{
 		Name:        "get_weather",
 		Description: "Get the current weather for a city",

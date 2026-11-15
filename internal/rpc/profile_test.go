@@ -29,6 +29,7 @@ func runFakeTurn(t *testing.T, c *Client, sessionID string) {
 }
 
 func TestClient_ProfileSwitchAndList(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
 	engine.profiles = []ProfileInfo{{Name: "local", Kind: "ollama", Model: "qwen", Default: true, Usable: true}, {Name: "cloud", Kind: "openai", Problem: "needs an API key"}}
 	ctx := context.Background()
@@ -76,6 +77,7 @@ func TestClient_ProfileSwitchAndList(t *testing.T) {
 }
 
 func TestClient_ProfileSwitchWaitsForTheTurn(t *testing.T) {
+	t.Parallel()
 	c, _ := dialFake(t, &Server{PermissionWait: time.Second})
 	ctx := context.Background()
 	view, err := c.OpenSession(ctx, OpenOptions{})
@@ -112,6 +114,7 @@ func TestClient_ProfileSwitchWaitsForTheTurn(t *testing.T) {
 }
 
 func TestClient_Fork(t *testing.T) {
+	t.Parallel()
 	c, engine := dialFake(t, &Server{PermissionWait: time.Second})
 	ctx := context.Background()
 	view, err := c.OpenSession(ctx, OpenOptions{})

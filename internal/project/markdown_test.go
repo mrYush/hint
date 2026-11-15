@@ -10,6 +10,7 @@ import (
 const guideDoc = "# Guide\n\nIntro sentence here. More intro.\n\n## Build\n\nRun make. Then wait.\n\n```\n# not a heading\n```\n\n## Never\n\n- Never push to main. Ever.\n"
 
 func TestSections(t *testing.T) {
+	t.Parallel()
 	got := project.Sections(guideDoc)
 	if len(got) != 3 {
 		t.Fatalf("sections = %+v, want 3", got)
@@ -44,6 +45,7 @@ func TestSections(t *testing.T) {
 }
 
 func TestSections_PreambleAndHeadless(t *testing.T) {
+	t.Parallel()
 	got := project.Sections("Be brief.\n\n# Rules\nOne.\n")
 	if len(got) != 2 || got[0].Level != 0 || got[0].Body != "Be brief." || got[0].Line != 1 || got[1].Title != "Rules" || got[1].Line != 3 {
 		t.Errorf("preamble: %+v", got)
@@ -60,6 +62,7 @@ func TestSections_PreambleAndHeadless(t *testing.T) {
 }
 
 func TestSpan(t *testing.T) {
+	t.Parallel()
 	doc := "# A\nA body.\n## A1\nA1 body.\n### A1a\nDeep.\n## A2\nA2 body.\n# B\nB body.\n"
 	s := project.Sections(doc)
 	if got := project.Span(s, 1); got != "## A1\nA1 body.\n\n### A1a\nDeep." {
@@ -74,6 +77,7 @@ func TestSpan(t *testing.T) {
 }
 
 func TestFirstSentence(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"":                                   "",
 		"\n\n  \n":                           "",

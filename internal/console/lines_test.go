@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/mrYush/hint/internal/console"
 )
@@ -54,7 +55,7 @@ func TestLineReader_CancelLeavesReaderUsable(t *testing.T) {
 			_, _ = io.WriteString(pw, "later\n")
 			_ = pw.Close()
 		}()
-		requireLine(t, r, "later")
+		requireLine(t, r, pw, "later")
 	})
 }
 
@@ -80,21 +81,37 @@ func TestLineReader_DiscardPending(t *testing.T) {
 			_, _ = io.WriteString(pw, "real\n")
 			_ = pw.Close()
 		}()
-		requireLine(t, r, "real")
+		requireLine(t, r, pw, "real")
 	})
 }
 
-func requireLine(t *testing.T, r *console.LineReader, want string) {
+func requireLine(t *testing.T, r *console.LineReader, input *io.PipeWriter, want string) {
 	t.Helper()
-	got, err := r.ReadLine(t.Context())
-	if err != nil || got != want {
-		t.Errorf("ReadLine = %q, %v; want %q", got, err, want)
-	}
-	for line, err := r.ReadLine(t.Context()); !errors.Is(err, io.EOF); line, err = r.ReadLine(t.Context()) {
-		if err != nil {
-			t.Fatalf("ReadLine after the answer = %v, want io.EOF", err)
+	// Close input and drain independently of a failed assertion. The reader
+	// must deliver its terminal error before the synctest bubble can exit.
+	defer func() {
+		_ = input.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		for {
+			_, err := r.ReadLine(ctx)
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if err != nil {
+				t.Errorf("draining input: %v", err)
+				return
+			}
 		}
-		t.Errorf("ReadLine after the answer = %q, want io.EOF", line)
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	got, err := r.ReadLine(ctx)
+	if err != nil || got != want {
+		t.Fatalf("ReadLine = %q, %v; want %q", got, err, want)
+	}
+	if got, err := r.ReadLine(ctx); !errors.Is(err, io.EOF) {
+		t.Fatalf("ReadLine after the answer = %q, %v; want EOF", got, err)
 	}
 }
 

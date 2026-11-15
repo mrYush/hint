@@ -53,6 +53,7 @@ func pinTestRoot(t *testing.T, s *Store) Snapshot {
 }
 
 func TestCatalogRejectsOldSchemaAndNoncanonicalSymbolIDs(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	file, symbols := testSource("a.go", "Open")
 	symbols[0].ID = "s_invalid"
@@ -75,6 +76,7 @@ func TestCatalogRejectsOldSchemaAndNoncanonicalSymbolIDs(t *testing.T) {
 }
 
 func TestScanEntriesReconcilesNestedMetadataInBoundedPages(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	for _, path := range []string{"a.go", "deep/a.go", "deep/other/z.go", "z.go"} {
 		file, symbols := testSource(path, "Open")
@@ -108,6 +110,7 @@ func TestScanEntriesReconcilesNestedMetadataInBoundedPages(t *testing.T) {
 }
 
 func TestFileCoverageCountersExcludeDirectoriesAndBoundaries(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	file, _ := testSource("changing", "Open")
 	for i, change := range []struct {
@@ -162,6 +165,7 @@ func visibleRecords(t *testing.T, s *Store, snapshot Snapshot, query Query) []Re
 }
 
 func TestVersionedSourcesRetainSnapshotsAcrossReopen(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	file, symbols := testSource("src/a.go", "Before")
 	if gen := putTestSource(t, s, file, symbols); gen != 1 {
@@ -224,6 +228,7 @@ func TestVersionedSourcesRetainSnapshotsAcrossReopen(t *testing.T) {
 }
 
 func TestReservationsEnforceCapacityExpiryAndRootBinding(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{MaxPins: 1})
 	snapshot := pinTestRoot(t, s)
 	if snapshot.Generation != 0 {
@@ -250,6 +255,7 @@ func TestReservationsEnforceCapacityExpiryAndRootBinding(t *testing.T) {
 }
 
 func TestConcurrentGenerationAndPinAdmissionPreservesQuotaAndRoots(t *testing.T) {
+	t.Parallel()
 	const maxPins, callers, updates = 4, 24, 6
 	s, _ := openTestStore(t, Options{MaxPins: maxPins})
 	roots := []string{"r_first", "r_second"}
@@ -340,6 +346,7 @@ func TestConcurrentGenerationAndPinAdmissionPreservesQuotaAndRoots(t *testing.T)
 }
 
 func TestOrderedQueriesAndBoundedContinuation(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	inputs := []struct{ path, name string }{
 		{"z.go", "Alpha"}, {"a.go", "Alphabet"}, {"b.go", "Alpha"},
@@ -387,6 +394,7 @@ func TestOrderedQueriesAndBoundedContinuation(t *testing.T) {
 }
 
 func TestQueryPlansSeekWithoutGlobalSort(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	key := &Key{Path: []byte("a.go"), Name: "Alpha", StartByte: 1, Kind: "function", SymbolID: "s_test", Version: 1}
 	queries := []Query{
@@ -438,6 +446,7 @@ func TestQueryPlansSeekWithoutGlobalSort(t *testing.T) {
 }
 
 func TestSparseNameQueryDoesNotExamineUnrelatedRecords(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	for i := range 100 {
 		file, symbols := testSource(fmt.Sprintf("file-%03d.go", i), "Common")
@@ -452,6 +461,7 @@ func TestSparseNameQueryDoesNotExamineUnrelatedRecords(t *testing.T) {
 }
 
 func TestSourceAdmissionIsAtomicAndRootScoped(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{MaxRecordBytes: 1024})
 	file, symbols := testSource("a.go", "Before")
 	putTestSource(t, s, file, symbols)
@@ -479,6 +489,7 @@ func TestSourceAdmissionIsAtomicAndRootScoped(t *testing.T) {
 }
 
 func TestDiskQuotaPreservesExistingGenerationAndPin(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{MaxBytes: 512 << 10})
 	file, symbols := testSource("a.go", "Original")
 	putTestSource(t, s, file, symbols)
@@ -525,6 +536,7 @@ func TestDiskQuotaPreservesExistingGenerationAndPin(t *testing.T) {
 }
 
 func TestFrontierRevisionAndChildListing(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	if err := s.Enqueue(t.Context(), "r_test", []byte(".")); err != nil {
 		t.Fatal(err)
@@ -576,6 +588,7 @@ func TestFrontierRevisionAndChildListing(t *testing.T) {
 }
 
 func TestFrontierLookupReturnsCurrentRotatedAndInvalidatedTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openTestStore(t, Options{})
 	path := []byte("retained/directory")
 	if err := s.Enqueue(t.Context(), "r_test", path); err != nil {
@@ -623,6 +636,7 @@ func TestFrontierLookupReturnsCurrentRotatedAndInvalidatedTask(t *testing.T) {
 }
 
 func TestFrontierRotationRetainsWorkAndNewInvalidations(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	for _, path := range []string{"directory", "file.go"} {
 		if err := s.Enqueue(t.Context(), "r_test", []byte(path)); err != nil {

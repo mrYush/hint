@@ -10,6 +10,7 @@ import (
 )
 
 func TestReadOnly_ContainsNoWriteOrExecuteTool(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	reg, err := tool.NewRegistry(builtin.ReadOnly(root)...)
 	if err != nil {
@@ -27,6 +28,7 @@ func TestReadOnly_ContainsNoWriteOrExecuteTool(t *testing.T) {
 }
 
 func TestAll_RegistersWithValidSchemas(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, nil)
 	reg, err := tool.NewRegistry(builtin.All(root)...)
 	if err != nil {

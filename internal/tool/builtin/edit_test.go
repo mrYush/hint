@@ -28,6 +28,7 @@ func other() {
 `
 
 func TestEditFile_ExactUniqueReplace(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": sample})
 	tl := builtin.NewEditFile(root)
 	if tl.Class() != agentapi.ClassWrite {
@@ -50,6 +51,7 @@ func TestEditFile_ExactUniqueReplace(t *testing.T) {
 }
 
 func TestEditFile_AmbiguousListsLines(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": sample})
 	tl := builtin.NewEditFile(root)
 	got := failed(t, run(t, tl, editArgs("main.go", "\tfmt.Println(x)\n", "\tfmt.Println(y)\n")), "occurs 2 times")
@@ -62,6 +64,7 @@ func TestEditFile_AmbiguousListsLines(t *testing.T) {
 }
 
 func TestEditFile_IndentationFallback(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": sample})
 	tl := builtin.NewEditFile(root)
 
@@ -88,6 +91,7 @@ func TestEditFile_IndentationFallback(t *testing.T) {
 }
 
 func TestEditFile_NotFoundShowsClosestLines(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": sample})
 	tl := builtin.NewEditFile(root)
 	got := failed(t, run(t, tl, editArgs("main.go", "func main() {\n\tx := 1\n\tfmt.Printn(x)\n", "")), "old_str not found")
@@ -100,6 +104,7 @@ func TestEditFile_NotFoundShowsClosestLines(t *testing.T) {
 }
 
 func TestEditFile_CRLF(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"win.txt": "alpha\r\nbeta\r\ngamma\r\n"})
 	tl := builtin.NewEditFile(root)
 	got := ok(t, run(t, tl, editArgs("win.txt", "beta\n", "BETA\nbeta2\n")))
@@ -112,6 +117,7 @@ func TestEditFile_CRLF(t *testing.T) {
 }
 
 func TestEditFile_EmptyOldCreatesOrAppends(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"notes.md": "# Notes"})
 	tl := builtin.NewEditFile(root)
 
@@ -130,6 +136,7 @@ func TestEditFile_EmptyOldCreatesOrAppends(t *testing.T) {
 }
 
 func TestEditFile_Errors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"a.txt": "hello\n", "d/x": ""})
 	tl := builtin.NewEditFile(root)
 	tests := []struct{ name, args, want string }{

@@ -15,6 +15,7 @@ import (
 )
 
 func TestHTTPHeadersStayOnOrigin(t *testing.T) {
+	t.Parallel()
 	var otherHits atomic.Int32
 	var otherAuth atomic.Value
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +101,7 @@ func TestHTTPHeadersStayOnOrigin(t *testing.T) {
 }
 
 func TestHTTPStreamableServer(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	fake := newFakeServer(t, echoTool())

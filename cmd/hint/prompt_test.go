@@ -16,6 +16,7 @@ import (
 )
 
 func TestREPLListsAndExpandsMCPPrompt(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "reviewed" }}
 	as, sio, _, stderr := testAssembly(t, chat, "/prompts\n/fake:review \"the auth flow\"\n/exit\n")
 	server := newMCPTestServer(t)
@@ -62,6 +63,7 @@ func TestREPLListsAndExpandsMCPPrompt(t *testing.T) {
 }
 
 func TestREPLCtrlCDuringPromptExpansionDoesNotCancelNextTurn(t *testing.T) {
+	t.Parallel()
 	chat := &fakeChat{reply: func(int) string { return "ok" }}
 	as, sio, _, stderr := testAssembly(t, chat, "/fake:review x\nhello\n/exit\n")
 	server := newMCPTestServer(t)

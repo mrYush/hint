@@ -11,6 +11,7 @@ import (
 )
 
 func TestConfigCommandTypedFlagsAndWarnings(t *testing.T) {
+	t.Parallel()
 	env := environment{home: t.TempDir(), cwd: t.TempDir()}
 	if err := os.MkdirAll(filepath.Join(env.cwd, ".hint"), 0o755); err != nil {
 		t.Fatal(err)
@@ -60,6 +61,7 @@ instructions: {budget: 1000, summarize: true}
 }
 
 func TestConfigCLIErrorCategories(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name string
 		args []string

@@ -40,6 +40,7 @@ func splitProject(t *testing.T) string {
 }
 
 func TestDiscoverRules(t *testing.T) {
+	t.Parallel()
 	dir := splitProject(t)
 	j := func(parts ...string) string { return filepath.Join(append([]string{dir}, parts...)...) }
 	rules, warnings := project.DiscoverRules([]string{dir, j("sub")})
@@ -73,6 +74,7 @@ func TestDiscoverRules(t *testing.T) {
 }
 
 func TestDiscoverRulesRetainsAllWarnings(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
 		".hint/rules/large.md": "---\npaths: ['[', 'x/[', '*.go']\n---\n" + strings.Repeat("x", 64<<10),
@@ -96,6 +98,7 @@ func TestDiscoverRulesRetainsAllWarnings(t *testing.T) {
 }
 
 func TestRuleMatches(t *testing.T) {
+	t.Parallel()
 	r := project.Rule{Root: "/p", Paths: []string{"internal/**/*.go", "*.md"}}
 	cases := map[string]bool{
 		"/p/internal/a/b.go":  true,
@@ -116,6 +119,7 @@ func TestRuleMatches(t *testing.T) {
 }
 
 func TestActivation(t *testing.T) {
+	t.Parallel()
 	goRule := project.Rule{Path: "/p/.hint/rules/go.md", Root: "/p", Title: "Go", Paths: []string{"**/*.go"}}
 	tsRule := project.Rule{Path: "/p/.cursor/rules/ts.mdc", Root: "/p", Title: "TS", Paths: []string{"*.ts"}}
 	always := project.Rule{Path: "/p/.hint/rules/always.md", Root: "/p", Title: "Always"}
@@ -140,6 +144,7 @@ func TestActivation(t *testing.T) {
 }
 
 func TestLoad_SplitProject(t *testing.T) {
+	t.Parallel()
 	dir := splitProject(t)
 	j := func(parts ...string) string { return filepath.Join(append([]string{dir}, parts...)...) }
 	pc, err := project.Load(context.Background(), j("sub"), project.WithGit(""), project.WithOverview(project.None{}))

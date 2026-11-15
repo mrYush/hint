@@ -11,6 +11,7 @@ import (
 )
 
 func TestRoot_Resolve(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -58,6 +59,7 @@ func TestRoot_Resolve(t *testing.T) {
 }
 
 func TestRoot_SymlinkEscapeRejected(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation needs privileges on Windows")
 	}
@@ -92,6 +94,7 @@ func TestRoot_SymlinkEscapeRejected(t *testing.T) {
 }
 
 func TestRoot_Rel(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	root, err := tool.NewRoot(dir)
 	if err != nil {
@@ -109,6 +112,7 @@ func TestRoot_Rel(t *testing.T) {
 }
 
 func TestNewRoot_Errors(t *testing.T) {
+	t.Parallel()
 	if _, err := tool.NewRoot(""); err == nil {
 		t.Error("empty dir accepted")
 	}

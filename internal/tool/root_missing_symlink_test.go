@@ -10,6 +10,7 @@ import (
 )
 
 func TestRootMissingChildBelowAbsoluteInRootSymlink(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "real"), 0700); err != nil {
 		t.Fatal(err)

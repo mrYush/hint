@@ -21,6 +21,7 @@ func (h *harness) completes() int {
 }
 
 func TestTabAsksForAndAcceptsACompletion(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, completionEngine("tab"), Options{})
 	h.run(h.m.Init())
 	if h.m.cmpl.mode() != "tab" {
@@ -68,6 +69,7 @@ func TestTabAsksForAndAcceptsACompletion(t *testing.T) {
 }
 
 func TestCompletionOffSaysSoOnTab(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, completionEngine("off"), Options{})
 	h.run(h.m.Init())
 	h.typeText("add a test for")
@@ -92,6 +94,7 @@ func TestCompletionOffSaysSoOnTab(t *testing.T) {
 }
 
 func TestIdleCompletionObeysTheThresholds(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, completionEngine("idle"), Options{})
 	h.run(h.m.Init())
 	// Short text: the tick after the edit asks nothing.
@@ -127,6 +130,7 @@ func TestIdleCompletionObeysTheThresholds(t *testing.T) {
 }
 
 func TestCompletionFailuresSwitchItOff(t *testing.T) {
+	t.Parallel()
 	eng := completionEngine("tab")
 	eng.completeErr = errors.New("boom")
 	h := newHarness(t, eng, Options{})
@@ -159,6 +163,7 @@ func TestCompletionFailuresSwitchItOff(t *testing.T) {
 }
 
 func TestCompletionCommandReportsModeAndCost(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, completionEngine("both"), Options{})
 	h.run(h.m.Init())
 	h.typeText("add a test for")
@@ -188,6 +193,7 @@ func TestCompletionCommandReportsModeAndCost(t *testing.T) {
 }
 
 func TestLateCompletionIsDropped(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, completionEngine("tab"), Options{})
 	h.run(h.m.Init())
 	h.typeText("add a test for")
@@ -205,6 +211,7 @@ func TestLateCompletionIsDropped(t *testing.T) {
 }
 
 func TestTabFetchesTheModelsOfAProfile(t *testing.T) {
+	t.Parallel()
 	eng := &fakeEngine{profiles: twoProfiles(), models: map[string][]string{"local": {"qwen", "llama"}}}
 	setup := &Setup{Describe: "d", Profile: "local", Set: func(string, string, bool) (string, error) { return "", nil }}
 	h := newHarness(t, eng, Options{Setup: setup})

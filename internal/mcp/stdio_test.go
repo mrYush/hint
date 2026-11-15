@@ -89,6 +89,7 @@ func toolByName(tools []agentapi.Tool, name string) agentapi.Tool {
 }
 
 func TestStdioServerLifecycle(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	base := []string{"PATH=" + os.Getenv("PATH"), "SECRET=base-secret"}
@@ -144,6 +145,7 @@ func TestStdioServerLifecycle(t *testing.T) {
 }
 
 func TestStdioTimeoutAndTruncation(t *testing.T) {
+	// The subprocess handshake shares the short real tool deadline.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cfg := stdioConfig(30 * time.Millisecond)
@@ -176,6 +178,7 @@ func TestStdioTimeoutAndTruncation(t *testing.T) {
 }
 
 func TestProjectEnviron(t *testing.T) {
+	t.Parallel()
 	base := []string{
 		"PATH=/bin", "HOME=/home/u", "LC_ALL=C", "LANG=en",
 		"SECRET=one", "GITHUB_TOKEN=two", "AWS_SECRET_ACCESS_KEY=three",
@@ -195,6 +198,7 @@ func TestProjectEnviron(t *testing.T) {
 }
 
 func TestMergeEnvOverrides(t *testing.T) {
+	t.Parallel()
 	got := mergeEnv([]string{"A=1", "B=2"}, map[string]string{"B": "3", "C": "4"})
 	joined := strings.Join(got, "\n")
 	for _, want := range []string{"A=1", "B=3", "C=4"} {

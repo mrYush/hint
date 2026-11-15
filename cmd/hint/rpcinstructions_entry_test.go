@@ -15,6 +15,7 @@ import (
 )
 
 func TestRepoPrepareEntryIDPreservesExactTarget(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{" leading space.txt", "raw\xff.txt"} {
 		t.Run(name, func(t *testing.T) {
 			s, dir := repoTestSession(t)
@@ -77,6 +78,7 @@ func TestRepoPrepareEntryIDPreservesExactTarget(t *testing.T) {
 }
 
 func TestRepoRoutingRejectsNullAndAmbiguousFields(t *testing.T) {
+	t.Parallel()
 	s, _ := repoTestSession(t)
 	for _, tc := range []struct{ name, args, reason string }{
 		{"null repo", `{"repo":null,"path":"new.txt","content":"x"}`, "repo must be a string"},
@@ -95,6 +97,7 @@ func TestRepoRoutingRejectsNullAndAmbiguousFields(t *testing.T) {
 }
 
 func TestRepoPrepareRejectsNullAndAmbiguousFields(t *testing.T) {
+	t.Parallel()
 	s, _ := repoTestSession(t)
 	for _, tc := range []struct{ name, args, reason string }{
 		{"null repo", `{"repo":null,"path":"new.txt"}`, "repo must be a string"},

@@ -65,6 +65,7 @@ func runMap(t *testing.T, target agentapi.Tool, args string, cap int) Response {
 }
 
 func TestMapWrappersBoundPagesWithoutLosingDeclarations(t *testing.T) {
+	t.Parallel()
 	for _, cap := range []int{1024, 1500, 2048, 8192} {
 		t.Run(fmt.Sprint(cap), func(t *testing.T) {
 			m, space, dir := queryFixture(t)
@@ -110,6 +111,7 @@ func TestMapWrappersBoundPagesWithoutLosingDeclarations(t *testing.T) {
 }
 
 func TestMapReportsExhaustedHashBudgetWithoutUpgradingAllFiles(t *testing.T) {
+	t.Parallel()
 	const fileCount, outputCap = 50, 8192
 	m, space, dir := queryFixture(t)
 	for i := range fileCount {
@@ -174,6 +176,7 @@ func TestMapReportsExhaustedHashBudgetWithoutUpgradingAllFiles(t *testing.T) {
 }
 
 func TestMapLargeExcludedRangeAdvancesWithoutLosingFollowingCandidate(t *testing.T) {
+	t.Parallel()
 	const excludedCount, outputCap = 1025, 8192
 	m, space, dir := queryFixture(t)
 	root := spaceRootID(t, space)
@@ -226,6 +229,7 @@ func TestMapLargeExcludedRangeAdvancesWithoutLosingFollowingCandidate(t *testing
 }
 
 func TestMapPinnedCoverageDoesNotBecomeCompleteLater(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "x.go", "package p; func Open() {}")
 	m.setStatus(spaceRootID(t, space), Status{State: "building"})
@@ -261,6 +265,7 @@ func spaceRootID(t *testing.T, space *workspace.Session) string {
 }
 
 func TestMapValidationSuppressesChangedSourcesAndPolicies(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"content", "policy", "deleted"} {
 		t.Run(change, func(t *testing.T) {
 			m, space, dir := queryFixture(t)
@@ -296,6 +301,7 @@ func TestMapValidationSuppressesChangedSourcesAndPolicies(t *testing.T) {
 }
 
 func TestMapReportsDefinitiveInvalidationsSeparatelyFromCoverage(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "a.go", "package p; func Old() {}; func OldTwo() {}")
 	indexQueryFile(t, m, space, dir, "b.go", "package p; func Good() {}")
@@ -322,6 +328,7 @@ func TestMapReportsDefinitiveInvalidationsSeparatelyFromCoverage(t *testing.T) {
 }
 
 func TestMapEmptyPartialPageCanContinue(t *testing.T) {
+	// The large SQLite fixture must finish within the real write deadline.
 	m, space, dir := queryFixture(t)
 	var source strings.Builder
 	source.WriteString("package p\n")
@@ -348,6 +355,7 @@ func TestMapEmptyPartialPageCanContinue(t *testing.T) {
 }
 
 func TestMapValidationReportsHashBudgetExhaustion(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "x.go", "package p; func Open() {}")
 	lease, err := space.Resolve("", "x.go")
@@ -366,6 +374,7 @@ func TestMapValidationReportsHashBudgetExhaustion(t *testing.T) {
 }
 
 func TestMapCursorIsBoundToMembershipAndRejectsMalformedIDs(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "x.go", "package p; func Open() {}")
 	q, err := m.openQuery(t.Context(), space, Request{Path: ".", Limit: 1})
@@ -391,6 +400,7 @@ func TestMapCursorIsBoundToMembershipAndRejectsMalformedIDs(t *testing.T) {
 }
 
 func TestMapCursorDoesNotRevealRemovedScope(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	indexQueryFile(t, m, space, dir, "scope/x.go", "package p; func Open() {}")
 	q, err := m.openQuery(t.Context(), space, Request{Path: "scope", Limit: 1})
@@ -410,6 +420,7 @@ func TestMapCursorDoesNotRevealRemovedScope(t *testing.T) {
 }
 
 func TestMapReportsRetentionCapacityAsRetryable(t *testing.T) {
+	t.Parallel()
 	m, space, _ := queryFixture(t)
 	root := spaceRootID(t, space)
 	for range 128 {
@@ -433,6 +444,7 @@ func TestMapReportsRetentionCapacityAsRetryable(t *testing.T) {
 }
 
 func TestMapTurnCancellationIsPreserved(t *testing.T) {
+	t.Parallel()
 	m, space, _ := queryFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -444,6 +456,7 @@ func TestMapTurnCancellationIsPreserved(t *testing.T) {
 }
 
 func TestMapStructuredRedactionThroughLimits(t *testing.T) {
+	t.Parallel()
 	m, space, dir := queryFixture(t)
 	secret := "SecretIdentifier123"
 	indexQueryFile(t, m, space, dir, "x.go", "package p; func "+secret+"() {}")

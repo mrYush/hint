@@ -10,6 +10,7 @@ import (
 )
 
 func TestProcessEnvironmentSnapshot(t *testing.T) {
+	// This test changes process-wide environment or working directory.
 	t.Setenv("HINT_TEST_SNAPSHOT", "before")
 	env, err := processEnvironment()
 	if err != nil {
@@ -22,6 +23,7 @@ func TestProcessEnvironmentSnapshot(t *testing.T) {
 }
 
 func TestEnvironmentMissingLookup(t *testing.T) {
+	t.Parallel()
 	var e environment
 	if value, ok := e.lookup("ANY"); ok || value != "" {
 		t.Fatalf("unexpected lookup %q %v", value, ok)
@@ -29,6 +31,7 @@ func TestEnvironmentMissingLookup(t *testing.T) {
 }
 
 func TestConfigOptionsUseInjectedSources(t *testing.T) {
+	t.Parallel()
 	home, cwd := t.TempDir(), t.TempDir()
 	e := environment{home: home, cwd: cwd, lookupEnv: func(name string) (string, bool) {
 		if name == "HINT_MODEL" {
@@ -52,6 +55,7 @@ func TestConfigOptionsUseInjectedSources(t *testing.T) {
 }
 
 func TestRunRejectsMissingHomeBeforeCoreStartup(t *testing.T) {
+	t.Parallel()
 	err := run(context.Background(), options{env: environment{cwd: t.TempDir()}}, invocation{}, stdio{})
 	if err == nil || !strings.Contains(err.Error(), "home directory") {
 		t.Fatalf("run error = %v", err)
@@ -59,6 +63,7 @@ func TestRunRejectsMissingHomeBeforeCoreStartup(t *testing.T) {
 }
 
 func TestCacheDirectories(t *testing.T) {
+	t.Parallel()
 	home, absolute := t.TempDir(), t.TempDir()
 	for _, value := range []string{"", "relative-cache", absolute} {
 		t.Run(value, func(t *testing.T) {

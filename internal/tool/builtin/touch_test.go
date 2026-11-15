@@ -11,6 +11,7 @@ import (
 )
 
 func TestFileTools_Touches(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"main.go": "package main\n"})
 	want := filepath.Join(root.Dir(), "main.go")
 	tools := map[string]agentapi.Tool{

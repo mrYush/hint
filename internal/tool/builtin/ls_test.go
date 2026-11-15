@@ -10,6 +10,7 @@ import (
 )
 
 func TestListDir_Tree(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{
 		"go.mod":                "",
 		"cmd/hint/main.go":      "",
@@ -49,6 +50,7 @@ func TestListDir_Tree(t *testing.T) {
 }
 
 func TestListDir_EmptyAndErrors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, map[string]string{"f.txt": "", "empty/.keep": ""})
 	tl := builtin.NewListDir(root)
 
@@ -61,6 +63,7 @@ func TestListDir_EmptyAndErrors(t *testing.T) {
 }
 
 func TestListDir_CapsEntries(t *testing.T) {
+	t.Parallel()
 	files := map[string]string{}
 	for i := 0; i < 600; i++ {
 		files[fmt.Sprintf("f%03d", i)] = ""

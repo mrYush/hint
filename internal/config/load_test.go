@@ -75,6 +75,7 @@ fallback_provider: local
 `
 
 func TestSourcePriority(t *testing.T) {
+	t.Parallel()
 	// One field (model) walked through every layer of the overlay chain:
 	// flag > HINT_MODEL > project file > global file.
 	tests := []struct {
@@ -148,6 +149,7 @@ providers:
 }
 
 func TestUnsetFlagDoesNotOverrideFile(t *testing.T) {
+	t.Parallel()
 	// Regression for the pre-WP0.2 bug: --model had default "gpt-4", so the
 	// file value never won. Empty Flags must leave the file value intact.
 	opts := dirs(t)
@@ -168,6 +170,7 @@ providers:
 }
 
 func TestEnvOverlayTouchesOnlySelectedProfile(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), twoProfilesYAML)
 	opts.LookupEnv = lookup(map[string]string{"HINT_API_KEY": "env-key"})
@@ -189,6 +192,7 @@ func TestEnvOverlayTouchesOnlySelectedProfile(t *testing.T) {
 }
 
 func TestProviderSelection(t *testing.T) {
+	t.Parallel()
 	// --provider beats HINT_PROVIDER, and the field overlays land on the
 	// profile selected AFTER that resolution, not on the file's default.
 	opts := dirs(t)
@@ -225,6 +229,7 @@ func TestProviderSelection(t *testing.T) {
 }
 
 func TestMergeByName(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
 providers:
@@ -263,6 +268,7 @@ providers:
 }
 
 func TestEnvExpansionInFileValues(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -289,6 +295,7 @@ providers:
 }
 
 func TestUnsetVarExpandsToEmptyAndFailsValidation(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -310,6 +317,7 @@ providers:
 // complete still comes back as configured, base_url and model included,
 // while a file that does not parse is an error even for a draft.
 func TestDraftKeepsAProfileWithoutAKey(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
 default_provider: router
@@ -340,6 +348,7 @@ providers:
 }
 
 func TestFlatConfigMigration(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 api_url: https://api.openai.com/v1
@@ -361,6 +370,7 @@ model: gpt-4
 }
 
 func TestFlatKeysIgnoredWhenProvidersPresent(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 api_key: flat-key
@@ -381,6 +391,7 @@ providers:
 }
 
 func TestLegacyPaths(t *testing.T) {
+	t.Parallel()
 	t.Run("legacy global read with warning", func(t *testing.T) {
 		opts := dirs(t)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint.yaml"), `
@@ -450,6 +461,7 @@ providers:
 }
 
 func TestXDGConfigHome(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	xdg := t.TempDir()
 	opts.LookupEnv = lookup(map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -470,6 +482,7 @@ providers:
 }
 
 func TestZeroConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		env         map[string]string
@@ -585,6 +598,7 @@ func TestZeroConfig(t *testing.T) {
 }
 
 func TestOpenAIKindDefaultsToALocalServerNotOpenAICom(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -607,6 +621,7 @@ providers:
 }
 
 func TestUsabilityValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		yaml    string
@@ -759,6 +774,7 @@ providers:
 }
 
 func TestSingleProfileIsImplicitDefault(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -777,6 +793,7 @@ providers:
 }
 
 func TestHintDebug(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -806,6 +823,7 @@ providers:
 }
 
 func TestMalformedYAMLErrorNamesThePath(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	path := filepath.Join(opts.WorkingDir, ".hint", "config.yaml")
 	writeFile(t, path, "providers: [not: valid: yaml")
@@ -816,6 +834,7 @@ func TestMalformedYAMLErrorNamesThePath(t *testing.T) {
 }
 
 func TestSecrets(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{Providers: []Profile{
 		{Name: "a", APIKey: "key-one"},
 		{Name: "b", APIKey: "key-two"},
@@ -829,6 +848,7 @@ func TestSecrets(t *testing.T) {
 }
 
 func TestLimits(t *testing.T) {
+	t.Parallel()
 	base := `
 providers:
   - name: p
@@ -946,6 +966,7 @@ overview:
 }
 
 func TestGlobalDir(t *testing.T) {
+	t.Parallel()
 	if got := GlobalDir("/home/u", lookup(nil)); got != filepath.Join("/home/u", ".config", "hint") {
 		t.Errorf("GlobalDir = %q", got)
 	}
@@ -958,6 +979,7 @@ func TestGlobalDir(t *testing.T) {
 }
 
 func TestHeaderTimeout(t *testing.T) {
+	t.Parallel()
 	t.Run("project file overrides the global profile", func(t *testing.T) {
 		opts := dirs(t)
 		writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), `
@@ -1024,6 +1046,7 @@ providers:
 }
 
 func TestCompletionBlockLayersAndGuards(t *testing.T) {
+	t.Parallel()
 	global := `
 providers:
   - name: big
@@ -1103,6 +1126,7 @@ completion:
 }
 
 func TestKeyringReferencesAndKeySources(t *testing.T) {
+	t.Parallel()
 	file := `
 providers:
   - name: stored
@@ -1190,6 +1214,7 @@ default_provider: stored
 }
 
 func TestFilterEnviron(t *testing.T) {
+	t.Parallel()
 	env := []string{"PATH=/bin", "APIBAR_KEY=sk-1", "MY_KEY=sk-2", "COPY=sk-2", "EMPTY=", "PLAIN=hello", "NOEQ"}
 	got := FilterEnviron(env, []string{"APIBAR_KEY", "MY_KEY"}, []string{"sk-2", ""})
 	want := []string{"PATH=/bin", "EMPTY=", "PLAIN=hello", "NOEQ"}
@@ -1199,6 +1224,7 @@ func TestFilterEnviron(t *testing.T) {
 }
 
 func TestSecretsStoreAndKeyringAvailable(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.HomeDir, ".config", "hint", "config.yaml"), "providers:\n  - name: p\n    kind: openai\n    api_key: k-1234567890\n    model: m\nsecrets:\n  store: file\n")
 	cfg, err := LoadFrom(opts)
@@ -1238,6 +1264,7 @@ func (failingKeyring) Delete(string) error {
 }
 
 func TestUnsetEnvReferenceWarningInDraft(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:
@@ -1256,6 +1283,7 @@ providers:
 }
 
 func TestTypedProfileErrors(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{}
 	_, err := cfg.Default()
 	if !errors.Is(err, ErrNoProvider) {
@@ -1280,6 +1308,7 @@ func intPtr(v int) *int    { return &v }
 func boolPtr(v bool) *bool { return &v }
 
 func TestExplicitTypedFlagOverrides(t *testing.T) {
+	t.Parallel()
 	opts := dirs(t)
 	writeFile(t, filepath.Join(opts.WorkingDir, ".hint", "config.yaml"), `
 providers:

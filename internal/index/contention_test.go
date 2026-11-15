@@ -14,6 +14,7 @@ import (
 )
 
 func TestOpenContentionIsBoundedAndRecovers(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{})
 	conn, err := s.db.Conn(t.Context())
 	if err != nil {
@@ -75,6 +76,7 @@ func TestOpenContentionIsBoundedAndRecovers(t *testing.T) {
 }
 
 func TestOpenCancellationAndPermanentFailure(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	path := filepath.Join(t.TempDir(), "cancel", "index.db")
@@ -94,6 +96,7 @@ func TestOpenCancellationAndPermanentFailure(t *testing.T) {
 }
 
 func TestSharedCatalogRejectsConflictingAllowances(t *testing.T) {
+	t.Parallel()
 	s, path := openTestStore(t, Options{MaxBytes: 1 << 20, MaxPins: 4})
 	for _, opts := range []Options{{MaxBytes: 2 << 20, MaxPins: 4}, {MaxBytes: 512 << 10, MaxPins: 4}, {MaxBytes: 1 << 20, MaxPins: 5}} {
 		other, err := Open(path, opts)
@@ -113,6 +116,7 @@ func TestSharedCatalogRejectsConflictingAllowances(t *testing.T) {
 }
 
 func TestCatalogProcessPeer(t *testing.T) {
+	// This entry point runs in a dedicated child process.
 	path := os.Getenv("HINT_INDEX_TEST_PATH")
 	if path == "" {
 		t.Skip("subprocess helper")
@@ -160,6 +164,7 @@ func TestCatalogProcessPeer(t *testing.T) {
 // TestPeerOpenRetriesAfterAttemptDeadline exercises a real SQLite lock rather
 // than relying on process scheduling to exhaust the first open attempt.
 func TestPeerOpenRetriesAfterAttemptDeadline(t *testing.T) {
+	// The SQLite peer uses a short real attempt deadline.
 	owner, path := openTestStore(t, Options{})
 	conn, err := owner.db.Conn(t.Context())
 	if err != nil {
@@ -228,6 +233,7 @@ func retryPeerBusy(ctx context.Context, operation func() error) error {
 }
 
 func TestPeerBusyRetry(t *testing.T) {
+	// The SQLite peer uses short real attempt deadlines.
 	for _, tt := range []struct {
 		name string
 		err  error
@@ -267,6 +273,7 @@ func TestPeerBusyRetry(t *testing.T) {
 }
 
 func TestIndependentProcessesInitializeMigrateAndWrite(t *testing.T) {
+	t.Parallel()
 	for _, migrate := range []bool{false, true} {
 		t.Run(fmt.Sprint(migrate), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "catalog.db")
