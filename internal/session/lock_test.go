@@ -12,6 +12,7 @@ import (
 // ErrLocked instead of interleaving its records, and Close releases the
 // lock for the next run.
 func TestOpenLocksTheSession(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "1111")
 	sess := writeGolden(t, store, "/p")
 	path := sess.Path()
@@ -42,6 +43,7 @@ func TestOpenLocksTheSession(t *testing.T) {
 // moment it exists, so a second run that lists it as the latest cannot
 // append to it.
 func TestCreateLocksTheSession(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "2222")
 	sess, err := store.Create("/p")
 	if err != nil {
@@ -66,6 +68,7 @@ func TestCreateLocksTheSession(t *testing.T) {
 // without taking its lock, so a run another process records stays
 // readable, and the peek cannot append to it.
 func TestPeekReadsWhileSessionIsOpen(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "3333")
 	sess := writeGolden(t, store, "/p")
 	path := sess.Path()
@@ -99,6 +102,7 @@ func TestPeekReadsWhileSessionIsOpen(t *testing.T) {
 // and the headers without taking the lock, so an attach can learn the
 // full id of a session another run holds.
 func TestResolveFindsASessionWhileItIsOpen(t *testing.T) {
+	t.Parallel()
 	store := newStore(t, "4444")
 	sess := writeGolden(t, store, "/p")
 	held, err := store.Open(sess.Path())

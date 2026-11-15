@@ -20,6 +20,7 @@ func feedAll(d *decoder, lines ...string) []agentapi.ChatEvent {
 }
 
 func TestDecoderJoinsMultiLineData(t *testing.T) {
+	t.Parallel()
 	// The SSE grammar splits one record across several data: lines, joined
 	// with newlines at the blank-line boundary. JSON tolerates the inserted
 	// newline between tokens.
@@ -35,6 +36,7 @@ func TestDecoderJoinsMultiLineData(t *testing.T) {
 }
 
 func TestDecoderToleratesBareJSONLines(t *testing.T) {
+	t.Parallel()
 	// Some servers stream plain JSON lines without SSE framing.
 	d := &decoder{}
 	events := feedAll(d,
@@ -47,6 +49,7 @@ func TestDecoderToleratesBareJSONLines(t *testing.T) {
 }
 
 func TestDecoderSkipsCommentsAndOtherFields(t *testing.T) {
+	t.Parallel()
 	d := &decoder{}
 	events := feedAll(d,
 		`: keep-alive ping`,
@@ -61,6 +64,7 @@ func TestDecoderSkipsCommentsAndOtherFields(t *testing.T) {
 }
 
 func TestDecoderSkipsMalformedChunk(t *testing.T) {
+	t.Parallel()
 	d := &decoder{}
 	events := feedAll(d,
 		`data: {not json`,
@@ -74,6 +78,7 @@ func TestDecoderSkipsMalformedChunk(t *testing.T) {
 }
 
 func TestDecoderFinalRecordWithoutTrailingBlankLine(t *testing.T) {
+	t.Parallel()
 	d := &decoder{}
 	feedAll(d,
 		`data: {"choices":[{"index":0,"delta":{"content":"a"}}]}`,
@@ -93,6 +98,7 @@ func TestDecoderFinalRecordWithoutTrailingBlankLine(t *testing.T) {
 }
 
 func TestDecoderMissingFinishReasonWithOutput(t *testing.T) {
+	t.Parallel()
 	d := &decoder{}
 	feedAll(d,
 		`data: {"choices":[{"index":0,"delta":{"content":"partial answer"}}]}`,
@@ -109,6 +115,7 @@ func TestDecoderMissingFinishReasonWithOutput(t *testing.T) {
 }
 
 func TestDecoderIDKeyedToolFragments(t *testing.T) {
+	t.Parallel()
 	// Copilot-style dialect: no index field, fragments correlated by id.
 	d := &decoder{}
 	feedAll(d,
@@ -138,6 +145,7 @@ func TestDecoderIDKeyedToolFragments(t *testing.T) {
 }
 
 func TestDecoderSynthesizesMissingCallID(t *testing.T) {
+	t.Parallel()
 	d := &decoder{}
 	feedAll(d,
 		`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"ping","arguments":"{}"}}]}}]}`,
@@ -164,6 +172,7 @@ func TestDecoderSynthesizesMissingCallID(t *testing.T) {
 }
 
 func TestDecoderFinishReasonMapping(t *testing.T) {
+	t.Parallel()
 	// Exhaustive over the dialect spellings, mirroring the ErrorKind routing
 	// test: an unmapped upstream value must never surface raw.
 	tests := map[string]agentapi.FinishReason{
@@ -187,6 +196,7 @@ func TestDecoderFinishReasonMapping(t *testing.T) {
 }
 
 func TestDecoderEmptyChoicesChunks(t *testing.T) {
+	t.Parallel()
 	// Azure prompt-filter annotations and usage-only chunks have no choices;
 	// they must not panic or produce events.
 	d := &decoder{}
@@ -206,6 +216,7 @@ func TestDecoderEmptyChoicesChunks(t *testing.T) {
 
 // TestInStreamErrors exercises the 200-OK error envelope classification.
 func TestInStreamErrors(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, payload string
 		want          agentapi.ErrorKind

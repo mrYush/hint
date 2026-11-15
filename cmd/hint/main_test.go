@@ -21,6 +21,7 @@ import (
 	"sync"
 	"testing"
 	"testing/iotest"
+	"testing/synctest"
 	"time"
 
 	"github.com/mrYush/hint/internal/config"
@@ -66,6 +67,7 @@ func TestToolRegistry_AllBehindPermissions(t *testing.T) {
 }
 
 func TestRunMode(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		ask, autoEdit, yolo bool
 		want                permission.Mode
@@ -83,6 +85,7 @@ func TestRunMode(t *testing.T) {
 }
 
 func TestWarnMode(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	warnMode(&out, permission.ModeYolo, false)
 	if !bytes.Contains(out.Bytes(), []byte("WARNING")) || !bytes.Contains(out.Bytes(), []byte("--yolo")) {
@@ -109,6 +112,7 @@ func TestWarnMode(t *testing.T) {
 }
 
 func TestSessionModeOf(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		cont, resume, off bool
 		id                string
@@ -302,6 +306,7 @@ func TestOpenSession(t *testing.T) {
 }
 
 func TestSystemPrompt(t *testing.T) {
+	t.Parallel()
 	pc := &project.Context{
 		Dir:      "/w/app/sub",
 		GitRoot:  "/w/app",
@@ -592,51 +597,61 @@ func TestREPL(t *testing.T) {
 }
 
 func TestREPLInterrupt(t *testing.T) {
+	t.Parallel()
 	// Ctrl-C during an answer: the provider hangs until cancelled, the
 	// turn reports "interrupted", and the next line is still read.
 	hanging := &fakeChat{hang: true}
-	pr, pw := io.Pipe()
 	as, sio, out, stderr := testAssembly(t, hanging, "")
-	sio.in = pr
-	a, err := assemble(context.Background(), as, sio)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sigs := make(chan os.Signal, 1)
-	done := make(chan error, 1)
-	go func() { done <- a.repl(context.Background(), sigs) }()
+	synctest.Test(t, func(t *testing.T) {
+		pr, pw := io.Pipe()
+		defer func() { _ = pw.Close() }()
+		sio.in = pr
+		a, err := assemble(t.Context(), as, sio)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer a.close()
 
-	go func() {
-		_, _ = io.WriteString(pw, "slow question\n")
-		// Wait until the turn is under way — the provider has been asked.
-		for len(hanging.seen()) == 0 {
-			time.Sleep(5 * time.Millisecond)
+		sigs := make(chan os.Signal, 1)
+		done := make(chan error, 1)
+		go func() { done <- a.repl(t.Context(), sigs) }()
+		if _, err := io.WriteString(pw, "slow question\n"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if got := len(hanging.seen()); got != 1 {
+			t.Errorf("provider saw %d requests before interrupt, want 1", got)
 		}
 		sigs <- os.Interrupt
-		// Ctrl-C at the prompt is a hint, not an exit.
-		time.Sleep(20 * time.Millisecond)
-		sigs <- os.Interrupt
-		time.Sleep(20 * time.Millisecond)
-		_, _ = io.WriteString(pw, "/quit\n")
-	}()
 
-	select {
-	case err := <-done:
-		if err != nil {
+		// Wait until the canceled turn has returned to the next prompt.
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "hint: interrupted") {
+			t.Errorf("stderr did not report the interrupted turn:\n%s", stderr)
+		}
+		sigs <- os.Interrupt
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Ctrl-D or type /exit") {
+			t.Errorf("stderr did not report how to exit:\n%s", stderr)
+		}
+
+		if _, err := io.WriteString(pw, "/quit\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
 			t.Fatalf("repl: %v", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("repl did not return")
-	}
-	_ = pw.Close()
-	if out.Len() != 0 {
-		t.Errorf("stdout = %q, want nothing from a cancelled turn", out.String())
-	}
-	for _, want := range []string{"hint: interrupted", "Ctrl-D or type /exit"} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Errorf("stderr lacks %q:\n%s", want, stderr.String())
+		if out.Len() != 0 {
+			t.Errorf("stdout = %q, want nothing from a cancelled turn", out.String())
 		}
-	}
+
+		if err := pw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.lines.ReadLine(t.Context()); !errors.Is(err, io.EOF) {
+			t.Fatalf("input after /quit = %v, want EOF", err)
+		}
+	})
 }
 
 // TestTrace checks the --debug log end to end: the profile, the system
@@ -680,6 +695,7 @@ func TestTrace(t *testing.T) {
 }
 
 func TestPrintModelsAndHumanSize(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	err := printModels(&out, []provider.Model{
 		{Name: "qwen2.5:7b", SizeBytes: 4_700_000_000, Modified: time.Date(2026, 8, 1, 12, 0, 0, 0, time.Local)},
@@ -744,6 +760,7 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestVersionFlag(t *testing.T) {
+	t.Parallel()
 	root := newRootCommand()
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -757,6 +774,7 @@ func TestVersionFlag(t *testing.T) {
 }
 
 func TestFormatVersion(t *testing.T) {
+	t.Parallel()
 	// ldflags win; build info fills in only what the build left blank.
 	info := &debug.BuildInfo{
 		Main: debug.Module{Version: "v0.2.0"},

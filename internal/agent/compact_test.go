@@ -63,6 +63,7 @@ func lastAgentEvent(events []agentapi.Event, kind agentapi.EventKind) *agentapi.
 // — the contract already promises thinking is dropped first, and a real
 // LLM summary call is wasted work if that alone clears the threshold.
 func TestCompact_ThinkingOnlyShortcut(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "should not be used"}
 	a := &Agent{
 		limits:    Limits{MaxContextTokens: 100, CompactThreshold: 0.8},
@@ -127,6 +128,7 @@ func collectEventChan(t *testing.T, ch <-chan agentapi.Event) []agentapi.Event {
 // (including its tool round) is kept verbatim as the tail, and only the
 // middle — the Compactor's input — is replaced by one system-role summary.
 func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "SUMMARY"}
 	a := &Agent{
 		limits:    Limits{MaxContextTokens: 0, CompactThreshold: 0.8},
@@ -189,6 +191,7 @@ func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
 // system prefix and the still-open tail, compact refuses to pretend it
 // helped.
 func TestCompact_EmptyBodyIsFatal(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "should not be called"}
 	a := &Agent{
 		limits:    Limits{MaxContextTokens: 0, CompactThreshold: 0.8},
@@ -219,6 +222,7 @@ func TestCompact_EmptyBodyIsFatal(t *testing.T) {
 // (e.g. the summarizing provider itself erroring) is reported as-is rather
 // than swallowed.
 func TestCompact_PropagatesCompactorError(t *testing.T) {
+	t.Parallel()
 	want := errors.New("summary provider is down")
 	compactor := &stubCompactor{err: want}
 	a := &Agent{
@@ -243,6 +247,7 @@ func TestCompact_PropagatesCompactorError(t *testing.T) {
 }
 
 func TestCharEstimator(t *testing.T) {
+	t.Parallel()
 	e := charEstimator{}
 	messages := []agentapi.Message{agentapi.UserMessage("12345678")} // 8 chars
 	if got, want := e.Estimate(messages), int64(2); got != want {
@@ -254,6 +259,7 @@ func TestCharEstimator(t *testing.T) {
 // part of the body of the next compaction, not of the prefix: it is folded
 // into the new summary instead of accumulating beside it.
 func TestCompact_ReplacesPreviousSummary(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "NEW"}
 	messages := []agentapi.Message{
 		agentapi.SystemMessage("sys"),
@@ -300,6 +306,7 @@ func TestCompact_ReplacesPreviousSummary(t *testing.T) {
 // summarizing it again, so compact refuses instead of letting an
 // overflowing provider spin forever.
 func TestCompact_OnlySummariesIsFatal(t *testing.T) {
+	t.Parallel()
 	compactor := &stubCompactor{summary: "should not be called"}
 	messages := []agentapi.Message{
 		agentapi.SystemMessage("sys"),
@@ -331,6 +338,7 @@ func TestCompact_OnlySummariesIsFatal(t *testing.T) {
 // B2 fix: the reset is the invariant, but a baseline left past the end of
 // a shortened history must not slice out of range on the way there.
 func TestOccupancy_StaleBaselineFallsBackToEstimate(t *testing.T) {
+	t.Parallel()
 	a := &Agent{estimator: charEstimator{}}
 	messages := []agentapi.Message{agentapi.UserMessage("12345678")} // 2 tokens
 

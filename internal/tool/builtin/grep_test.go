@@ -22,6 +22,7 @@ var grepFixture = map[string]string{
 }
 
 func TestGrep_PureGo(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, grepFixture)
 	tl := builtin.NewGrep(root, builtin.WithRipgrep(""))
 	if tl.Class() != agentapi.ClassRead {
@@ -56,6 +57,7 @@ func TestGrep_PureGo(t *testing.T) {
 }
 
 func TestGrep_Errors(t *testing.T) {
+	t.Parallel()
 	root := newRoot(t, grepFixture)
 	tl := builtin.NewGrep(root, builtin.WithRipgrep(""))
 	failed(t, run(t, tl, `{}`), "pattern is required")
@@ -66,6 +68,7 @@ func TestGrep_Errors(t *testing.T) {
 }
 
 func TestGrep_CapsMatches(t *testing.T) {
+	t.Parallel()
 	var sb strings.Builder
 	for i := 0; i < 300; i++ {
 		fmt.Fprintf(&sb, "needle %d\n", i)
@@ -95,6 +98,7 @@ func TestGrep_CapsMatches(t *testing.T) {
 }
 
 func TestGrep_ReportsLineTooLongToScan(t *testing.T) {
+	t.Parallel()
 	long := "needle " + strings.Repeat("x", 2<<20) + "\n"
 	root := newRoot(t, map[string]string{
 		"huge.txt": long,
@@ -110,6 +114,7 @@ func TestGrep_ReportsLineTooLongToScan(t *testing.T) {
 }
 
 func TestGrep_RipgrepReportsLineTooLongToScan(t *testing.T) {
+	t.Parallel()
 	rg := ripgrep(t)
 	long := "needle " + strings.Repeat("x", 5<<20) + "\n"
 	root := newRoot(t, map[string]string{
@@ -126,6 +131,7 @@ func TestGrep_RipgrepReportsLineTooLongToScan(t *testing.T) {
 }
 
 func TestGrep_TruncatesLineOnRuneBoundary(t *testing.T) {
+	t.Parallel()
 	long := "needle " + strings.Repeat("Привет", 200)
 	root := newRoot(t, map[string]string{"a.txt": long + "\n"})
 	got := ok(t, run(t, builtin.NewGrep(root, builtin.WithRipgrep("")), `{"pattern":"needle"}`))
@@ -142,6 +148,7 @@ func TestGrep_TruncatesLineOnRuneBoundary(t *testing.T) {
 }
 
 func TestGrep_RipgrepAgreesWithPureGo(t *testing.T) {
+	t.Parallel()
 	rg := ripgrep(t)
 	root := newRoot(t, grepFixture)
 	withRg := builtin.NewGrep(root, builtin.WithRipgrep(rg))

@@ -7,6 +7,7 @@ import (
 )
 
 func TestFirstLineOfCutsRuneBoundary(t *testing.T) {
+	t.Parallel()
 	got := firstLineOf(strings.Repeat("Привет", 10), 11)
 	want := "Приве..."
 	if got != want {

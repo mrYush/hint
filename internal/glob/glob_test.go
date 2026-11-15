@@ -3,6 +3,7 @@ package glob
 import "testing"
 
 func TestGlobMatcher(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		pattern string
 		path    string
@@ -47,6 +48,7 @@ func TestGlobMatcher(t *testing.T) {
 }
 
 func TestGlobMatcher_Invalid(t *testing.T) {
+	t.Parallel()
 	for _, p := range []string{"", "[unclosed", "a/[b"} {
 		if _, err := Compile(p); err == nil {
 			t.Errorf("Compile(%q) accepted", p)
@@ -55,6 +57,7 @@ func TestGlobMatcher_Invalid(t *testing.T) {
 }
 
 func TestExpandBraces(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		in   string
 		want []string

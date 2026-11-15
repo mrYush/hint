@@ -3,6 +3,7 @@ package shell
 import "testing"
 
 func TestParseRepos(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		input, action, path string
 		invalid             bool
