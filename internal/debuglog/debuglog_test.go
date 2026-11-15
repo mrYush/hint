@@ -161,3 +161,22 @@ func TestRetentionKeepsRecentlyWrittenOldTrace(t *testing.T) {
 		t.Fatalf("recently written trace removed: %v", err)
 	}
 }
+
+func TestSlogRedactsBeforeEncoding(t *testing.T) {
+	secret := "secret-with-\"quotes\"\nand-newline"
+	l, err := Open(t.TempDir(), time.Now(), []string{secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Slog().Debug("request "+secret, "credential", secret)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(l.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret-with") || !strings.Contains(string(data), "level=DEBUG") {
+		t.Fatalf("unexpected log: %s", data)
+	}
+}

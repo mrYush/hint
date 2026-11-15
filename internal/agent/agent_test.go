@@ -643,3 +643,25 @@ func (t countingTool) Run(_ context.Context, callID string, _ json.RawMessage) (
 	*t.count++
 	return agentapi.TextResult(callID, "count", "ok"), nil
 }
+
+func TestRunTurn_OverflowAfterOutputDoesNotRetry(t *testing.T) {
+	for _, kind := range []agentapi.ChatEventKind{agentapi.ChatTextDelta, agentapi.ChatThinkingDelta} {
+		t.Run(string(kind), func(t *testing.T) {
+			compactor := &stubCompactor{summary: "SUMMARY"}
+			p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{{Kind: kind, Text: "partial"}, failure(agentapi.ErrContextOverflow)}}}}
+			a := agent.New(p, agent.WithCompactor(compactor), agent.WithLimits(agent.Limits{MaxIterations: 10}))
+			events := collect(t, a.RunTurn(context.Background(), history4()))
+			if len(p.calls) != 1 || compactor.calls != 0 {
+				t.Fatalf("calls=%d compactions=%d", len(p.calls), compactor.calls)
+			}
+			errEv := lastEvent(events, agentapi.EventError)
+			if errEv == nil || errEv.Err.Kind != agentapi.ErrContextOverflow {
+				t.Fatalf("error=%+v", errEv)
+			}
+			end := lastEvent(events, agentapi.EventTurnEnd)
+			if end == nil || end.FinishReason != agentapi.FinishError {
+				t.Fatalf("end=%+v", end)
+			}
+		})
+	}
+}

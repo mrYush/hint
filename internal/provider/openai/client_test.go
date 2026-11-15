@@ -1,8 +1,10 @@
 package openai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -533,10 +535,8 @@ func TestCompletionsURLNotDoubled(t *testing.T) {
 
 func TestLoggerMasksAPIKey(t *testing.T) {
 	srv, _ := serveFixture(t, "text.sse")
-	var lines []string
-	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()), WithLogger(func(s string) {
-		lines = append(lines, s)
-	}))
+	var lines bytes.Buffer
+	c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()), WithSlogLogger(slog.New(slog.NewTextHandler(&lines, &slog.HandlerOptions{Level: slog.LevelDebug}))))
 
 	ch, err := c.Stream(context.Background(), simpleRequest())
 	if err != nil {
@@ -544,10 +544,10 @@ func TestLoggerMasksAPIKey(t *testing.T) {
 	}
 	collect(t, ch)
 
-	if len(lines) == 0 {
+	if lines.Len() == 0 {
 		t.Fatal("logger received nothing")
 	}
-	joined := strings.Join(lines, "\n")
+	joined := lines.String()
 	if strings.Contains(joined, "sk-test-1234567890abcdef") {
 		t.Fatal("raw API key leaked into debug log")
 	}
@@ -623,5 +623,43 @@ func TestHeaderTimeoutFromProfile(t *testing.T) {
 	_, err := New(p).Stream(context.Background(), simpleRequest())
 	if err == nil || !strings.Contains(err.Error(), "timeout awaiting response headers") {
 		t.Errorf("Stream error = %v, want a response-header timeout", err)
+	}
+}
+
+func TestStreamClassifiedError(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		kind agentapi.ErrorKind
+	}{
+		{`"context_length_exceeded"`, agentapi.ErrContextOverflow},
+		{`401`, agentapi.ErrAuth},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("data: {\"error\":{\"message\":\"refused\",\"code\":" + tc.code + "}}\n\n"))
+			}))
+			defer srv.Close()
+			c := New(testProfile(srv.URL), WithHTTPClient(srv.Client()))
+			ch, err := c.Stream(context.Background(), simpleRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			term := last(t, collect(t, ch))
+			if term.Kind != agentapi.ChatError || term.Err.Kind != tc.kind || term.Err.Provider != "test" {
+				t.Fatalf("terminal=%+v", term)
+			}
+		})
+	}
+}
+
+type formattingProbe struct{ called *bool }
+
+func (p formattingProbe) String() string { *p.called = true; return "formatted" }
+func TestDiscardLoggerSkipsFormatting(t *testing.T) {
+	called := false
+	New(testProfile("http://unused.invalid")).debugf("%s", formattingProbe{&called})
+	if called {
+		t.Fatal("disabled debug logging formatted the message")
 	}
 }

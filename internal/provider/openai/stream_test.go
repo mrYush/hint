@@ -203,3 +203,38 @@ func TestDecoderEmptyChoicesChunks(t *testing.T) {
 		t.Errorf("usage = %+v", d.usage)
 	}
 }
+
+// TestInStreamErrors exercises the 200-OK error envelope classification.
+func TestInStreamErrors(t *testing.T) {
+	cases := []struct {
+		name, payload string
+		want          agentapi.ErrorKind
+	}{
+		{"overflow", `{"error":{"message":"too long","code":"context_length_exceeded"}}`, agentapi.ErrContextOverflow},
+		{"auth", `{"error":{"message":"Invalid API key","code":"invalid_api_key"}}`, agentapi.ErrAuth},
+		{"rate", `{"error":{"message":"slow down","code":"rate_limit_exceeded"}}`, agentapi.ErrRateLimited},
+		{"model", `{"error":{"message":"missing","code":"model_not_found"}}`, agentapi.ErrModelNotFound},
+		{"invalid request", `{"error":{"code":"invalid_request_error"}}`, agentapi.ErrInvalidRequest},
+		{"content filter", `{"error":{"code":"content_filter"}}`, agentapi.ErrContentFiltered},
+		{"mixed case type", `{"error":{"type":"  Authentication_Error  "}}`, agentapi.ErrAuth},
+		{"numeric auth", `{"error":{"message":"bad credentials","code":401}}`, agentapi.ErrAuth},
+		{"numeric forbidden", `{"error":{"code":403}}`, agentapi.ErrAuth},
+		{"numeric rate", `{"error":{"code":429}}`, agentapi.ErrRateLimited},
+		{"numeric model", `{"error":{"code":404}}`, agentapi.ErrModelNotFound},
+		{"numeric invalid", `{"error":{"code":400}}`, agentapi.ErrInvalidRequest},
+		{"numeric overflow", `{"error":{"code":400,"message":"maximum context length"}}`, agentapi.ErrContextOverflow},
+		{"numeric unavailable", `{"error":{"code":503}}`, agentapi.ErrUnavailable},
+		{"numeric unknown", `{"error":{"code":409}}`, agentapi.ErrUnknown},
+		{"null", `{"error":{"code":null}}`, agentapi.ErrUnavailable},
+		{"unknown", `{"error":{"message":"upstream failed"}}`, agentapi.ErrUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &decoder{}
+			feedAll(d, "data: "+tc.payload, "")
+			if d.failure == nil || d.failure.Kind != tc.want {
+				t.Fatalf("failure = %+v; want %s", d.failure, tc.want)
+			}
+		})
+	}
+}
