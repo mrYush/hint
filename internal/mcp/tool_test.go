@@ -127,7 +127,7 @@ func TestCapDescription(t *testing.T) {
 }
 
 func TestToolAdapterRunProtocolAndTimeout(t *testing.T) {
-	// Discovery shares the short real tool deadline in the timeout fixture.
+	t.Parallel()
 	t.Run("protocol error", func(t *testing.T) {
 		m, _ := testManager(t, []fakeTool{{
 			name: "boom", description: "Fails.", schema: objectSchema(),
@@ -160,12 +160,16 @@ func TestToolAdapterRunProtocolAndTimeout(t *testing.T) {
 					return textResult("late"), nil
 				}
 			},
-		}}, ServerConfig{Timeout: 20 * time.Millisecond}, Options{})
+		}}, ServerConfig{}, Options{})
 		tools, err := m.Tools(context.Background())
 		if err != nil {
 			t.Fatalf("Tools: %v", err)
 		}
-		res, err := tools[0].Run(context.Background(), "id", json.RawMessage(`{}`))
+		if len(tools) != 1 {
+			t.Fatalf("tools = %v, want slow", toolNames(tools))
+		}
+		slow := limitedTool(tools[0], ServerConfig{Timeout: 20 * time.Millisecond})
+		res, err := slow.Run(context.Background(), "id", json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}

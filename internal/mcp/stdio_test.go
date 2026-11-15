@@ -145,10 +145,12 @@ func TestStdioServerLifecycle(t *testing.T) {
 }
 
 func TestStdioTimeoutAndTruncation(t *testing.T) {
-	// The subprocess handshake shares the short real tool deadline.
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cfg := stdioConfig(30 * time.Millisecond)
+	// Discovery and the successful large response use the normal budget.
+	// Only the deliberately blocked call gets the short execution timeout.
+	cfg := stdioConfig(5 * time.Second)
 	cfg.Env = map[string]string{"HINT_MCP_TEST_SERVER": "1"}
 	m := newStdioManager(t, cfg, []string{"PATH=" + os.Getenv("PATH")})
 	tools, err := m.Tools(ctx)
@@ -156,6 +158,10 @@ func TestStdioTimeoutAndTruncation(t *testing.T) {
 		t.Fatalf("Tools: %v", err)
 	}
 	sleep := toolByName(tools, "child.sleep")
+	if sleep == nil {
+		t.Fatalf("child.sleep is not registered; tools = %v", toolNames(tools))
+	}
+	sleep = limitedTool(sleep, ServerConfig{Timeout: 30 * time.Millisecond})
 	res, err := sleep.Run(ctx, "call-1", json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatalf("Run sleep: %v", err)
@@ -165,6 +171,9 @@ func TestStdioTimeoutAndTruncation(t *testing.T) {
 	}
 
 	big := toolByName(tools, "child.big")
+	if big == nil {
+		t.Fatalf("child.big is not registered; tools = %v", toolNames(tools))
+	}
 	res, err = big.Run(ctx, "call-2", json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatalf("Run big: %v", err)

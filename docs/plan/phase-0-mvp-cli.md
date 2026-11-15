@@ -38,7 +38,9 @@ git auto-commits, LSP, widgets, and mobile apps — all later phases.
 - [x] Cover future and expired HTTP dates in `Retry-After`; retain the existing B1/B2/B3/M1/M2 regressions.
 
 The scheduler overlap heuristic and fractional-second retry rounding remain separate follow-ups.
-Integration fixtures that couple discovery or initialization to short real deadlines retain serial execution.
+MCP timeout fixtures discover tools with the normal connection budget and apply the short timeout only to the deliberately blocked call.
+They verify that discovery returned the expected tools before invoking them.
+Resource-sensitive initialization fixtures retain serial execution.
 
 ## Work packages
 
