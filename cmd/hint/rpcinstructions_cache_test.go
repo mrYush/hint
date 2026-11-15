@@ -20,12 +20,14 @@ func TestSummaryProviderKey(t *testing.T) {
 	if strings.Contains(original, cfg.Providers[0].APIKey) {
 		t.Fatal("cache key contains the API key")
 	}
-	for _, i := range []int{0, 1} {
-		cfg.Providers[i].Model += "-new"
-		if summaryProviderKey(cfg) == original {
-			t.Errorf("changing the model of %s did not change the cache key", cfg.Providers[i].Name)
-		}
-		cfg.Providers[i].Model = strings.TrimSuffix(cfg.Providers[i].Model, "-new")
+	cfg.Providers[0].Model = "new-primary-model"
+	if summaryProviderKey(cfg) == original {
+		t.Error("changing the primary model did not change the cache key")
+	}
+	cfg.Providers[0].Model = "primary-model"
+	cfg.Providers[1].Model = "new-fallback-model"
+	if summaryProviderKey(cfg) != original {
+		t.Error("changing the fallback model changed the primary cache key")
 	}
 	cfg.Providers[0].APIKey = "rotated-key"
 	if summaryProviderKey(cfg) != original {

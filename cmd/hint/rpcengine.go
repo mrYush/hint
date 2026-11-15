@@ -834,17 +834,10 @@ func projectOptions(as assembly, overview project.Overview) []project.Option {
 	return opts
 }
 
-// summaryProviderKey describes both providers the chat router may use.
+// summaryProviderKey identifies the primary profile that can populate the cache.
 func summaryProviderKey(cfg *config.Config) string {
-	identity := func(p config.Profile) string {
-		return fmt.Sprintf("%q %q %q %q", p.Name, p.Kind, p.BaseURL, p.Model)
-	}
-	primary, _ := cfg.Default()
-	key := identity(primary)
-	if fallback, ok := cfg.Fallback(); ok && fallback.Name != primary.Name {
-		key += "\n" + identity(fallback)
-	}
-	return key
+	p, _ := cfg.Default()
+	return fmt.Sprintf("%q %q %q %q", p.Name, p.Kind, p.BaseURL, p.Model)
 }
 
 // addMCPResources joins configured resources to the same instruction layout

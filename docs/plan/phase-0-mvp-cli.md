@@ -854,12 +854,6 @@ depend on them:
 
 ### WP0.8 — Project context — **done**
 
-**Branch:** `fix/issue-40-project-reliability` ([#40](https://github.com/mrYush/hint/issues/40))
-
-- ✅ Probe Git worktrees with a stable locale and preserve command and context errors under the existing time limits (S11).
-- ✅ Key instruction summaries by prompt, providers, path, content and budget, and publish cache entries atomically (S18).
-- ✅ Reuse compiled rule globs and report every rule warning (S21).
-
 - ✅ Read `HINT.md` (plus `AGENTS.md`/`CLAUDE.md` as compatible names) from the project root into the system prompt
 - ✅ Auto-context of the current directory — as today, but with a size limit and `.gitignore` filtering
 - ✅ Backlog (audit 2026-09-28, S20; [#41](https://github.com/mrYush/hint/issues/41)): UTF-8-safe truncation in instruction excerpts, budget cuts and bounded reads — [review](review-2026-09-28-go-practices.md#L291-L304) ([#41](https://github.com/mrYush/hint/issues/41), `fix/utf8-truncation`)
@@ -951,6 +945,16 @@ depend on them:
   the model reaches the text that was cut, is worked out in
   [WP0.12](#wp012--instructions-beyond-the-budget--done); just-in-time loading
   of a subdirectory's instructions lives there too.
+
+#### Project context reliability follow-up — issue #40
+
+**Branch:** `fix/issue-40-project-reliability`
+
+Tracks [#40](https://github.com/mrYush/hint/issues/40).
+
+- ✅ Probe Git worktrees with a stable locale and preserve command and context errors under the existing time limits (S11).
+- ✅ Key instruction summaries by both prompts, primary profile and budget, sync and publish cache entries atomically, and skip caching fallback responses (S18).
+- ✅ Reuse compiled rule globs and report every rule warning (S21).
 
 ### WP0.9 — Run modes and CLI surface — **done**
 
