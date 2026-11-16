@@ -38,10 +38,9 @@ from harbor.models.model_api_format import ModelApiFormat
 from harbor.trial.errors import AgentTimeoutError
 from pydantic import BaseModel, Field
 
+from .baseline import HINT_VERSION, REVISION
 from .trace import EmptyTrajectoryError, JournalRecord, convert, read_journal
 
-REVISION = "53264f88ad6900abab31c8e50e1281c0381ff45f"
-HINT_VERSION: Final = f"harbor-baseline+{REVISION[:7]}"
 BINARY = "/installed-agent/hint"
 CHAT = ModelApiFormat.OPENAI_CHAT_COMPLETIONS
 type Architecture = Literal["amd64", "arm64"]
@@ -209,6 +208,7 @@ class EffectiveConfig(BaseModel):
     """Sanitized record of effective Hint trial configuration."""
 
     hint: str
+    hint_version: str = HINT_VERSION
     hint_commit: str = REVISION
     hint_sha256: str
     platform: str
@@ -462,7 +462,13 @@ class HintAgent(BaseInstalledAgent):
         if len(lines) != 2 or not lines[0].split():
             raise RuntimeError("Could not identify the installed Hint binary")
         identity = BinaryIdentity(sha256=lines[0].split()[0], version=lines[1])
-        if identity.sha256 != expected.sha256 or REVISION not in identity.version:
+        expected_version = (
+            rf"hint version {re.escape(HINT_VERSION)} "
+            rf"\(commit {REVISION}, built [^\r\n)]+\)"
+        )
+        if identity.sha256 != expected.sha256 or not re.fullmatch(
+            expected_version, identity.version
+        ):
             raise RuntimeError(
                 "Installed Hint identity differs from the benchmark baseline"
             )

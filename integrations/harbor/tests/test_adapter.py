@@ -3,6 +3,8 @@
 import hashlib
 import json
 import shlex
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,8 +15,8 @@ from harbor.models.trajectories import Trajectory
 from harbor.trial.errors import AgentTimeoutError
 from pydantic import ValidationError
 
+from hint_harbor import baseline
 from hint_harbor.agent import (
-    REVISION,
     AgentError,
     BinaryIdentity,
     HintAgent,
@@ -24,11 +26,22 @@ from hint_harbor.agent import (
     redact,
     select_binary,
 )
+from hint_harbor.baseline import HINT_VERSION, REVISION
 from hint_harbor.trace import convert, read_journal
 
 
 class AdapterTests(unittest.TestCase):
     """Check route, binary, trace and redaction contracts."""
+
+    def test_builder_baseline(self) -> None:
+        """Expose the packaged baseline to the shell builder without dependencies."""
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", baseline.__file__],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.stdout, f"{HINT_VERSION} {REVISION}\n")
 
     def agent(self, **overrides: object) -> HintAgent:
         """Create an isolated fixture agent with typed overrides."""
@@ -313,6 +326,49 @@ class AdapterTests(unittest.TestCase):
             self.assertNotIn(secret, redact(value=value, secret=secret))
 
 
+class BinaryTests(unittest.IsolatedAsyncioTestCase):
+    """Verify the installed build before running a benchmark attempt."""
+
+    async def test_installed_identity(self) -> None:
+        """Accept the full pinned identity and reject stale or malformed builds."""
+        agent = AdapterTests().agent()
+        checksum = "a" * 64
+        binary = SelectedBinary(
+            path=Path("/tmp/hint"), sha256=checksum, architecture="amd64"
+        )
+        version_line = f"hint version {HINT_VERSION} (commit {REVISION}, built unknown)"
+        valid = f"{checksum}  /installed-agent/hint\n{version_line}\n"
+        cases = [
+            ("valid", valid, True),
+            ("wrong checksum", valid.replace(checksum, "b" * 64), False),
+            ("wrong commit", valid.replace(REVISION, "0" * 40), False),
+            ("short commit", valid.replace(REVISION, REVISION[:7]), False),
+            ("wrong version", valid.replace(HINT_VERSION, "0.4.1"), False),
+            ("commit prefix", valid.replace(REVISION, REVISION + "0"), False),
+            ("extra output", valid + "unexpected\n", False),
+            ("missing output", "", False),
+        ]
+        for name, stdout, accepted in cases:
+            with (
+                self.subTest(name=name),
+                patch.object(
+                    agent,
+                    "exec_as_agent",
+                    new_callable=AsyncMock,
+                    return_value=Mock(stdout=stdout),
+                ),
+            ):
+                if accepted:
+                    identity = await agent.verify_binary(
+                        environment=Mock(), expected=binary
+                    )
+                    self.assertEqual(identity.sha256, checksum)
+                    self.assertEqual(identity.version, version_line)
+                else:
+                    with self.assertRaises(RuntimeError):
+                        await agent.verify_binary(environment=Mock(), expected=binary)
+
+
 class CollectTests(unittest.IsolatedAsyncioTestCase):
     """Exercise independent artifact collection."""
 
@@ -361,6 +417,10 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
                     context=AgentContext(),
                 )
             execution = json.loads((agent.logs_dir / "execution.json").read_text())
+            effective = json.loads((agent.logs_dir / "effective.json").read_text())
+            self.assertEqual(effective["hint_version"], HINT_VERSION)
+            self.assertEqual(effective["hint_commit"], REVISION)
+            self.assertEqual(effective["hint_sha256"], binary.sha256)
             self.assertEqual(execution["error_kind"], "turn_limit")
             self.assertFalse(execution["cancelled"])
             self.assertEqual(
@@ -477,6 +537,7 @@ class CollectTests(unittest.IsolatedAsyncioTestCase):
                 else:
                     trace = Trajectory.model_validate_json(primary.read_text())
                     self.assertEqual(trace.session_id, "target")
+                    self.assertEqual(trace.agent.version, HINT_VERSION)
                     self.assertEqual(bool(trace.steps), with_message)
 
     async def test_success_rejects_empty_trajectory(self) -> None:

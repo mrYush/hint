@@ -28,19 +28,24 @@ uv pip install --python "$work/venv/bin/python" \
 py="$work/venv/bin/python"
 harbor="$work/venv/bin/harbor"
 
-GOTOOLCHAIN=go1.26.10 sh "$integration/build-hint.sh" "$work/bin"
+PYTHON="$py" sh "$integration/build-hint.sh" "$work/bin"
 "$harbor" --version
 "$harbor" agent schema hint_harbor.agent:HintAgent --json
 ```
 
-The build uses a Git archive of Hint commit `53264f88ad6900abab31c8e50e1281c0381ff45f`, stamped as `harbor-baseline`.
-The adapter selects the binary using the container's `uname -m`, checks the build's SHA-256 before and after upload, and verifies the embedded commit.
+The build uses the v0.4.2 sources at commit `c6be73183a9e0288a2b70cff14085854811d2234`.
+[`hint_harbor/baseline.py`](hint_harbor/baseline.py) is the shared version and full-commit definition used by the source builder, installed adapter, manifests and trajectories.
+The builder requires Python 3 (`PYTHON` selects the interpreter) and pins Go 1.26.10.
+It archives the pinned commit, so local source changes do not enter the benchmark binary.
+The adapter selects the binary using the container's `uname -m`, checks the build's SHA-256 before and after upload, and verifies the exact embedded version and full commit.
+Use the binaries and `SHA256SUMS` produced together by this script.
+Official release archives use a short embedded commit and a different build recipe; this source-build workflow requires the full commit.
 The expected SHA-256 values for the documented toolchain are below.
 
 | Binary | SHA-256 |
 | --- | --- |
-| linux/amd64 | `599f6ea8730db3652ba7cf13d3dd33a8cdfa9729e125810814b52ac7f6c51963` |
-| linux/arm64 | `ebc0b423efbf9e6788d0cc993cbf71a66dedc815635e002599424c00347ae0d1` |
+| linux/amd64 | `46a523e71ed8605f3e9b306ed2f161cbaff2855ff2b0c4190b963928dafd68b9` |
+| linux/arm64 | `143c76a2ee45674c8da888ccae569259d5452ef4cecbfd8629a6518a026be2ce` |
 
 ## Dataset and Docker
 
@@ -131,6 +136,9 @@ hint_bench "$work/jobs/rerun-$failed_task" --task "$failed_task" --attempts 1
 
 `manifest.json` records the requested dataset version, local task identities, digest-pinned agent and verifier images, model route, platform, attempts and retry policy.
 Harbor's `lock.json` records resolved task digests, and each trial's `agent/effective.json` records the actual Hint binary and container architecture.
+The manifest's `hint.version` and `hint.commit` identify the pinned build, with a `binary_sha256` entry for each Linux architecture.
+After binary verification, `effective.json` records `hint_version`, `hint_commit`, the installed `hint_sha256` and the full CLI version line in `hint`.
+The ATIF trajectory's agent version is the same Hint release version.
 `summary.json` retains exceptions and missing attempts alongside verifier rewards.
 Use Harbor's aggregate result for the repeated-attempt mean and pass@k, and the trial results for individual outcomes.
 A completed agent process supplies no reward by itself.
@@ -191,7 +199,7 @@ uv pip install --python "$py" -r requirements.txt '.[dev,docs]'
 "$py" -m unittest discover -s tests -v
 "$work/venv/bin/ruff" format --check .
 "$work/venv/bin/ruff" check .
-"$work/venv/bin/pyright"
+"$work/venv/bin/pyright" --pythonpath "$py"
 "$work/venv/bin/sphinx-build" -W -b html docs docs/_build
 ```
 

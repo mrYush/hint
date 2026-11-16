@@ -75,6 +75,30 @@ This companion package supplies external evaluation evidence for WP2R.2 and keep
 - [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
   The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
 
+#### Hint v0.4.2 benchmark baseline (#133)
+
+**Branch:** `fix/harbor-hint-baseline`
+
+[Issue #133](https://github.com/mrYush/hint/issues/133) updates the source-built benchmark baseline to v0.4.2 at `c6be73183a9e0288a2b70cff14085854811d2234`.
+The shared `hint_harbor/baseline.py` supplies the version and full commit to the shell builder and adapter.
+The adapter verifies the installed version, full commit and checksum before starting a trial.
+Manifest, effective configuration and ATIF metadata identify the same build.
+
+- ✅ Build both Linux architectures from the pinned source archive and record their checksums in the Harbor README.
+- ✅ Verify accepted and rejected binary identities and consistency of the saved metadata.
+- ✅ Run Python tests, formatting, lint, type and documentation checks, plus applicable repository checks.
+- [ ] Run Docker fake-provider smoke for success, authentication failure and timeout (blocked: this execution environment denies creation of the Docker Unix socket with `operation not permitted`).
+- ✅ Verify package installation, source builds, Harbor version and adapter schema commands.
+- [ ] Verify the remaining Docker reproduction steps on a Docker-capable host.
+
+Validation passed with 31 Python tests, Ruff formatting and lint, Pyright, Sphinx with warnings treated as errors, Go tests and vet, golangci-lint v2.13.2, and a Linux arm64 cross-build.
+Both pinned source builds used Go 1.26.10.
+The installed wheel accepted the native amd64 binary's actual checksum and version output through the identity validator, with remote execution mocked.
+This check does not replace the Docker smoke gate.
+Run the README's three fake-provider modes on a Docker-capable host before closing #133, then proceed to the separately authorized real-model smoke.
+
+Real-model acceptance remains in #107, DeepSeek reasoning in #109, and broader dependency provenance in #112.
+
 #### Remove declarative monetary budgets (2026-11-11)
 
 The owner requested removal of monetary budget declarations because the adapter neither calculates costs nor enforces spending limits.

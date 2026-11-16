@@ -25,6 +25,7 @@ from benchmark import (
     task_manifest,
 )
 from hint_harbor.agent import ERRORS, HintAgent
+from hint_harbor.baseline import HINT_VERSION, REVISION
 
 
 class BenchmarkTests(TestCase):
@@ -216,6 +217,15 @@ trusted_environment_confirmed: true
             self.assertEqual(launch(args=args), 0)
             run.assert_called_once()
         manifest = json.loads((args.job / "manifest.json").read_text())
+        self.assertEqual(manifest["hint"]["version"], HINT_VERSION)
+        self.assertEqual(manifest["hint"]["commit"], REVISION)
+        self.assertEqual(
+            manifest["hint"]["binary_sha256"],
+            {
+                arch: hashlib.sha256(arch.encode()).hexdigest()
+                for arch in ("amd64", "arm64")
+            },
+        )
         self.assertEqual(manifest["hint"]["model"], "gateway/model")
         self.assertEqual(manifest["hint"]["base_url"], "https://example.invalid/v1")
         self.assertEqual(manifest["hint"]["context_window"], 32768)
