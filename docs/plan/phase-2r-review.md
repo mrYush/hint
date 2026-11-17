@@ -89,7 +89,7 @@ Manifest, effective configuration and ATIF metadata identify the same build.
 - ✅ Run Python tests, formatting, lint, type and documentation checks, plus applicable repository checks.
 - ✅ Run Docker fake-provider smoke for success, authentication failure and timeout.
 - ✅ Verify package installation, source builds, Harbor version and adapter schema commands.
-- [ ] Verify the remaining Docker reproduction steps on a Docker-capable host.
+- ✅ Verify the remaining Docker reproduction steps on a Docker-capable host.
 
 Validation passed with 31 Python tests, Ruff formatting and lint, Pyright, Sphinx with warnings treated as errors, Go tests and vet, golangci-lint v2.13.2, and a Linux arm64 cross-build.
 Both pinned source builds used Go 1.26.10.
@@ -104,7 +104,9 @@ Authentication failure verified 1 trial and recorded `AgentAuthenticationError`.
 Timeout verified 1 trial and recorded `AgentTimeoutError`.
 The smoke script prints `verified trial records` only after checking the Hint version, full commit, SHA-256, verifier reward, and absence of the fake key.
 Artifacts remain under `.tmp/harbor/fake.LS295d`.
-The dataset download and the oracle `wal-recovery-ordering` task remain unverified on this host.
+The same host downloaded `terminal-bench/terminal-bench-cpu-only@4.0.0` as 63 task directories under `.tmp/harbor/data/terminal-bench-cpu-only`.
+The oracle run of `wal-recovery-ordering` finished one trial in 4m 58s with no exception, mean 1.000, and reward 1.0.
+Its summary is `.tmp/harbor/jobs/oracle-wal/summary.json`.
 
 Real-model acceptance remains in #107, DeepSeek reasoning in #109, and broader dependency provenance in #112.
 
