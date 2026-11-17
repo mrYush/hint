@@ -16,13 +16,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from typing_extensions import TypedDict
 
-from hint_harbor.agent import (
-    HINT_VERSION,
-    REVISION,
-    HintAgent,
-    Reasoning,
-    Route,
-)
+from hint_harbor.agent import HintAgent, Reasoning, Route
+from hint_harbor.baseline import HINT_VERSION, REVISION
 
 DATASET = "terminal-bench/terminal-bench-cpu-only@4.0.0"
 AGENT = "hint_harbor.agent:HintAgent"

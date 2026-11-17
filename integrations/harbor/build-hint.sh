@@ -2,7 +2,10 @@
 set -eu
 export GOTOOLCHAIN=go1.26.10
 
-revision=53264f88ad6900abab31c8e50e1281c0381ff45f
+integration=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+baseline=$("${PYTHON:-python3}" "$integration/hint_harbor/baseline.py")
+version=${baseline%% *}
+revision=${baseline#* }
 repo=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 mkdir -p "${1:?Usage: build-hint.sh OUTPUT_DIR}"
 output=$(cd "$1" && pwd)
@@ -13,7 +16,7 @@ tar -xf "$source/source.tar" -C "$source"
 cd "$source"
 for arch in amd64 arm64; do
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=false \
-        -ldflags "-X main.version=harbor-baseline -X main.commit=$revision" \
+        -ldflags "-X main.version=$version -X main.commit=$revision" \
         -o "$output/hint-linux-$arch" ./cmd/hint
 done
 cd "$output"

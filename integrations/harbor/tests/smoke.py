@@ -14,6 +14,9 @@ from typing import Literal, override
 
 from harbor.models.trajectories import Trajectory
 
+from hint_harbor.agent import select_binary
+from hint_harbor.baseline import HINT_VERSION, REVISION
+
 KEY = "fake-harbor-canary-key"
 MODEL = "fixture/model"
 PROMPT = "Write the result. Юникод ' \" `touch injected` $(touch injected) ; $HOME\n\n"
@@ -267,6 +270,16 @@ def run(*, args: SmokeArgs, fixture: Path) -> None:
         logs = path.parent / "agent"
         execution = json.loads((logs / "execution.json").read_text())
         trace = Trajectory.model_validate_json((logs / "trajectory.json").read_text())
+        effective = json.loads((logs / "effective.json").read_text())
+        assert effective["hint_version"] == HINT_VERSION
+        assert effective["hint_commit"] == REVISION
+        assert trace.agent.version == HINT_VERSION
+        machine = {
+            "linux/amd64": "x86_64",
+            "linux/arm64": "aarch64",
+        }[effective["platform"]]
+        binary = select_binary(directory=args.binary_dir, machine=machine)
+        assert effective["hint_sha256"] == binary.sha256
         assert trace.steps[0].message == server.instruction
         session_ids.add(trace.session_id)
         if args.mode == "success":
