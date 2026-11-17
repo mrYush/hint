@@ -87,15 +87,24 @@ Manifest, effective configuration and ATIF metadata identify the same build.
 - ✅ Build both Linux architectures from the pinned source archive and record their checksums in the Harbor README.
 - ✅ Verify accepted and rejected binary identities and consistency of the saved metadata.
 - ✅ Run Python tests, formatting, lint, type and documentation checks, plus applicable repository checks.
-- [ ] Run Docker fake-provider smoke for success, authentication failure and timeout (blocked: this execution environment denies creation of the Docker Unix socket with `operation not permitted`).
+- ✅ Run Docker fake-provider smoke for success, authentication failure and timeout.
 - ✅ Verify package installation, source builds, Harbor version and adapter schema commands.
 - [ ] Verify the remaining Docker reproduction steps on a Docker-capable host.
 
 Validation passed with 31 Python tests, Ruff formatting and lint, Pyright, Sphinx with warnings treated as errors, Go tests and vet, golangci-lint v2.13.2, and a Linux arm64 cross-build.
 Both pinned source builds used Go 1.26.10.
 The installed wheel accepted the native amd64 binary's actual checksum and version output through the identity validator, with remote execution mocked.
-This check does not replace the Docker smoke gate.
-Run the README's three fake-provider modes on a Docker-capable host before closing #133, then proceed to the separately authorized real-model smoke.
+On 2026-11-17 the three fake-provider modes passed on an Intel iMac running Docker Desktop 29.1.3 for linux/amd64 with 6 CPUs and 7.654 GiB of memory.
+`build-hint.sh` used Go 1.26.10, and both README checksums matched the binaries in `.tmp/harbor/bin`.
+The host interpreter was CPython 3.13.1, because the installed uv 0.6.1 has no macOS x86_64 build of CPython 3.13.15.
+Harbor 0.25.0 requires Python 3.12 or newer, and the binary checksums do not depend on that patch.
+The amd64 binary printed `hint version 0.4.2 (commit c6be73183a9e0288a2b70cff14085854811d2234, built unknown)`.
+Success verified 4 trials with mean 1.000 and reward 1.0 on every trial.
+Authentication failure verified 1 trial and recorded `AgentAuthenticationError`.
+Timeout verified 1 trial and recorded `AgentTimeoutError`.
+The smoke script prints `verified trial records` only after checking the Hint version, full commit, SHA-256, verifier reward, and absence of the fake key.
+Artifacts remain under `.tmp/harbor/fake.LS295d`.
+The dataset download and the oracle `wal-recovery-ordering` task remain unverified on this host.
 
 Real-model acceptance remains in #107, DeepSeek reasoning in #109, and broader dependency provenance in #112.
 
