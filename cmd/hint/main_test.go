@@ -85,6 +85,77 @@ func TestRunMode(t *testing.T) {
 	}
 }
 
+func TestTurnLimit(t *testing.T) {
+	t.Parallel()
+	unlimited := -1
+	forty := 40
+	cases := []struct {
+		name string
+		args []string
+		want *int
+		fail bool
+	}{
+		{name: "omitted", want: nil},
+		{name: "unlimited", args: []string{"--max-turns", "0"}, want: &unlimited},
+		{name: "capped", args: []string{"--max-turns", "40"}, want: &forty},
+		{name: "negative", args: []string{"--max-turns", "-1"}, fail: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := newRootCommand()
+			if n, err := root.PersistentFlags().GetInt("max-turns"); err != nil || n != 25 {
+				t.Fatalf("default max-turns = %d, %v", n, err)
+			}
+			if err := root.ParseFlags(c.args); err != nil {
+				t.Fatal(err)
+			}
+			got, err := turnLimit(root)
+			if c.fail {
+				if err == nil {
+					t.Fatal("expected a usage error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (got == nil) != (c.want == nil) || (got != nil && *got != *c.want) {
+				t.Fatalf("turnLimit = %v, want %v", got, c.want)
+			}
+		})
+	}
+
+	root := newRootCommand()
+	serve, _, err := root.Find([]string{"serve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := serve.ParseFlags([]string{"--max-turns", "0"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := turnLimit(serve)
+	if err != nil || got == nil || *got != -1 {
+		t.Fatalf("serve --max-turns 0 = %v, %v", got, err)
+	}
+}
+
+func TestLimitsForTurnCap(t *testing.T) {
+	t.Parallel()
+	primary := config.Profile{ContextWindow: 131072}
+	cfg := &config.Config{}
+	if got := limitsFor(cfg, primary, nil); got.MaxIterations != 25 || got.MaxContextTokens != 131072 {
+		t.Fatalf("omitted = %+v", got)
+	}
+	unlimited := -1
+	if got := limitsFor(cfg, primary, &unlimited); got.MaxIterations != -1 || got.MaxContextTokens != 131072 {
+		t.Fatalf("unlimited = %+v", got)
+	}
+	capped := 40
+	if got := limitsFor(cfg, primary, &capped); got.MaxIterations != 40 || got.MaxContextTokens != 131072 {
+		t.Fatalf("capped = %+v", got)
+	}
+}
+
 func TestWarnMode(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer

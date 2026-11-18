@@ -10,6 +10,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -55,6 +56,12 @@ const (
 	hostedDefaultModel = "gpt-4o"
 )
 
+// Direct DeepSeek thinking modes.
+const (
+	ThinkingEnabled  = "enabled"
+	ThinkingDisabled = "disabled"
+)
+
 // Profile is one configured provider endpoint.
 type Profile struct {
 	Name    string
@@ -79,6 +86,8 @@ type Profile struct {
 	// in (`max_tokens_field`): FieldMaxTokens or FieldMaxCompletionTokens.
 	// Empty is FieldMaxTokens.
 	MaxTokensField string
+	// Thinking selects the direct DeepSeek reasoning mode.
+	Thinking string
 	// KeyFrom says where APIKey came from: KeyFromFile for a literal in
 	// a config file, KeyFromEnv for a ${VAR} reference, KeyFromKeyring
 	// for a keyring:<account> reference, KeyFromOverlay for HINT_API_KEY
@@ -90,6 +99,23 @@ type Profile struct {
 	// why a keyring reference yielded nothing.
 	KeyRef   string
 	KeyError error
+}
+
+// DeepSeekThinking returns the wire mode for a direct DeepSeek endpoint. It returns
+// an empty string for other hosts or an invalid URL.
+func (p Profile) DeepSeekThinking() string {
+	u, err := url.Parse(p.BaseURL)
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host != "deepseek.com" && !strings.HasSuffix(host, ".deepseek.com") {
+		return ""
+	}
+	if p.Thinking == "" {
+		return ThinkingEnabled
+	}
+	return p.Thinking
 }
 
 // The sources of a profile's key, for Profile.KeyFrom.

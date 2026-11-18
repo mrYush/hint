@@ -182,8 +182,16 @@ func TestExampleConfigIsCurrent(t *testing.T) {
 		t.Errorf("the example loads as %+v", cfg)
 	}
 
+	// Include the optional DeepSeek profile in the schema coverage check.
+	const start = "  # - name: deepseek"
+	before, after, ok := strings.Cut(string(data), start)
+	if !ok {
+		t.Fatal("missing optional DeepSeek example")
+	}
+	block, rest, _ := strings.Cut(after, "\n\n")
+	expanded := before + strings.ReplaceAll(start+block, "  # ", "  ") + "\n\n" + rest
 	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &doc); err != nil {
 		t.Fatal(err)
 	}
 	documented := map[string]bool{}

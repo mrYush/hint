@@ -96,7 +96,7 @@ func TestCompactThinkingShortcutCountsTools(t *testing.T) {
 		agentapi.UserMessage("current question"),
 	}
 	out := make(chan agentapi.Event, 1)
-	_, err := a.compact(t.Context(), messages, 75, out)
+	_, err := a.compact(t.Context(), messages, 75, true, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -126,7 +126,7 @@ func TestCompactReservesToolCatalogBeforeSplittingTail(t *testing.T) {
 		)
 	}
 	out := make(chan agentapi.Event, 1)
-	result, err := a.compact(t.Context(), messages, 80, out)
+	result, err := a.compact(t.Context(), messages, 80, true, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact must release an older tool round from the tail after reserving catalog space: %v", err)

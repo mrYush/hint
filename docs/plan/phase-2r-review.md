@@ -70,10 +70,16 @@ This companion package supplies external evaluation evidence for WP2R.2 and keep
 - ✅ Pin Harbor and Hint, run the production headless loop in isolated Docker trials, and preserve Harbor's verifier and task settings.
 - ✅ Record effective configuration, artifacts, ATIF, available usage and exceptions, with a deterministic tool-using Docker regression.
 - [ ] Validate real model routes with an explicitly selected scope and number of attempts.
-  GLM and DeepSeek gateway runs require operator-confirmed model IDs and endpoints.
+  The selected scope is one GLM attempt of `wal-recovery-ordering` on Hint 0.4.3, which can remove the iteration cap with `--max-turns 0`.
+  Direct DeepSeek stays on the checkbox below and in #109.
 - ✅ Add offline Python CI for option validation, partial log recovery, result accounting, static typing and API documentation.
 - [ ] Unblock direct DeepSeek in a separate provider change with explicit reasoning controls and reasoning history on tool turns.
-  The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the local scope for `fix/deepseek-reasoning-history`.
+  The [provider dependency](../../integrations/harbor/README.md#deepseek-provider-dependency) tracks the reasoning replay implementation on `fix/deepseek-reasoning-history`.
+  For direct DeepSeek with thinking and tools, the loop sends the full history including all completed turns, even past the estimated compaction threshold.
+  Compaction uses this policy when either the selected profile or its fallback requires replay, since routing happens after compaction.
+  If a previous provider produced no trace, a direct DeepSeek thinking request still fails local validation.
+  If the full request exceeds the provider window, the run ends with `ErrContextOverflow`, including with `--max-turns 0`.
+  Direct Harbor support awaits the authorized multi-tool smoke with recorded model ID, endpoint and budget.
 
 #### Hint v0.4.2 benchmark baseline (#133)
 
@@ -107,8 +113,8 @@ Artifacts remain under `.tmp/harbor/fake.LS295d`.
 The same host downloaded `terminal-bench/terminal-bench-cpu-only@4.0.0` as 63 task directories under `.tmp/harbor/data/terminal-bench-cpu-only`.
 The oracle run of `wal-recovery-ordering` finished one trial in 4m 58s with no exception, mean 1.000, and reward 1.0.
 Its summary is `.tmp/harbor/jobs/oracle-wal/summary.json`.
-
-Real-model acceptance remains in #107, DeepSeek reasoning in #109, and broader dependency provenance in #112.
+Real-model measurement for #107 waits for Hint 0.4.3, which adds `--max-turns`.
+Direct DeepSeek reasoning remains in #109, and broader dependency provenance remains in #112.
 
 #### Remove declarative monetary budgets (2026-11-11)
 

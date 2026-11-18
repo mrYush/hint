@@ -110,6 +110,8 @@ func TestConfigCLIDisplaysUnreadyConfiguration(t *testing.T) {
 		name, yaml, want, warning string
 	}{
 		{"empty", "", "default_provider = (unset)", ""},
+		{"DeepSeek default", "providers: [{name: ds, kind: openai, base_url: 'https://api.deepseek.com', model: m}]\n", "providers.ds.thinking = enabled (default)", ""},
+		{"DeepSeek explicit", "providers: [{name: ds, kind: openai, base_url: 'https://api.deepseek.com', model: m, thinking: disabled}]\n", "providers.ds.thinking = disabled", ""},
 		{"invalid profile", "providers: [{name: hub, kind: bogus}]\ndefault_provider: nope\n", "providers.hub.kind = bogus", ""},
 		{"duplicate fallback", "providers: [{name: local, kind: ollama, model: m}]\ndefault_provider: local\nfallback_provider: local\n", "fallback_provider = (unset)", "hint: fallback_provider \"local\" equals default_provider and was ignored\n"},
 	} {

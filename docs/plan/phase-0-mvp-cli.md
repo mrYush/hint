@@ -335,11 +335,9 @@ depend on them:
   `pkg/agentapi/error_test.go`; `WireVersion` was not bumped, since adding
   an `ErrorKind` value is additive.
 - **Compaction is two internal steps, not two round-trips to the provider.**
-  `Agent.compact` first drops every `PartThinking` part (cheap, and the
-  contract already promises this happens first); only if the configured
-  window says that was not enough does it fall through, within the same
-  call, to summarizing the middle of the conversation via the injected
-  `Compactor`. A reactive overflow retries `Stream` against the compacted
+  By default, `Agent.compact` drops optional `PartThinking` parts and summarizes the middle of the conversation if the remaining history still exceeds the threshold.
+  Direct DeepSeek thinking requests with tools bypass compaction to preserve reasoning from all prior turns (see [WP2R.3](phase-2r-review.md#wp2r3--harbor-benchmark-integration)).
+  A reactive overflow retries `Stream` against the compacted
   history inside the same round, so the retry does not spend
   `MaxIterations`. The retry stops when `compact` refuses.
 - **Occupancy tracking reuses the last call's real `Usage` when there is
@@ -351,7 +349,7 @@ depend on them:
   it anticipates, and `MaxContextTokens: 0` disables only the proactive
   check — the reactive path on `ErrContextOverflow` always applies.
 - **The prefix/body/tail split never cuts a `ToolCall`/`RoleTool` pair
-  apart.** The tail (from the last `RoleUser` message onward) is only
+  apart.** Outside the DeepSeek replay case, the tail (from the last `RoleUser` message onward) is only
   shrunk, when it alone is heavier than half the window, to whole
   assistant+tool groups. A compaction summary is a `RoleSystem` message
   marked `Summary`. The prefix is the leading system run before the first

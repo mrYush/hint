@@ -77,6 +77,7 @@ var keys = []Key{
 		Help: "the model's context size in tokens; sizes the compaction"},
 	{Path: "providers.*.header_timeout", Type: TypeDuration, Default: "60s",
 		Help: "how long to wait for response headers, with units (90s, 15m); raise it for a slow local server"},
+	{Path: "providers.*.thinking", Type: TypeEnum, Enum: []string{ThinkingEnabled, ThinkingDisabled}, Help: "direct DeepSeek thinking mode (enabled by default)"},
 	{Path: "providers.*.max_tokens_field", Type: TypeEnum, Enum: []string{FieldMaxTokens, FieldMaxCompletionTokens}, Default: FieldMaxTokens,
 		Help: "the request field for a reply's token limit; OpenAI's reasoning models (o-series, gpt-5) need max_completion_tokens"},
 	{Path: "default_provider", Type: TypeString, Env: "HINT_PROVIDER", Flag: "--provider",

@@ -100,6 +100,7 @@ func TestLoadValidationFields(t *testing.T) {
 		{"missing default", base + "  - {name: other, kind: ollama, model: m}\n", "default_provider", nil},
 		{"kind", strings.Replace(base, "ollama", "unknown", 1), "providers.p.kind", nil},
 		{"header timeout", base + "    header_timeout: -1s\n", "providers.p.header_timeout", nil},
+		{"thinking", base + "    thinking: other\n", "providers.p.thinking", nil},
 		{"max tokens field", base + "    max_tokens_field: other\n", "providers.p.max_tokens_field", nil},
 		{"context window", base + "    context_window: -1\n", "providers.p.context_window", nil},
 		{"instruction budget", base + "instructions: {budget: -1}\n", "instructions.budget", nil},

@@ -210,7 +210,14 @@ hint -p "add a --version flag"            # --ask (default): every edit shows a
                                           # you answer y / n / a(lways)
 hint --auto-edit -p "fix the failing test"   # edits apply silently, commands still ask
 hint --yolo -p "..."                         # nothing asks; prints a loud warning
+hint --yolo --max-turns 0 -p "..."           # the same, with no cap on tool-calling rounds
 ```
+
+`--max-turns` caps how many tool-calling rounds one turn may take.
+The default is 25.
+`0` removes that cap.
+Hint has no overall wall-clock timeout.
+With `--max-turns 0`, press Ctrl-C to interrupt a running turn or set an external deadline for unattended runs.
 
 Answering `a` to a command remembers its program and subcommand for the
 rest of the run: `go test` covers `go test ./...` but not `go build`, and
@@ -630,6 +637,15 @@ the whole prompt, which on a Raspberry Pi takes minutes, so raise it for
 such profiles.
 
 `max_tokens_field: max_completion_tokens` is for OpenAI's reasoning models (o-series, gpt-5), which refuse `max_tokens`; the default `max_tokens` is what local servers understand.
+
+For a direct DeepSeek profile (`deepseek.com` or a subdomain), `thinking: enabled` is the default.
+When tools are available, Hint sends the reasoning from earlier assistant messages along with their answers, which consumes context and can increase input cost.
+Hint sends the full conversation, including completed turns, even when its estimated size crosses the compaction threshold.
+If the provider rejects that history for context overflow, the turn ends without a summary or retry.
+Hint also preserves the full conversation when a direct DeepSeek profile with thinking enabled is configured only as the fallback.
+This applies before failover, so a long tool exchange can exhaust the context window even while a local primary is answering.
+Set `thinking: disabled` to turn off reasoning and replay.
+If a resumed journal contains a compaction summary or answers recorded without reasoning, use `disabled` for that profile or start a new session with thinking enabled.
 
 ### MCP servers
 

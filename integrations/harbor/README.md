@@ -183,11 +183,12 @@ All cases scan saved files for the fake key.
 
 ## DeepSeek provider dependency
 
-The pinned Hint code reads reasoning deltas in [stream.go](../../internal/provider/openai/stream.go).
-The outgoing [Chat Completions message](../../internal/provider/openai/convert.go) does not serialize `reasoning_content`.
-[DeepSeek's thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/) requires that history for requests carrying tools, and its current API defaults to thinking.
-The separate provider change [#109](https://github.com/mrYush/hint/issues/109) on `fix/deepseek-reasoning-history` must implement explicit reasoning controls and preserve the required reasoning through multi-tool history before enabling direct DeepSeek evaluation.
-Cover resumed and compacted sessions in the provider regression and verify an authorized multi-tool smoke against the direct endpoint.
+On the [#109](https://github.com/mrYush/hint/issues/109) branch, direct DeepSeek profiles send an explicit thinking mode (default `enabled`, configurable with `thinking: disabled`).
+With thinking and tools enabled, Hint replays stored reasoning on assistant messages, including after session resume, and keeps every completed and active turn in the request.
+If the full history exceeds the provider window, Hint reports context overflow.
+Hint rejects the entire tool-carrying request before contacting DeepSeek if any retained assistant message lacks its trace.
+Harbor continues to reject direct endpoints pending an authorized two-round smoke with the updated binary and a recorded model ID, endpoint and budget.
+The operator-verified external non-thinking gateway route remains available.
 The integration tracks this dependency in the [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
 
 ## Development

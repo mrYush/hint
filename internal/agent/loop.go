@@ -45,7 +45,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 		default:
 		}
 
-		if iter >= a.limits.MaxIterations {
+		if a.limits.MaxIterations >= 0 && iter >= a.limits.MaxIterations {
 			out <- agentapi.Event{Kind: agentapi.EventError, Err: agentapi.NewError(
 				agentapi.ErrTurnLimit, "reached %d iterations without a final answer", a.limits.MaxIterations)}
 			out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
@@ -62,8 +62,10 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 		// retries. A subsequent logical round can refresh a changed schema.
 		tools := a.schemas()
 		toolTokens := a.estimateTools(tools)
-		if a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, toolTokens, lastUsage)) {
-			compacted, err := a.compact(ctx, messages, toolTokens, out)
+		// Full replay cannot be compacted. The provider decides whether it fits.
+		canCompact := len(tools) == 0 || !a.limits.PreserveToolReasoning
+		if canCompact && a.limits.MaxContextTokens > 0 && a.overflowing(a.occupancy(messages, toolTokens, lastUsage)) {
+			compacted, err := a.compact(ctx, messages, toolTokens, len(tools) > 0, out)
 			if err != nil {
 				// Proactive compaction is a courtesy, not a requirement: if
 				// it fails, report it and try the request as-is — the
@@ -105,7 +107,7 @@ func (a *Agent) runTurn(ctx context.Context, history []agentapi.Message, out cha
 				}
 				break
 			}
-			compacted, cerr := a.compact(ctx, messages, toolTokens, out)
+			compacted, cerr := a.compact(ctx, messages, toolTokens, len(tools) > 0, out)
 			if cerr != nil {
 				out <- agentapi.Event{Kind: agentapi.EventError, Err: toError(cerr)}
 				out <- agentapi.Event{Kind: agentapi.EventTurnEnd, FinishReason: agentapi.FinishError}
