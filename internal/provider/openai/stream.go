@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -42,7 +43,7 @@ func (c *Client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	defer close(out)
 	defer func() { _ = resp.Body.Close() }()
 
-	dec := &decoder{log: c.debugf}
+	dec := &decoder{log: c.debugf, keepEmptyReasoning: c.profile.DeepSeekThinking() == config.ThinkingEnabled}
 	delivered := false
 
 	// emit forwards one event unless the consumer cancelled. The contract
@@ -177,7 +178,7 @@ type wireDelta struct {
 	Content string `json:"content"`
 	// ReasoningContent (DeepSeek and most gateways) and Reasoning
 	// (OpenRouter) are the two spellings of a streamed thinking trace.
-	ReasoningContent string             `json:"reasoning_content"`
+	ReasoningContent *string            `json:"reasoning_content"`
 	Reasoning        string             `json:"reasoning"`
 	ToolCalls        []wireToolCallFrag `json:"tool_calls"`
 }
@@ -224,9 +225,14 @@ type decoder struct {
 	// grammar joins them with newlines at the blank-line record boundary.
 	data []string
 
-	calls  callAccumulator
-	usage  *agentapi.Usage
-	finish agentapi.FinishReason
+	// Defer an explicitly empty trace until successful completion so it does
+	// not count as delivered output when a provider disconnects.
+	keepEmptyReasoning bool
+	sawReasoningField  bool
+	emittedReasoning   bool
+	calls              callAccumulator
+	usage              *agentapi.Usage
+	finish             agentapi.FinishReason
 	// done is set by the [DONE] sentinel.
 	done bool
 	// failure is a provider-reported in-stream error; it terminates the
@@ -300,8 +306,16 @@ func (d *decoder) flushRecord() []agentapi.ChatEvent {
 	if choice.Delta.Content != "" {
 		events = append(events, agentapi.ChatEvent{Kind: agentapi.ChatTextDelta, Text: choice.Delta.Content})
 	}
-	if t := firstNonEmpty(choice.Delta.ReasoningContent, choice.Delta.Reasoning); t != "" {
-		events = append(events, agentapi.ChatEvent{Kind: agentapi.ChatThinkingDelta, Text: t})
+	reasoning := choice.Delta.Reasoning
+	if content := choice.Delta.ReasoningContent; content != nil {
+		d.sawReasoningField = true
+		if *content != "" {
+			reasoning = *content
+		}
+	}
+	if reasoning != "" {
+		d.emittedReasoning = true
+		events = append(events, agentapi.ChatEvent{Kind: agentapi.ChatThinkingDelta, Text: reasoning})
 	}
 	for _, frag := range choice.Delta.ToolCalls {
 		d.calls.add(frag)
@@ -359,6 +373,9 @@ func (d *decoder) finalizeAfter(delivered bool) ([]agentapi.ChatEvent, *agentapi
 	}
 
 	var events []agentapi.ChatEvent
+	if d.keepEmptyReasoning && d.sawReasoningField && !d.emittedReasoning {
+		events = append(events, agentapi.ChatEvent{Kind: agentapi.ChatThinkingDelta})
+	}
 	for i := range calls {
 		events = append(events, agentapi.ChatEvent{Kind: agentapi.ChatToolCall, Call: &calls[i]})
 	}
@@ -373,13 +390,6 @@ func (d *decoder) logf(format string, args ...any) {
 	if d.log != nil {
 		d.log(format, args...)
 	}
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 // mapFinishReason folds every dialect spelling onto the agentapi vocabulary.

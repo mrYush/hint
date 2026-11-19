@@ -60,13 +60,13 @@ func lastAgentEvent(events []agentapi.Event, kind agentapi.EventKind) *agentapi.
 
 // TestCompact_ThinkingOnlyShortcut checks that dropping PartThinking alone,
 // without ever calling the Compactor, is enough when the estimator says so
-// — the contract already promises thinking is dropped first, and a real
+// — reasoning is optional on this request without tools, and a real
 // LLM summary call is wasted work if that alone clears the threshold.
 func TestCompact_ThinkingOnlyShortcut(t *testing.T) {
 	t.Parallel()
 	compactor := &stubCompactor{summary: "should not be used"}
 	a := &Agent{
-		limits:    Limits{MaxContextTokens: 100, CompactThreshold: 0.8},
+		limits:    Limits{MaxContextTokens: 100, CompactThreshold: 0.8, PreserveToolReasoning: true},
 		compactor: compactor,
 		estimator: thinkingAwareEstimator{big: 1000, small: 10},
 	}
@@ -81,7 +81,7 @@ func TestCompact_ThinkingOnlyShortcut(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, 0, out)
+	result, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -148,7 +148,7 @@ func TestCompact_SummarizesBodyBetweenPrefixAndTail(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, 0, out)
+	result, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -204,7 +204,7 @@ func TestCompact_EmptyBodyIsFatal(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, 0, out)
+	_, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 
 	if err == nil {
@@ -238,7 +238,7 @@ func TestCompact_PropagatesCompactorError(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, 0, out)
+	_, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 
 	if !errors.Is(err, want) {
@@ -275,7 +275,7 @@ func TestCompact_ReplacesPreviousSummary(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	result, err := a.compact(context.Background(), messages, 0, out)
+	result, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 	if err != nil {
 		t.Fatalf("compact: %v", err)
@@ -320,7 +320,7 @@ func TestCompact_OnlySummariesIsFatal(t *testing.T) {
 	}
 
 	out := make(chan agentapi.Event, 10)
-	_, err := a.compact(context.Background(), messages, 0, out)
+	_, err := a.compact(context.Background(), messages, 0, false, out)
 	close(out)
 
 	if err == nil {

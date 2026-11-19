@@ -31,6 +31,9 @@ func (s *setupInfo) currentValues() map[string]string {
 	if p.HeaderTimeout > 0 {
 		v["header_timeout"] = p.HeaderTimeout.String()
 	}
+	if p.Thinking != "" {
+		v["thinking"] = p.Thinking
+	}
 	if p.MaxTokensField != "" {
 		v["max_tokens_field"] = p.MaxTokensField
 	}
@@ -145,11 +148,19 @@ func (s *setupInfo) showWithWarnings() (string, []string, error) {
 		if p.HeaderTimeout > 0 {
 			fields["header_timeout"] = p.HeaderTimeout.String()
 		}
+		if p.Thinking != "" {
+			fields["thinking"] = p.Thinking
+		} else if mode := p.DeepSeekThinking(); mode != "" {
+			fields["thinking"] = mode + " (default)"
+		}
 		if p.MaxTokensField != "" {
 			fields["max_tokens_field"] = p.MaxTokensField
 		}
 		for _, k := range config.ProfileKeys() {
 			field, _ := k.Profile()
+			if field == "thinking" && fields[field] == "" {
+				continue
+			}
 			fmt.Fprintf(&b, "providers.%s.%s = %s\n", p.Name, field, orUnset(fields[field]))
 		}
 	}

@@ -45,8 +45,8 @@ const (
 	PartText PartKind = "text"
 	// PartThinking is the model's reasoning trace, held in ContentPart.Text.
 	// It is kept separate from PartText because it is displayed differently,
-	// is dropped first during compaction, and some providers require it to be
-	// replayed verbatim.
+	// can be dropped during compaction when the provider permits it, and may
+	// need to be replayed verbatim, including an explicitly empty trace.
 	PartThinking PartKind = "thinking"
 	// PartImage is an image, held in ContentPart.Image.
 	PartImage PartKind = "image"

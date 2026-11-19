@@ -28,19 +28,24 @@ uv pip install --python "$work/venv/bin/python" \
 py="$work/venv/bin/python"
 harbor="$work/venv/bin/harbor"
 
-GOTOOLCHAIN=go1.26.10 sh "$integration/build-hint.sh" "$work/bin"
+PYTHON="$py" sh "$integration/build-hint.sh" "$work/bin"
 "$harbor" --version
 "$harbor" agent schema hint_harbor.agent:HintAgent --json
 ```
 
-The build uses a Git archive of Hint commit `53264f88ad6900abab31c8e50e1281c0381ff45f`, stamped as `harbor-baseline`.
-The adapter selects the binary using the container's `uname -m`, checks the build's SHA-256 before and after upload, and verifies the embedded commit.
+The build uses the v0.4.2 sources at commit `c6be73183a9e0288a2b70cff14085854811d2234`.
+[`hint_harbor/baseline.py`](hint_harbor/baseline.py) is the shared version and full-commit definition used by the source builder, installed adapter, manifests and trajectories.
+The builder requires Python 3 (`PYTHON` selects the interpreter) and pins Go 1.26.10.
+It archives the pinned commit, so local source changes do not enter the benchmark binary.
+The adapter selects the binary using the container's `uname -m`, checks the build's SHA-256 before and after upload, and verifies the exact embedded version and full commit.
+Use the binaries and `SHA256SUMS` produced together by this script.
+Official release archives use a short embedded commit and a different build recipe; this source-build workflow requires the full commit.
 The expected SHA-256 values for the documented toolchain are below.
 
 | Binary | SHA-256 |
 | --- | --- |
-| linux/amd64 | `599f6ea8730db3652ba7cf13d3dd33a8cdfa9729e125810814b52ac7f6c51963` |
-| linux/arm64 | `ebc0b423efbf9e6788d0cc993cbf71a66dedc815635e002599424c00347ae0d1` |
+| linux/amd64 | `46a523e71ed8605f3e9b306ed2f161cbaff2855ff2b0c4190b963928dafd68b9` |
+| linux/arm64 | `143c76a2ee45674c8da888ccae569259d5452ef4cecbfd8629a6518a026be2ce` |
 
 ## Dataset and Docker
 
@@ -80,9 +85,13 @@ cp "$integration/route.example.yaml" "$route_config"
 ```
 
 For GLM, use `route: glm` and `reasoning_expectation: endpoint-default`.
-For DeepSeek, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying the gateway setting for the exact model ID.
+For a direct DeepSeek host (`deepseek.com` or a subdomain), use `route: deepseek` and `reasoning_expectation: endpoint-default`.
+The Hint binary must replay `reasoning_content`.
+The pinned v0.4.2 baseline does not.
+For a gateway, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying that the gateway disables thinking for that model ID.
+A direct host with `non-thinking` is rejected because the adapter does not send `thinking.type` `disabled`.
 The manifest records `reasoning_enforced: false` because the adapter sends no reasoning or output-token override.
-Direct DeepSeek API and reasoning-enabled DeepSeek tool turns require the [provider dependency](#deepseek-provider-dependency).
+The direct-host acceptance and the recorded smoke are in the [provider note](#deepseek-provider-dependency).
 Set `trusted_environment_confirmed: true` only after reviewing the task images and accepting the trust boundary below.
 Live `benchmark.py` runs require this declaration in `--route-config`; dry runs can inspect unconfirmed settings.
 Individual route flags (`--model`, `--base-url`, `--context-window`, `--route`, `--reasoning-expectation`) are available only with `--dry-run`.
@@ -131,6 +140,9 @@ hint_bench "$work/jobs/rerun-$failed_task" --task "$failed_task" --attempts 1
 
 `manifest.json` records the requested dataset version, local task identities, digest-pinned agent and verifier images, model route, platform, attempts and retry policy.
 Harbor's `lock.json` records resolved task digests, and each trial's `agent/effective.json` records the actual Hint binary and container architecture.
+The manifest's `hint.version` and `hint.commit` identify the pinned build, with a `binary_sha256` entry for each Linux architecture.
+After binary verification, `effective.json` records `hint_version`, `hint_commit`, the installed `hint_sha256` and the full CLI version line in `hint`.
+The ATIF trajectory's agent version is the same Hint release version.
 `summary.json` retains exceptions and missing attempts alongside verifier rewards.
 Use Harbor's aggregate result for the repeated-attempt mean and pass@k, and the trial results for individual outcomes.
 A completed agent process supplies no reward by itself.
@@ -175,12 +187,19 @@ All cases scan saved files for the fake key.
 
 ## DeepSeek provider dependency
 
-The pinned Hint code reads reasoning deltas in [stream.go](../../internal/provider/openai/stream.go).
-The outgoing [Chat Completions message](../../internal/provider/openai/convert.go) does not serialize `reasoning_content`.
-[DeepSeek's thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/) requires that history for requests carrying tools, and its current API defaults to thinking.
-The separate provider change [#109](https://github.com/mrYush/hint/issues/109) on `fix/deepseek-reasoning-history` must implement explicit reasoning controls and preserve the required reasoning through multi-tool history before enabling direct DeepSeek evaluation.
-Cover resumed and compacted sessions in the provider regression and verify an authorized multi-tool smoke against the direct endpoint.
-The integration tracks this dependency in the [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
+Direct DeepSeek profiles send `thinking.type` `enabled` unless the profile sets `thinking: disabled`.
+With thinking and tools enabled, Hint replays stored reasoning on assistant messages, including after session resume, and keeps every completed and active turn in the request.
+If the full history exceeds the provider window, Hint reports context overflow.
+Hint rejects the entire tool-carrying request before contacting DeepSeek if any retained assistant message lacks its trace.
+On 2026-11-19 a `go run` of this change called `deepseek-flash` at `https://api.deepseek.com`.
+The conversation made two `read_file` calls and then answered.
+Each later request included `reasoning_content` for every previous assistant message.
+Those traces were explicit empty strings, and DeepSeek accepted the following requests.
+Hint configured no spend cap.
+Harbor accepts that direct host when `reasoning_expectation` is `endpoint-default`.
+The operator-verified external non-thinking gateway route remains available.
+The pinned Harbor baseline is still Hint v0.4.2, which does not replay reasoning.
+The record is in [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
 
 ## Development
 
@@ -191,7 +210,7 @@ uv pip install --python "$py" -r requirements.txt '.[dev,docs]'
 "$py" -m unittest discover -s tests -v
 "$work/venv/bin/ruff" format --check .
 "$work/venv/bin/ruff" check .
-"$work/venv/bin/pyright"
+"$work/venv/bin/pyright" --pythonpath "$py"
 "$work/venv/bin/sphinx-build" -W -b html docs docs/_build
 ```
 

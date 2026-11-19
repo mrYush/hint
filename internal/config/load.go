@@ -131,6 +131,7 @@ func LoadFrom(opts Options) (*Config, error) {
 			KeyError: p.keyErr,
 
 			MaxTokensField: p.MaxTokensField,
+			Thinking:       p.Thinking,
 		}
 		if p.ContextWindow != nil {
 			prof.ContextWindow = *p.ContextWindow
@@ -265,6 +266,7 @@ type fileProfile struct {
 	// HeaderTimeout is a Go duration string ("90s", "15m"); yaml.v3
 	// refuses a bare number for a time.Duration, so units are mandatory.
 	HeaderTimeout  *time.Duration `yaml:"header_timeout"`
+	Thinking       string         `yaml:"thinking"`
 	MaxTokensField string         `yaml:"max_tokens_field"`
 	// keyFrom, keyRef and keyErr are filled by expand: where APIKey came
 	// from, and why a reference yielded nothing.
@@ -560,6 +562,9 @@ func (l *loader) mergeFiles(global, project fileConfig) fileConfig {
 			}
 			if pp.HeaderTimeout != nil {
 				out.Providers[i].HeaderTimeout = pp.HeaderTimeout
+			}
+			if pp.Thinking != "" {
+				out.Providers[i].Thinking = pp.Thinking
 			}
 			if pp.MaxTokensField != "" {
 				out.Providers[i].MaxTokensField = pp.MaxTokensField
@@ -1092,6 +1097,11 @@ func (l *loader) validate(cfg *Config) error {
 		}
 		if p.HeaderTimeout < 0 {
 			return validationErrorf("providers."+p.Name+".header_timeout", "%s is negative", p.HeaderTimeout)
+		}
+		switch p.Thinking {
+		case "", ThinkingEnabled, ThinkingDisabled:
+		default:
+			return validationErrorf("providers."+p.Name+".thinking", "must be enabled or disabled, got %q", p.Thinking)
 		}
 		switch p.MaxTokensField {
 		case "", FieldMaxTokens, FieldMaxCompletionTokens:

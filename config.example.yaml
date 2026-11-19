@@ -48,6 +48,14 @@ providers:
     context_window: 8192
     header_timeout: 15m
 
+  # Optional direct DeepSeek profile:
+  # - name: deepseek
+  #   kind: openai
+  #   base_url: https://api.deepseek.com
+  #   api_key: ${DEEPSEEK_API_KEY}
+  #   model: deepseek-flash
+  #   thinking: enabled # enabled (default) or disabled
+
   # An aggregator is one more openai profile; uncomment and pick one:
   # - name: cloud
   #   kind: openai

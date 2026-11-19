@@ -124,7 +124,7 @@ func (c *Client) Stream(ctx context.Context, req agentapi.ChatRequest) (<-chan a
 	if model == "" {
 		model = c.profile.Model
 	}
-	wire, err := convertRequest(model, req)
+	wire, err := convertRequest(model, c.profile.DeepSeekThinking(), req)
 	if err != nil {
 		return nil, c.attributed(err)
 	}

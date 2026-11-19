@@ -40,12 +40,17 @@ this process's stdin. Another terminal joins with hint --connect.`,
 			if err := env.validate(); err != nil {
 				return err
 			}
+			turns, err := turnLimit(cmd)
+			if err != nil {
+				return err
+			}
 			opts := options{
 				env:           env,
 				indexMaxBytes: *indexMaxBytes,
 				flags:         *flags,
 				mode:          runMode(ask, autoEdit, yolo),
 				debug:         debug,
+				maxTurns:      turns,
 			}
 			ctx, stop := signalContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

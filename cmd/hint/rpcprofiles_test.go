@@ -462,3 +462,34 @@ func TestUseTUI(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionRoutePreservesReasoningAcrossFallback(t *testing.T) {
+	as, _, _, _ := testAssembly(t, &fakeChat{}, "")
+	as.cfg = twoProfiles()
+	as.cfg.FallbackProvider = "other"
+	as.cfg.Providers[1].BaseURL = "https://api.deepseek.com"
+	eng, _ := testEngine(t, as)
+	ref := rpc.ProfileRef{Profile: "fake"}
+	check := func(reload, want bool) {
+		t.Helper()
+		route, err := eng.providerFor(ref, reload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if route.limits.PreserveToolReasoning != want || route.limits.MaxContextTokens != 4000 {
+			t.Fatalf("limits=%+v, want preserve=%v and primary window", route.limits, want)
+		}
+	}
+	if !eng.limits.PreserveToolReasoning {
+		t.Fatal("initial route lost fallback reasoning policy")
+	}
+	check(false, true)
+	cfg := twoProfiles()
+	cfg.FallbackProvider = "other"
+	cfg.Providers[1].BaseURL = "https://api.deepseek.com"
+	cfg.Providers[1].Thinking = config.ThinkingDisabled
+	eng.reload = func() (*config.Config, error) { return cfg, nil }
+	check(true, false)
+	cfg.Providers[0].BaseURL = "https://api.deepseek.com"
+	check(true, true)
+}
