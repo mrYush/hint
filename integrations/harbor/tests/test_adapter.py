@@ -128,6 +128,21 @@ class AdapterTests(unittest.TestCase):
         for options in cases:
             with self.subTest(options=options), self.assertRaises(ValueError):
                 self.agent(**options)
+        direct = self.agent(
+            base_url="https://api.deepseek.com",
+            route="deepseek",
+            model_name="deepseek-flash",
+            reasoning_expectation="endpoint-default",
+        )
+        self.assertEqual(direct.model, "deepseek-flash")
+        self.assertEqual(direct.endpoint, "https://api.deepseek.com")
+        self.agent(base_url="https://api.deepseek.com./v1")
+        with self.assertRaisesRegex(ValueError, "keeps thinking enabled"):
+            self.agent(
+                base_url="https://api.deepseek.com.",
+                route="deepseek",
+                reasoning_expectation="non-thinking",
+            )
         self.agent(route="deepseek", reasoning_expectation="non-thinking")
 
     def test_architecture_and_checksum(self) -> None:

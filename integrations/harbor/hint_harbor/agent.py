@@ -377,21 +377,29 @@ class HintAgent(BaseInstalledAgent):
             )
         if secret in endpoint or secret in model:
             raise ValueError("Keep the API key out of the model ID and endpoint")
+        host = url.hostname.removesuffix(".")
+        direct_deepseek = host == "deepseek.com" or host.endswith(".deepseek.com")
         is_deepseek = (
             options.route == "deepseek"
             or connection.provider == "deepseek"
-            or "deepseek" in url.hostname
+            or "deepseek" in host
             or "deepseek" in model.lower()
         )
-        if is_deepseek and (
-            options.reasoning_expectation != "non-thinking"
-            or "reasoner" in model.lower()
-            or url.hostname.endswith(".deepseek.com")
-            or url.hostname == "deepseek.com"
+        if direct_deepseek and options.reasoning_expectation == "non-thinking":
+            raise ValueError(
+                "Direct DeepSeek keeps thinking enabled; "
+                "non-thinking is only accepted for an operator-verified gateway"
+            )
+        if (
+            is_deepseek
+            and not direct_deepseek
+            and (
+                options.reasoning_expectation != "non-thinking"
+                or "reasoner" in model.lower()
+            )
         ):
             raise ValueError(
-                "DeepSeek requires a gateway with an operator-verified non-thinking route; "
-                "Hint cannot round-trip reasoning_content on tool turns"
+                "DeepSeek requires a gateway with an operator-verified non-thinking route"
             )
 
         if (

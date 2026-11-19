@@ -31,7 +31,7 @@ func TestConvertRequestRoundTrip(t *testing.T) {
 		MaxTokens:   512,
 	}
 
-	wire, err := convertRequest("m1", req)
+	wire, err := convertRequest("m1", "", req)
 	if err != nil {
 		t.Fatalf("convertRequest: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestConvertEmptyToolResultStillSendable(t *testing.T) {
 		},
 		msg,
 	}}
-	wire, err := convertRequest("m", req)
+	wire, err := convertRequest("m", "", req)
 	if err != nil {
 		t.Fatalf("convertRequest: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestConvertRejectsMediaParts(t *testing.T) {
 			Content: []agentapi.ContentPart{agentapi.ImagePart(agentapi.Image{URL: "https://x/y.png"})},
 		},
 	}}
-	_, err := convertRequest("m", req)
+	_, err := convertRequest("m", "", req)
 	if err == nil {
 		t.Fatal("image content silently accepted")
 	}

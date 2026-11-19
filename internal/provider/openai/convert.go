@@ -2,8 +2,10 @@ package openai
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
+	"github.com/mrYush/hint/internal/config"
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
@@ -11,7 +13,12 @@ import (
 // the dialect is an implementation detail of this package, and nothing
 // outside it may depend on the exact JSON shape.
 
+type wireThinking struct {
+	Type string `json:"type"`
+}
+
 type wireRequest struct {
+	Thinking    *wireThinking `json:"thinking,omitempty"`
 	Model       string        `json:"model"`
 	Messages    []wireMessage `json:"messages"`
 	Tools       []wireTool    `json:"tools,omitempty"`
@@ -29,7 +36,8 @@ type wireStreamOptions struct {
 }
 
 type wireMessage struct {
-	Role string `json:"role"`
+	Role             string  `json:"role"`
+	ReasoningContent *string `json:"reasoning_content,omitempty"`
 	// Content is a plain string: every supported dialect accepts it, while
 	// the array-of-parts form is rejected by some local servers. Phase 3
 	// (images) is when the array form becomes necessary.
@@ -66,17 +74,33 @@ type wireToolCallFunction struct {
 // default). It returns *agentapi.Error with ErrInvalidRequest for content the
 // dialect cannot carry yet (images, audio) — dropping such parts silently
 // would have the model answer a question it never saw.
-func convertRequest(model string, req agentapi.ChatRequest) (wireRequest, error) {
+func convertRequest(model, mode string, req agentapi.ChatRequest) (wireRequest, error) {
+	var thinking *wireThinking
+	if mode != "" {
+		thinking = &wireThinking{Type: mode}
+	}
+	replay := mode == config.ThinkingEnabled && len(req.Tools) > 0
 	msgs := make([]wireMessage, 0, len(req.Messages))
 	for i, m := range req.Messages {
 		wm, err := convertMessage(m)
 		if err != nil {
 			return wireRequest{}, agentapi.WrapError(agentapi.ErrInvalidRequest, err, "messages[%d]", i)
 		}
+		if replay && m.Summary {
+			return wireRequest{}, agentapi.NewError(agentapi.ErrInvalidRequest, "messages[%d]: summarized history cannot replay every prior turn; set thinking: disabled for this profile or start a new session", i)
+		}
+		if replay && m.Role == agentapi.RoleAssistant {
+			if !slices.ContainsFunc(m.Content, func(p agentapi.ContentPart) bool { return p.Kind == agentapi.PartThinking }) {
+				return wireRequest{}, agentapi.NewError(agentapi.ErrInvalidRequest, "messages[%d]: missing reasoning_content for DeepSeek thinking with tools; set thinking: disabled for this profile or start a new session", i)
+			}
+			reasoning := m.Thinking()
+			wm.ReasoningContent = &reasoning
+		}
 		msgs = append(msgs, wm)
 	}
 	return wireRequest{
 		Model:       model,
+		Thinking:    thinking,
 		Messages:    msgs,
 		Tools:       convertTools(req.Tools),
 		Temperature: req.Temperature,
@@ -90,9 +114,7 @@ func convertRequest(model string, req agentapi.ChatRequest) (wireRequest, error)
 }
 
 func convertMessage(m agentapi.Message) (wireMessage, error) {
-	// PartThinking is deliberately not replayed: most /v1 dialects either
-	// reject an unknown field or bill for tokens the model ignores. Media
-	// parts fail loudly until Phase 3 wires them.
+	// Media parts fail loudly until Phase 3 wires them.
 	for _, p := range m.Content {
 		if p.Kind == agentapi.PartImage || p.Kind == agentapi.PartAudio {
 			return wireMessage{}, agentapi.NewError(agentapi.ErrInvalidRequest,

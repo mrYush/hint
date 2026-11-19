@@ -127,11 +127,11 @@ func (e *rpcEngine) completionSource(sessionID string, settings config.Completio
 			ref.Profile = e.defaultRef().Profile
 		}
 	}
-	chat, _, err := e.providerFor(ref, false)
+	route, err := e.providerFor(ref, false)
 	if err != nil {
 		return nil, "", err
 	}
-	return chat, question, nil
+	return route.chat, question, nil
 }
 
 // CompletionSettings reads the completion block as the files stand now.

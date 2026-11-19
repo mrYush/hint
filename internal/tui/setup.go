@@ -73,6 +73,9 @@ func newSetupForm(s *Setup, width int) *setupForm {
 		in := textinput.New()
 		in.SetValue(s.Values[field])
 		in.Placeholder = placeholder(k)
+		if field == "thinking" {
+			in.Placeholder = "direct DeepSeek only: enabled | disabled"
+		}
 		if k.Type == config.TypeSecret {
 			in.EchoMode = textinput.EchoPassword
 		}

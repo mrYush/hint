@@ -119,6 +119,9 @@ type options struct {
 	// in-process core: connectAuto, unix:/path or tcp:host:port. Empty
 	// runs the core in this process.
 	connect string
+	// maxTurns overrides the built-in iteration cap when non-nil.
+	// A negative value means no cap.
+	maxTurns *int
 	// tui runs the interactive session as the full-screen shell; false is
 	// the line REPL (--plain, or no terminal on stdout).
 	tui bool
@@ -139,7 +142,7 @@ func newRootCommandWithEnvironment(env environment) *cobra.Command {
 	var sessionID, prompt, output, rpcMode, connect string
 	var debug, tuiMode, plain bool
 	var indexMaxBytes int64
-	var contextWindow, instructionBudget, overviewDepth, overviewEntries int
+	var contextWindow, instructionBudget, overviewDepth, overviewEntries, maxTurns int
 	var summarizeInstructions bool
 
 	rootCmd := &cobra.Command{
@@ -163,6 +166,7 @@ keeps the line REPL.`,
   hint --plain                           # the same as a line REPL
   hint -p "what does main.go do?"        # one answer, then exit
   hint -p "list the tests" --output json # for scripts
+  hint --yolo --max-turns 0 -p "fix the tests" # unattended, no turn cap
   hint -c                                # continue this directory's last session
   hint --session 3f2a                    # continue the session whose id starts with 3f2a
   hint sessions                          # list this directory's sessions
@@ -177,6 +181,10 @@ keeps the line REPL.`,
 			if indexMaxBytes < 512<<10 {
 				return fmt.Errorf("%w: --index-max-bytes must be at least 524288 bytes", errFlagUsage)
 			}
+			turns, err := turnLimit(cmd)
+			if err != nil {
+				return err
+			}
 			opts := options{
 				indexMaxBytes: indexMaxBytes,
 				env:           env,
@@ -187,6 +195,7 @@ keeps the line REPL.`,
 				debug:         debug,
 				connect:       connect,
 				tui:           useTUI(tuiMode, plain, os.Stdout),
+				maxTurns:      turns,
 			}
 			if rpcMode != "" && rpcMode != "rpc" {
 				return fmt.Errorf("%w: --mode must be rpc, not %q", errFlagUsage, rpcMode)
@@ -282,6 +291,7 @@ keeps the line REPL.`,
 	pf.BoolVar(&summarizeInstructions, "summarize-instructions", false, "Let the model summarize instruction files that do not fit the budget even as outlines (default false)")
 	pf.StringVar(&flags.Completion, "completion", "", "When the TUI asks a model to continue what you type: off, tab, idle or both (default off)")
 	pf.BoolVar(&debug, "debug", false, "Write the run's requests, responses and tool calls (keys masked) to a log file")
+	pf.IntVar(&maxTurns, "max-turns", 25, "Maximum tool-calling rounds in one turn; 0 removes the cap")
 
 	// Cobra parses typed values; Changed preserves explicit 0 and false.
 	// The persistent hook also applies to subcommands sharing config.Flags.
@@ -370,6 +380,27 @@ func isTerminal(f *os.File) bool {
 	}
 	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// turnLimit reads --max-turns. A nil result keeps the built-in cap of 25.
+// Zero removes the cap, which the agent loop stores as a negative limit.
+// A negative flag value is a usage error.
+func turnLimit(cmd *cobra.Command) (*int, error) {
+	if !cmd.Flags().Changed("max-turns") {
+		return nil, nil
+	}
+	n, err := cmd.Flags().GetInt("max-turns")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errFlagUsage, err)
+	}
+	if n < 0 {
+		return nil, fmt.Errorf("%w: --max-turns must be zero or positive, not %d", errFlagUsage, n)
+	}
+	if n == 0 {
+		unlimited := -1
+		return &unlimited, nil
+	}
+	return &n, nil
 }
 
 // runMode maps the three exclusive flags onto a [permission.Mode]; none

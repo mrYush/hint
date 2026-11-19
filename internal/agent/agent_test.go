@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,6 +309,57 @@ func TestRunTurn_IterationLimit(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Errorf("tool ran %d times, want 3 — a 4th round must not run", calls)
+	}
+}
+
+func TestRunTurn_ZeroIterationsStopsImmediately(t *testing.T) {
+	t.Parallel()
+	p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{
+		delta("hi"), done(agentapi.FinishStop),
+	}}}}
+	a := agent.New(p, agent.WithLimits(agent.Limits{}))
+
+	events := collect(t, a.RunTurn(context.Background(), question("hi")))
+
+	errEv := lastEvent(events, agentapi.EventError)
+	if errEv == nil || errEv.Err.Kind != agentapi.ErrTurnLimit {
+		t.Fatalf("error = %+v, want ErrTurnLimit", errEv)
+	}
+	if len(p.calls) != 0 {
+		t.Errorf("provider called %d times, want 0", len(p.calls))
+	}
+}
+
+func TestRunTurn_NegativeIterationsHaveNoCap(t *testing.T) {
+	t.Parallel()
+	const rounds = 26 // one past the built-in cap of 25
+	calls := 0
+	scripts := make([]script, rounds)
+	for i := range scripts {
+		scripts[i] = script{events: []agentapi.ChatEvent{
+			toolCallEvent("c", "count", `{}`),
+			done(agentapi.FinishToolCalls),
+		}}
+	}
+	scripts = append(scripts, script{events: []agentapi.ChatEvent{
+		delta("done"), done(agentapi.FinishStop),
+	}})
+	p := &fakeProvider{scripts: scripts}
+	a := agent.New(p, agent.WithTools(countingTool{count: &calls}), agent.WithLimits(agent.Limits{
+		MaxIterations: -1, MaxContextTokens: 0,
+	}))
+
+	events := collect(t, a.RunTurn(context.Background(), question("keep going")))
+
+	end := lastEvent(events, agentapi.EventTurnEnd)
+	if end == nil || end.FinishReason != agentapi.FinishStop {
+		t.Fatalf("turn_end = %+v, want FinishStop", end)
+	}
+	if len(p.calls) != rounds+1 {
+		t.Errorf("provider called %d times, want %d", len(p.calls), rounds+1)
+	}
+	if calls != rounds {
+		t.Errorf("tool ran %d times, want %d", calls, rounds)
 	}
 }
 
@@ -674,6 +726,47 @@ func TestRunTurn_OverflowAfterOutputDoesNotRetry(t *testing.T) {
 			end := lastEvent(events, agentapi.EventTurnEnd)
 			if end == nil || end.FinishReason != agentapi.FinishError {
 				t.Fatalf("end=%+v", end)
+			}
+		})
+	}
+}
+
+func TestDeepSeekToolRequestsKeepAllTurns(t *testing.T) {
+	history := history4()
+	history[2].Content = append(history[2].Content, agentapi.Thinking("completed turn reasoning"))
+	for _, id := range []string{"first", "second"} {
+		history = append(history, agentapi.Message{Role: agentapi.RoleAssistant,
+			Content:   []agentapi.ContentPart{agentapi.Thinking("think " + id)},
+			ToolCalls: []agentapi.ToolCall{{ID: id, Name: "echo", Arguments: json.RawMessage(`{}`)}}},
+			agentapi.TextResult(id, "echo", "result "+id).Message())
+	}
+	for _, tc := range []struct {
+		name     string
+		response agentapi.ChatEvent
+		overflow bool
+	}{
+		{name: "provider accepts full history", response: done(agentapi.FinishStop)},
+		{name: "provider rejects full history", response: failure(agentapi.ErrContextOverflow), overflow: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakeProvider{scripts: []script{{events: []agentapi.ChatEvent{tc.response}}}}
+			compactor := &stubCompactor{}
+			a := agent.New(p, agent.WithTools(echoTool{}), agent.WithCompactor(compactor),
+				agent.WithLimits(agent.Limits{PreserveToolReasoning: true, MaxContextTokens: 10, CompactThreshold: 0.8, MaxIterations: 2}))
+			events := collect(t, a.RunTurn(t.Context(), history))
+			if compactor.calls != 0 || len(p.calls) != 1 || lastEvent(events, agentapi.EventCompaction) != nil {
+				t.Fatalf("summaries=%d requests=%d events=%+v", compactor.calls, len(p.calls), events)
+			}
+			if !reflect.DeepEqual(p.calls[0].Messages, history) {
+				t.Fatalf("outgoing history=%+v", p.calls[0].Messages)
+			}
+			ev := lastEvent(events, agentapi.EventError)
+			if tc.overflow {
+				if ev == nil || ev.Err.Kind != agentapi.ErrContextOverflow || !strings.Contains(ev.Err.Message, "every prior turn") {
+					t.Fatalf("unexpected overflow error: %+v", ev)
+				}
+			} else if ev != nil {
+				t.Fatalf("unexpected error: %+v", ev)
 			}
 		})
 	}

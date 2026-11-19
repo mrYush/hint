@@ -11,11 +11,18 @@ import (
 	"github.com/mrYush/hint/pkg/agentapi"
 )
 
-// Limits bound one call to [Agent.RunTurn].
+// Limits configure the resource bounds and compaction policy for [Agent.RunTurn].
 type Limits struct {
+	// PreserveToolReasoning protects the entire history from compaction on
+	// requests with tools, including reasoning from completed turns.
+	// Direct DeepSeek in thinking mode requires reasoning replay. Enable
+	// this policy when either the primary or fallback route requires it.
+	PreserveToolReasoning bool
 	// MaxIterations caps the number of tool-calling rounds in a single turn.
 	// A "round" is one batch of tool calls from one assistant message; a
 	// turn that only ever gets plain text never counts against this.
+	// Zero, including the zero value of Limits, stops before the first
+	// request. A negative value means no cap.
 	MaxIterations int
 	// MaxContextTokens is the model's context window, used to trigger
 	// proactive compaction before a request is even sent. Zero disables

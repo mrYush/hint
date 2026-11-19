@@ -62,25 +62,16 @@ func (a *Agent) overflowing(tokens int64) bool {
 	return float64(tokens) >= a.limits.CompactThreshold*float64(a.limits.MaxContextTokens)
 }
 
-// compact runs one compaction attempt over messages: it first drops every
-// [agentapi.PartThinking] part (cheap, and the contract already promises
-// this happens before anything heavier), and only if that is not enough
-// against the configured window does it summarize the middle of the
-// conversation via the [Compactor].
-//
-// Either way the emitted [agentapi.EventCompaction] carries the resulting
-// history in Compaction.History: the region a summary replaces is not
-// contiguous once the tail has been shrunk, so an observer (the WP0.7
-// session store) could not rebuild the post-compaction state from the
-// summary and a count alone.
-//
-// One call here is "one attempt" in the loop's "no more than one compaction
-// attempt per iteration" rule — both steps happen without going back to the
-// provider in between, so the caller only ever needs to retry the actual
-// [agentapi.ChatProvider.Stream] call once after this returns.
-func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, toolTokens int64, out chan<- agentapi.Event) ([]agentapi.Message, error) {
+// compact refuses to shorten history when the provider requires full replay.
+// Otherwise it drops optional reasoning and, if needed, summarizes older messages.
+// The compaction event carries the resulting history so the journal can
+// restore the exact messages on resume.
+func (a *Agent) compact(ctx context.Context, messages []agentapi.Message, toolTokens int64, hasTools bool, out chan<- agentapi.Event) ([]agentapi.Message, error) {
+	if hasTools && a.limits.PreserveToolReasoning {
+		return nil, agentapi.NewError(agentapi.ErrContextOverflow,
+			"context overflow: this route requires reasoning from every prior turn for tool requests. Start a new session or use a model with a larger context window")
+	}
 	before := a.estimator.Estimate(messages) + toolTokens
-
 	stripped, dropped := dropThinking(messages)
 	if dropped > 0 {
 		after := a.estimator.Estimate(stripped) + toolTokens

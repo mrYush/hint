@@ -81,6 +81,9 @@ type rpcEngine struct {
 	pc       *project.Context
 	mode     permission.Mode
 	limits   agent.Limits
+	// maxTurns is the --max-turns override. Nil keeps the built-in cap
+	// inside limitsFor. A negative value removes the cap.
+	maxTurns *int
 	// mcp owns the configured MCP servers; nil when none are configured.
 	mcp *mcp.Manager
 	// mcpMu guards the one-time lazy load of the MCP tools. mcpLoaded
@@ -261,10 +264,8 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 	// A profile that states its context window sizes proactive
 	// compaction; the fallback profile keeps the same limits, and a
 	// smaller window there is caught by its own overflow error.
-	limits := agent.DefaultLimits()
-	if p, err := as.cfg.Default(); err == nil {
-		limits = limitsFor(p)
-	}
+	primary, _ := as.cfg.Default() // A setup-only engine may have no default profile.
+	limits := limitsFor(as.cfg, primary, as.opts.maxTurns)
 	debugLog := as.trace.Slog()
 	if as.trace != nil {
 		for _, p := range as.cfg.Providers {
@@ -279,6 +280,7 @@ func newEngine(ctx context.Context, as assembly) (_ *rpcEngine, resultErr error)
 		chat:        as.chat,
 		pc:          pc,
 		mode:        as.opts.mode,
+		maxTurns:    as.opts.maxTurns,
 		limits:      limits,
 		notices:     as.notices,
 		trace:       as.trace,
@@ -413,14 +415,18 @@ func warnFileKeys(cfg *config.Config, notices io.Writer) {
 	fmt.Fprintf(notices, "hint: warning: profile %s keeps its API key in a config file; hint setup moves it into the OS secret store\n", strings.Join(names, ", "))
 }
 
-// limitsFor is the agent's limits under profile p: the built-in ones,
-// with the context window the profile states when it states one. A
-// profile that does not keeps the built-in window; its own overflow
-// error catches a smaller one.
-func limitsFor(p config.Profile) agent.Limits {
+// limitsFor uses the selected profile's context window. Compaction runs
+// before failover, so it must preserve reasoning for either destination.
+func limitsFor(cfg *config.Config, primary config.Profile, maxTurns *int) agent.Limits {
 	limits := agent.DefaultLimits()
-	if p.ContextWindow > 0 {
-		limits.MaxContextTokens = p.ContextWindow
+	fallback, _ := cfg.Fallback()
+	limits.PreserveToolReasoning = primary.DeepSeekThinking() == config.ThinkingEnabled ||
+		fallback.DeepSeekThinking() == config.ThinkingEnabled
+	if primary.ContextWindow > 0 {
+		limits.MaxContextTokens = primary.ContextWindow
+	}
+	if maxTurns != nil {
+		limits.MaxIterations = *maxTurns
 	}
 	return limits
 }
@@ -578,8 +584,8 @@ func (e *rpcEngine) newSession(sess *session.Session, id string) *rpcSession {
 	// The default profile as the configuration stands now; the engine's
 	// own provider is the fallback should it have become unusable since.
 	ref := e.defaultRef()
-	if chat, p, err := e.providerFor(rpc.ProfileRef{Profile: ref.Profile}, false); err == nil {
-		live.use(chat, rpc.ProfileRef{Profile: ref.Profile}, rpc.ProfileRef{Profile: ref.Profile, Model: p.Model}, limitsFor(p))
+	if route, err := e.providerFor(rpc.ProfileRef{Profile: ref.Profile}, false); err == nil {
+		live.use(route.chat, rpc.ProfileRef{Profile: ref.Profile}, rpc.ProfileRef{Profile: ref.Profile, Model: route.model}, route.limits)
 	} else {
 		live.use(e.chat, rpc.ProfileRef{Profile: ref.Profile}, ref, e.limits)
 	}

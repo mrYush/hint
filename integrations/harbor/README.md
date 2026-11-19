@@ -85,9 +85,13 @@ cp "$integration/route.example.yaml" "$route_config"
 ```
 
 For GLM, use `route: glm` and `reasoning_expectation: endpoint-default`.
-For DeepSeek, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying the gateway setting for the exact model ID.
+For a direct DeepSeek host (`deepseek.com` or a subdomain), use `route: deepseek` and `reasoning_expectation: endpoint-default`.
+The Hint binary must replay `reasoning_content`.
+The pinned v0.4.2 baseline does not.
+For a gateway, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying that the gateway disables thinking for that model ID.
+A direct host with `non-thinking` is rejected because the adapter does not send `thinking.type` `disabled`.
 The manifest records `reasoning_enforced: false` because the adapter sends no reasoning or output-token override.
-Direct DeepSeek API and reasoning-enabled DeepSeek tool turns require the [provider dependency](#deepseek-provider-dependency).
+The direct-host acceptance and the recorded smoke are in the [provider note](#deepseek-provider-dependency).
 Set `trusted_environment_confirmed: true` only after reviewing the task images and accepting the trust boundary below.
 Live `benchmark.py` runs require this declaration in `--route-config`; dry runs can inspect unconfirmed settings.
 Individual route flags (`--model`, `--base-url`, `--context-window`, `--route`, `--reasoning-expectation`) are available only with `--dry-run`.
@@ -183,12 +187,19 @@ All cases scan saved files for the fake key.
 
 ## DeepSeek provider dependency
 
-The pinned Hint code reads reasoning deltas in [stream.go](../../internal/provider/openai/stream.go).
-The outgoing [Chat Completions message](../../internal/provider/openai/convert.go) does not serialize `reasoning_content`.
-[DeepSeek's thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/) requires that history for requests carrying tools, and its current API defaults to thinking.
-The separate provider change [#109](https://github.com/mrYush/hint/issues/109) on `fix/deepseek-reasoning-history` must implement explicit reasoning controls and preserve the required reasoning through multi-tool history before enabling direct DeepSeek evaluation.
-Cover resumed and compacted sessions in the provider regression and verify an authorized multi-tool smoke against the direct endpoint.
-The integration tracks this dependency in the [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
+Direct DeepSeek profiles send `thinking.type` `enabled` unless the profile sets `thinking: disabled`.
+With thinking and tools enabled, Hint replays stored reasoning on assistant messages, including after session resume, and keeps every completed and active turn in the request.
+If the full history exceeds the provider window, Hint reports context overflow.
+Hint rejects the entire tool-carrying request before contacting DeepSeek if any retained assistant message lacks its trace.
+On 2026-11-19 a `go run` of this change called `deepseek-flash` at `https://api.deepseek.com`.
+The conversation made two `read_file` calls and then answered.
+Each later request included `reasoning_content` for every previous assistant message.
+Those traces were explicit empty strings, and DeepSeek accepted the following requests.
+Hint configured no spend cap.
+Harbor accepts that direct host when `reasoning_expectation` is `endpoint-default`.
+The operator-verified external non-thinking gateway route remains available.
+The pinned Harbor baseline is still Hint v0.4.2, which does not replay reasoning.
+The record is in [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
 
 ## Development
 

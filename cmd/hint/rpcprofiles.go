@@ -47,22 +47,29 @@ func (e *rpcEngine) refresh() error {
 	return nil
 }
 
-// providerFor returns the provider for ref, building and caching it on
-// first use, with the profile it stands for. reload says whether to
+// sessionRoute pairs a provider with limits resolved from the same config snapshot.
+type sessionRoute struct {
+	chat   agentapi.ChatProvider
+	model  string
+	limits agent.Limits
+}
+
+// providerFor resolves ref to a cached or newly built provider, its model,
+// and compaction limits for the primary and fallback. reload says whether to
 // re-read the configuration first: a switch the user asked for does, so
 // that it sees what setup just wrote; restoring a session's recorded
 // profile on attach does not.
-func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatProvider, config.Profile, error) {
+func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (sessionRoute, error) {
 	e.cfgMu.Lock()
 	defer e.cfgMu.Unlock()
 	if reload {
 		if err := e.refresh(); err != nil {
-			return nil, config.Profile{}, err
+			return sessionRoute{}, err
 		}
 	}
 	own, err := e.cfg.Profile(ref.Profile)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, err.Error())
+		return sessionRoute{}, fmt.Errorf("%w: %s", rpc.ErrNotFound, err.Error())
 	}
 	// The cache is keyed by the profile and the model that differs from
 	// its own: a switch to the default profile, with or without its model
@@ -70,23 +77,24 @@ func (e *rpcEngine) providerFor(ref rpc.ProfileRef, reload bool) (agentapi.ChatP
 	if ref.Model == own.Model {
 		ref.Model = ""
 	}
-	if chat := e.providers[ref]; chat != nil {
-		p, err := e.cfg.Usable(ref.Profile, "selected")
-		if err != nil {
-			return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
+	chat := e.providers[ref]
+	var p config.Profile
+	if chat == nil {
+		chat, p, err = provider.ForProfile(e.cfg, ref.Profile, ref.Model, e.notices, e.debugLog)
+		if err == nil {
+			chat = e.observeInference(chat)
+			e.providers[ref] = chat
 		}
+	} else {
+		p, err = e.cfg.Usable(ref.Profile, "selected")
 		if ref.Model != "" {
 			p.Model = ref.Model
 		}
-		return chat, p, nil
 	}
-	chat, p, err := provider.ForProfile(e.cfg, ref.Profile, ref.Model, e.notices, e.debugLog)
 	if err != nil {
-		return nil, config.Profile{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
+		return sessionRoute{}, fmt.Errorf("%w: %s", rpc.ErrInvalid, err.Error())
 	}
-	chat = e.observeInference(chat)
-	e.providers[ref] = chat
-	return chat, p, nil
+	return sessionRoute{chat: chat, model: p.Model, limits: limitsFor(e.cfg, p, e.maxTurns)}, nil
 }
 
 // Profiles lists the configured profiles as they stand on disk now.
@@ -210,12 +218,12 @@ func (s *rpcSession) SetProfile(_ context.Context, ref rpc.ProfileRef) (rpc.Prof
 // the recorder and the preamble stay: an "always" grant and the
 // conversation survive a change of model.
 func (s *rpcSession) switchTo(ref rpc.ProfileRef, reload bool) error {
-	chat, p, err := s.eng.providerFor(ref, reload)
+	route, err := s.eng.providerFor(ref, reload)
 	if err != nil {
 		return err
 	}
-	s.use(chat, ref, rpc.ProfileRef{Profile: ref.Profile, Model: p.Model}, limitsFor(p))
-	s.tracef("session %s profile %s model %s window %d", s.id, ref.Profile, p.Model, p.ContextWindow)
+	s.use(route.chat, ref, rpc.ProfileRef{Profile: ref.Profile, Model: route.model}, route.limits)
+	s.tracef("session %s profile %s model %s window %d", s.id, ref.Profile, route.model, route.limits.MaxContextTokens)
 	return nil
 }
 
