@@ -390,9 +390,13 @@ class HintAgent(BaseInstalledAgent):
                 "Direct DeepSeek keeps thinking enabled; "
                 "non-thinking is only accepted for an operator-verified gateway"
             )
-        if is_deepseek and not direct_deepseek and (
-            options.reasoning_expectation != "non-thinking"
-            or "reasoner" in model.lower()
+        if (
+            is_deepseek
+            and not direct_deepseek
+            and (
+                options.reasoning_expectation != "non-thinking"
+                or "reasoner" in model.lower()
+            )
         ):
             raise ValueError(
                 "DeepSeek requires a gateway with an operator-verified non-thinking route"
