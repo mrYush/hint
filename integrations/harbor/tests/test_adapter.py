@@ -89,7 +89,7 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("HINT_CONTEXT_WINDOW=16384", command)
         self.assertIn("HINT_MODEL=fixture/qualified-model", command)
         self.assertNotIn(agent._secret, command)
-        self.assertIn("--output json --yolo", command)
+        self.assertIn("--output json --yolo --max-turns 0", command)
 
     def test_custom_credential_removed_from_launch_environment(self) -> None:
         """Strip the custom Harbor overlay key before starting the Hint shell."""

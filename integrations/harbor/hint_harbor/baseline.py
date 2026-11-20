@@ -6,8 +6,8 @@ The source builder uses this dependency-free entry point before installation.
 
 from typing import Final
 
-HINT_VERSION: Final = "0.4.2"
-REVISION: Final = "c6be73183a9e0288a2b70cff14085854811d2234"
+HINT_VERSION: Final = "0.4.3"
+REVISION: Final = "01440155d1442d78354990d54ce6b0fde2d79fd9"
 
 
 if __name__ == "__main__":

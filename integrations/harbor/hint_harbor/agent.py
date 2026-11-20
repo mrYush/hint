@@ -664,6 +664,9 @@ class HintTrial:
     def command(self) -> str:
         """Build a launch command without credentials or prompt contents.
 
+        ``--max-turns 0`` removes Hint's tool-round cap.
+        Harbor's deadline still bounds the trial.
+
         :returns: Quoted shell command.
         """
         # Start a distinct process group so cancelling docker exec can stop Hint.
@@ -694,7 +697,7 @@ rm -f {state}/credential {state}/instruction
 export HINT_API_KEY
 mkdir -p "$HOME/.config/hint" "$XDG_DATA_HOME/hint/sessions" "$TMPDIR"
 printf '%s\\n' 'default_provider: harbor' 'providers:' '  - name: harbor' '    kind: openai' > "$HOME/.config/hint/config.yaml"
-exec {BINARY} -p "${{prompt%.}}" --output json --yolo
+exec {BINARY} -p "${{prompt%.}}" --output json --yolo --max-turns 0
 """
         env = {
             "HOME": f"{state}/home",

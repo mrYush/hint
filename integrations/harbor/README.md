@@ -33,7 +33,7 @@ PYTHON="$py" sh "$integration/build-hint.sh" "$work/bin"
 "$harbor" agent schema hint_harbor.agent:HintAgent --json
 ```
 
-The build uses the v0.4.2 sources at commit `c6be73183a9e0288a2b70cff14085854811d2234`.
+The build uses the v0.4.3 sources at commit `01440155d1442d78354990d54ce6b0fde2d79fd9`.
 [`hint_harbor/baseline.py`](hint_harbor/baseline.py) is the shared version and full-commit definition used by the source builder, installed adapter, manifests and trajectories.
 The builder requires Python 3 (`PYTHON` selects the interpreter) and pins Go 1.26.10.
 It archives the pinned commit, so local source changes do not enter the benchmark binary.
@@ -44,8 +44,8 @@ The expected SHA-256 values for the documented toolchain are below.
 
 | Binary | SHA-256 |
 | --- | --- |
-| linux/amd64 | `46a523e71ed8605f3e9b306ed2f161cbaff2855ff2b0c4190b963928dafd68b9` |
-| linux/arm64 | `143c76a2ee45674c8da888ccae569259d5452ef4cecbfd8629a6518a026be2ce` |
+| linux/amd64 | `870e7659e8871f16363c3d1d41b9b151ef5e00f53d310095a9bbb2b3f4a54583` |
+| linux/arm64 | `f435cea09bfb910fb69f61c7faa9c8e2f7b46fc8b74d36501b616b8b55260a3d` |
 
 ## Dataset and Docker
 
@@ -86,8 +86,7 @@ cp "$integration/route.example.yaml" "$route_config"
 
 For GLM, use `route: glm` and `reasoning_expectation: endpoint-default`.
 For a direct DeepSeek host (`deepseek.com` or a subdomain), use `route: deepseek` and `reasoning_expectation: endpoint-default`.
-The Hint binary must replay `reasoning_content`.
-The pinned v0.4.2 baseline does not.
+The pinned v0.4.3 baseline replays `reasoning_content`.
 For a gateway, use `route: deepseek` and `reasoning_expectation: non-thinking` only after verifying that the gateway disables thinking for that model ID.
 A direct host with `non-thinking` is rejected because the adapter does not send `thinking.type` `disabled`.
 The manifest records `reasoning_enforced: false` because the adapter sends no reasoning or output-token override.
@@ -153,7 +152,9 @@ Effective metadata identifies the pinned preamble and tool source and records th
 Hint's turn limit uses Harbor's exhausted-budget policy.
 Harbor 0.25.0 normalizes the exception message to a timeout, and `execution.json` records the original `error_kind`.
 Token totals use only usage reported through Hint, with unavailable values and cost left null in execution metadata.
-Hint tool calls run noninteractively as the task's agent user using `--yolo` inside Docker.
+Hint tool calls run noninteractively as the task's agent user using `--yolo --max-turns 0` inside Docker.
+`--max-turns 0` removes Hint's tool-round cap.
+Harbor's deadline still bounds the trial.
 The process inherits the task environment, replaces Hint-specific variables and uses isolated XDG directories.
 A task with a pre-existing `.hint/config.yaml` or `hint.yaml` fails explicitly to preserve the evaluation configuration.
 The task image needs Bash and standard coreutils including chown, chmod, id, touch, sleep, uname, `sha256sum` and util-linux `setsid`.
@@ -198,7 +199,7 @@ Those traces were explicit empty strings, and DeepSeek accepted the following re
 Hint configured no spend cap.
 Harbor accepts that direct host when `reasoning_expectation` is `endpoint-default`.
 The operator-verified external non-thinking gateway route remains available.
-The pinned Harbor baseline is still Hint v0.4.2, which does not replay reasoning.
+The pinned Harbor baseline is Hint v0.4.3 at `01440155d1442d78354990d54ce6b0fde2d79fd9`, which replays reasoning.
 The record is in [WP2R.3](../../docs/plan/phase-2r-review.md#wp2r3--harbor-benchmark-integration).
 
 ## Development
