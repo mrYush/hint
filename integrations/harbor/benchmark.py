@@ -3,10 +3,8 @@
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -16,21 +14,11 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from typing_extensions import TypedDict
 
+from benchmark_dataset import DATASET, TaskManifestEntry, task_manifest
 from hint_harbor.agent import HintAgent, Reasoning, Route
 from hint_harbor.baseline import HINT_VERSION, REVISION
 
-DATASET = "terminal-bench/terminal-bench-cpu-only@4.0.0"
 AGENT = "hint_harbor.agent:HintAgent"
-
-
-class TaskManifestEntry(TypedDict):
-    """Public task identifiers, image digests and resource limits."""
-
-    directory: str
-    name: str
-    images: dict[str, str]
-    agent_resources: dict[str, int | float]
-    verifier_resources: dict[str, int | float]
 
 
 class RouteConfig(BaseModel):
@@ -265,57 +253,6 @@ def summarize(*, job: Path, task_count: int, attempts: int) -> JobSummary:
         "trials": trials,
         "unreadable_results": unreadable_results,
     }
-
-
-def task_manifest(*, dataset: Path, task_name: str | None) -> list[TaskManifestEntry]:
-    """Read task names, pinned image references and numeric resource limits.
-
-    :param dataset: Local exported dataset.
-    :param task_name: Directory name to select, or all tasks when omitted.
-    :returns: Sanitized task entries.
-    """
-    tasks: list[TaskManifestEntry] = []
-    paths = sorted(dataset.glob("*/task.toml"))
-    if len(paths) != 63:
-        raise ValueError(
-            f"Expected 63 exported tasks for {DATASET}; found {len(paths)}"
-        )
-    for path in paths:
-        if task_name and path.parent.name != task_name:
-            continue
-        task = tomllib.loads(path.read_text(encoding="utf-8"))
-        agent_env = task["environment"]
-        verifier_env = task.get("verifier", {}).get("environment", agent_env)
-        images = {
-            "agent": agent_env["docker_image"],
-            "verifier": verifier_env["docker_image"],
-        }
-        if any(
-            re.fullmatch(r"[^@\s]+@sha256:[0-9a-fA-F]{64}", ref) is None
-            for ref in images.values()
-        ):
-            raise ValueError(
-                f"Invalid pinned SHA-256 image digest for {path.parent.name}"
-            )
-        resource_keys = ("cpus", "memory_mb", "storage_mb", "gpus", "build_timeout_sec")
-        tasks.append(
-            {
-                "directory": path.parent.name,
-                "name": task["task"]["name"],
-                "images": images,
-                "agent_resources": {
-                    key: agent_env[key] for key in resource_keys if key in agent_env
-                },
-                "verifier_resources": {
-                    key: verifier_env[key]
-                    for key in resource_keys
-                    if key in verifier_env
-                },
-            }
-        )
-    if not tasks:
-        raise ValueError(f"Task not found: {task_name}")
-    return tasks
 
 
 def launch(*, args: RunArgs) -> int:
