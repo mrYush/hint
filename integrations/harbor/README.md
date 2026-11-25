@@ -70,6 +70,36 @@ CPU-only tasks can still exceed available memory, and separate verification can 
   --oracle --task wal-recovery-ordering --attempts 1 --concurrent 1 --platform "$platform"
 ```
 
+### Download images ahead of a run
+
+From the repository root, after exporting the dataset above, list the pinned agent images and download them one image at a time on macOS or Linux.
+
+```bash
+"$py" "$integration/pull_images.py" --dataset "$dataset" --role agent --list
+"$py" "$integration/pull_images.py" --dataset "$dataset" --role agent --speed-window 120
+```
+
+The default selection covers the 62 tasks remaining after `wal-recovery-ordering`.
+Omit `--role agent` to include separate verifier images, or add `--include-wal` for all 63 tasks.
+Restart the same command to skip cached `linux/amd64` digests.
+The single progress bar counts unique compressed layers across the queue and estimates remaining transfer time from a rolling window (60 seconds by default).
+During extraction or a retry, the rate can fall to zero.
+An optional `--mirror mirror.gcr.io` seeds layers before Docker verifies the original Docker Hub digest.
+Docker uses the credentials from `docker login` when available.
+
+The final summary counts image references. For example, `cached=61 downloaded=63 failed=0` means that 61 images were already available when the command started and all 63 remaining images were downloaded successfully.
+With both roles selected, those 124 images cover the agent and verifier environments for 62 tasks.
+If `failed` is greater than zero, the script lists the missing references. Rerun the same command to retry them.
+Once every image is available, you can check harness installation in the cached agent images before starting a benchmark trial.
+
+The checked-in `pull_image_sizes.json` covers both roles and WAL.
+To regenerate it, run the following command with Docker Buildx and registry access.
+It reads manifests by digest without pulling image layers or starting trials.
+
+```bash
+"$py" "$integration/pull_images.py" --dataset "$dataset" --generate-index
+```
+
 ## Model route and runs
 
 Copy the [route configuration example](route.example.yaml) and fill in the exact model ID, Chat Completions base URL, context window and credential environment variable name.

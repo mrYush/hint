@@ -23,3 +23,12 @@ Trace conversion
 .. automodule:: hint_harbor.trace
    :members: EmptyTrajectoryError, JournalRecord, JournalMessage, JournalCall, JournalPart, convert, read_journal
    :exclude-members: model_config
+
+Image preparation
+-----------------
+
+``pull_images.image_queue`` selects pinned agent and verifier images from the local export.
+``image_index.generate_index`` verifies registry manifests and writes compressed sizes for the queue.
+``pull_progress.QueueMeter`` accounts for shared layers, cached images and provisional download progress.
+``pull_progress.WindowRate`` uses a time-based rolling window for the transfer rate and ETA.
+See the integration README for the CLI commands.

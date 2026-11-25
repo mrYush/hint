@@ -29,7 +29,7 @@ ignore = ["D105", "D107"]
 convention = "pep257"
 
 [tool.pyright]
-include = ["hint_harbor", "benchmark.py", "tests"]
+include = ["hint_harbor", "benchmark.py", "benchmark_dataset.py", "pull_images.py", "pull_progress.py", "image_index.py", "tests"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 useLibraryCodeForTypes = true
