@@ -1,0 +1,43 @@
+"Task","Harness","Status","Score","Tests Passed","Total Tests","Input Tokens","Cached Input Tokens","Output Tokens","Total Tokens"
+"wal-recovery-ordering","Hint","Completed",1.0,97,97,4294623,4257536,97502,4392125
+"wal-recovery-ordering","Hermes","Invalid (technical): Setup timed out before model call — harness setup timeout","","","","","","",""
+"wal-recovery-ordering","Hermes","Completed",0.0,93,97,2476347,2438912,85092,2561439
+"wal-recovery-ordering","OpenCode","Completed (partial usage)",1.0,97,97,1197614,1169280,41642,1239256
+"wal-recovery-ordering","DSH","Completed",0.0,93,97,1667198,1635200,61126,1728324
+"batched-eval-parity","Hint","Completed (offline verification)",0.0,1,5,12154226,12079872,134943,12289169
+"batched-eval-parity","Hermes","Completed (offline verification)",0.0,1,5,23823808,23700864,183386,24007194
+"batched-eval-parity","OpenCode","Completed",1.0,5,5,4531697,4465280,103175,4634872
+"batched-eval-parity","DSH","Completed",0.0,3,5,9477226,9417344,161430,9638656
+"session-window-debug","Hint","Invalid (technical): UnknownApiError (before Docker restart) (partial usage) — interrupted on previous Docker allocation",0.0,2,7,22027,15104,479,22506
+"session-window-debug","Hermes","Invalid (technical): NonZeroAgentExitCodeError (before Docker restart) — interrupted on previous Docker allocation",0.0,"","",36806,22784,1966,38772
+"session-window-debug","Hint","Completed",0.0,4,7,2672822,2635392,64524,2737346
+"session-window-debug","Hermes","Completed",0.0,6,7,3514969,3474688,66706,3581675
+"session-window-debug","OpenCode","Completed",0.0,5,7,2137579,2088064,71516,2209095
+"session-window-debug","DSH","Completed",0.0,5,7,2261101,2219392,67448,2328549
+"cad-model","Hint","Completed (partial usage)",0.0,0,8,30226584,28208000,750245,30976829
+"cad-model","Hermes","Completed (partial usage)",0.0,0,8,31286514,31116928,684205,31970719
+"cad-model","OpenCode","Completed",0.0,0,8,13835429,13791360,200368,14035797
+"cad-model","DSH","Completed",0.0,0,8,86391154,86087424,403662,86794816
+"cargo-flight-dispatch","Hint","Completed (partial usage)",0.0,19,27,3075799,3040512,71090,3146889
+"cargo-flight-dispatch","Hermes","Completed",0.0,19,27,2493653,2450432,78927,2572580
+"cargo-flight-dispatch","OpenCode","Completed",0.0,19,27,1233185,1204736,55996,1289181
+"cargo-flight-dispatch","DSH","Invalid (technical): UnknownApiError (partial usage) — terminal provider transport failure (gaierror)",0.0,9,27,244960,228224,17631,262591
+"biped-contact-dynamics","Hint","Invalid (technical): NetworkConnectionError (partial usage) — terminal client network failure",0.0,0,3,6502996,6468864,195123,6698119
+"biped-contact-dynamics","Hermes","Completed (partial usage)",1.0,3,3,66682740,66549760,397581,67080321
+"biped-contact-dynamics","Hint","Completed (partial usage) (replacement for 8mYwP6q)",1.0,3,3,49392858,48634752,795710,50188568
+"cargo-flight-dispatch","DSH","Completed (partial usage) (replacement for nHdMZAi)",0.0,25,27,2938976,2894592,87135,3026111
+"biped-contact-dynamics","OpenCode","Completed (partial usage)",1.0,3,3,21418011,21329408,263160,21681171
+"biped-contact-dynamics","DSH","Completed (partial usage)",1.0,3,3,25099637,24963968,239300,25338937
+"bun-sourcemap-leak","Hint","Completed (partial usage)",0.0,27,36,2670487,2639104,69349,2739836
+"bun-sourcemap-leak","Hermes","Completed (partial usage)",0.0,31,36,3597378,3546368,55551,3652929
+"bun-sourcemap-leak","OpenCode","Completed",0.0,32,36,2276211,2251136,65082,2341293
+"bun-sourcemap-leak","DSH","Completed (partial usage)",0.0,27,36,1895082,1872128,68300,1963382
+"ctr-optimization","Hint","Completed (partial usage)",0.0,3,4,17471968,17413888,191154,17663122
+"coq-block-bound","Hint","Completed",0.0,2,3,15260313,15200768,376273,15636586
+"coq-block-bound","Hermes","Completed (partial usage)",0.0,1,2,28056101,27844992,658805,28714906
+"coq-block-bound","OpenCode","Completed (partial usage)",0.0,2,3,82525320,82397824,323704,82849024
+"coq-block-bound","DSH","Completed (partial usage)",0.0,2,3,59291057,59201920,472546,59763603
+"ctr-optimization","Hermes","Completed (partial usage)",0.0,3,4,13675650,13610880,146671,13822321
+"ctr-optimization","OpenCode","Completed (partial usage)",0.0,3,4,6208620,6161664,90493,6299113
+"ctr-optimization","DSH","Invalid (technical): HostRestart (partial usage) — confirmed host restart before verifier","","","",3772577,3700608,48127,3820704
+"ctr-optimization","DSH","Completed (partial usage) (replacement for 4bGmsvF)",0.0,3,4,30423872,30280320,141916,30565788
