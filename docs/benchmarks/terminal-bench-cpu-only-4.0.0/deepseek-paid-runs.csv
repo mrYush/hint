@@ -41,3 +41,12 @@
 "ctr-optimization","OpenCode","Completed (partial usage)",0.0,3,4,6208620,6161664,90493,6299113
 "ctr-optimization","DSH","Invalid (technical): HostRestart (partial usage) — confirmed host restart before verifier","","","",3772577,3700608,48127,3820704
 "ctr-optimization","DSH","Completed (partial usage) (replacement for 4bGmsvF)",0.0,3,4,30423872,30280320,141916,30565788
+"wal-recovery-ordering","Hint","Completed (isolated pilot)",0.0,95,97,4083004,4048128,81083,4164087
+"wal-recovery-ordering","Hermes","Completed (isolated pilot)",0.0,94,97,3207405,3163776,66863,3274268
+"wal-recovery-ordering","OpenCode","Completed (isolated pilot)",0.0,95,97,1916960,1886848,49584,1966544
+"wal-recovery-ordering","DSH","Completed (isolated pilot)",0.0,96,97,2775964,2749440,78233,2854197
+"batched-eval-parity","Hint","Completed (isolated pilot)",0.0,1,5,83453829,79919872,1027363,84481192
+"batched-eval-parity","Hermes","Completed (isolated pilot) (partial usage)",0.0,3,5,13287462,13201536,185691,13473153
+"batched-eval-parity","OpenCode","Completed (isolated pilot)",0.0,3,5,5572596,5520128,107068,5679664
+"batched-eval-parity","DSH","Invalid (technical): NonZeroAgentExitCodeError (isolated pilot) (partial usage) — terminal DSH provider stream closed before completion",1.0,5,5,6567520,6511104,94522,6662042
+"batched-eval-parity","DSH","Completed (isolated pilot) (replacement for fhUzfvo)",1.0,5,5,17432570,17335680,164273,17596843
